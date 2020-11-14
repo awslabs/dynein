@@ -75,11 +75,11 @@ fn test_help() -> Result<(), Box<dyn std::error::Error>> {
 fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_create_table";
 
-    // $ dy table create <table_name> --keys pk
-    let mut c = setup()?; let create_cmd = c.args(&["--region", "local", "table", "create", table_name, "--keys", "pk"]);
+    // $ dy admin create table <table_name> --keys pk
+    let mut c = setup()?; let create_cmd = c.args(&["--region", "local", "admin", "create", "table", table_name, "--keys", "pk"]);
     create_cmd.assert().success().stdout(predicate::str::contains(format!("name: {}\nregion: local", &table_name)));
 
-    // $ dy table desc <table_name>
+    // $ dy admin desc <table_name>
     let mut c = setup()?; let desc_cmd = c.args(&["--region", "local", "table", "desc", table_name]);
     desc_cmd.assert().success().stdout(predicate::str::contains(format!("name: {}\nregion: local", &table_name)));
 

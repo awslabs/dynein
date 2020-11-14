@@ -268,7 +268,7 @@ pub enum Sub {
 
     /// Export items from a DynamoDB table and save them as CSV/JSON file.
     ///
-    /// If you want to achieve best performance, recommendated way is to switch the table to OnDemand mode before export. (e.g. dy table update your_table --mode ondemand).{n}
+    /// If you want to achieve best performance, recommendated way is to switch the table to OnDemand mode before export. (e.g. dy admin update table your_table --mode ondemand).{n}
     /// When you export items as JSON (including jsonl, json-compact), all attributes in all items will be exported.{n}
     /// When you export items as CSV, on the other hand, dynein has to know which attributes are to be exported as CSV format requires "column" - i.e. N th column should contain attribute ABC throughout a csv file.
     #[structopt()]
@@ -297,7 +297,7 @@ pub enum Sub {
 
     /// Import items into a DynamoDB table from CSV/JSON file.
     ///
-    /// If you want to achieve best performance, recommendated way is to switch the table to OnDemand mode before export. (e.g. dy table update your_table --mode ondemand).{n}
+    /// If you want to achieve best performance, recommendated way is to switch the table to OnDemand mode before import. (e.g. dy admin update table your_table --mode ondemand).{n}
     /// When you import items from a CSV file, header names are used to attributes for items. The first one or two column(s) would be primary key(s).
     #[structopt()]
     Import {

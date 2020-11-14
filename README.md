@@ -61,11 +61,29 @@ dynein - DynamoDB CLI
 
 # Installation
 
-## Method 1. HomeBrew (MacOS)
+## Method 1. Download binaries
 
-(currently not available)
+macOS
 
-## Method 2. Download a binary
+```
+$ curl -O -L https://github.com/awslabs/dynein/releases/latest/download/dynein-darwin.tar.gz
+$ tar xzvf dynein-darwin.tar.gz
+$ mv dy /usr/local/bin/
+$ chmod +x /usr/local/bin/dy
+$ dy --help
+```
+
+Linux x86 (64-bit)
+
+```
+$ curl -O -L https://github.com/awslabs/dynein/releases/latest/download/dynein-linux.tar.gz
+$ tar xzvf dynein-linux.tar.gz
+$ sudo mv dy /usr/local/bin/
+$ chmod +x /usr/local/bin/dy
+$ dy --help
+```
+
+## Method 2. Homebrew (MacOS)
 
 (currently not available)
 
@@ -145,7 +163,6 @@ To find more features, `dy help` will show you complete list of available comman
 $ dy --help
 dynein x.x.x
 dynein is a command line tool to interact with DynamoDB tables/data using concise interface.
-dynein looks for a config file under $HOME/.dynein directory. For more info: https://github.com/thash/dynein
 
 USAGE:
     dy [OPTIONS] <SUBCOMMAND>
@@ -191,7 +208,7 @@ dynein consists of multiple layers of subcommands. For example, `dy admin` and `
 
 ```
 $ dy admin --help
-dy-admin 0.1.0
+dy-admin x.x.x
 <sub> Admin operations such as creating/updating table or GSI
 
 USAGE:
@@ -215,7 +232,7 @@ SUBCOMMANDS:
     list      List tables in the region. [API: ListTables]
 ```
 
-By executing following command, you can create a DynamoDB.
+By executing following command, you can create a DynamoDB table.
 
 ```
 $ dy admin create table mytable --keys pk,S
@@ -763,8 +780,8 @@ $ kubectl port-forward deployment/dynamodb 8000:8000
 Now you can interact with DynamoDB Local with `--region local` option.
 
 ```
-$ dy --region local table create localdb --keys pk
-$ dy --region local use localdb
+$ dy --region local admin create table localdb --keys pk
+$ dy --region local use -t localdb
 $ dy put firstItem
 $ dy put secondItem
 $ dy scan
@@ -776,8 +793,6 @@ $ dy scan
 dynein is named after [a motor protein](https://en.wikipedia.org/wiki/Dynein).
 
 ## Ideas for future works
-
-Sorted by feasibility/simplicity.
 
 - `dy admin update table` command
 - `dy admin plan` & `dy admin apply` commands to manage tables through CloudFormation.
