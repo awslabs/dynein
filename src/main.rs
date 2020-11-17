@@ -47,13 +47,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let c = cmd::initialize_from_args();
     debug!("Command details: {:?}", c);
 
-    let config = app::load_or_touch_config_file(true)?;
-
     // when --region <region-name e.g. ap-northeast-1>, use the region. when --region local, use DynamoDB local.
     // --region/--table option can be passed as a top-level or subcommand-level (i.e. global).
     let mut context = app::Context {
         region: None,
-        config: Some(config),
+        config: Some(app::load_or_touch_config_file(true)?),
+        cache:  Some(app::load_or_touch_cache_file(true)?),
         overwritten_region: app::region_from_str(c.region),
         overwritten_table_name: c.table,
         output: None,
@@ -110,10 +109,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if all_tables { control::describe_all_tables(context).await }
             else { control::describe_table(context).await }
         },
-        cmd::Sub::Use { }  => app::use_table(&context).await,
+        cmd::Sub::Use { target_table_to_use }  => app::use_table(&context, target_table_to_use).await?,
         cmd::Sub::Config { grandchild } => match grandchild {
-            cmd::ConfigSub::Dump  => println!("{}", serde_yaml::to_string(&app::load_or_touch_config_file(true)?)?),
-            cmd::ConfigSub::Clear => app::remove_config_file().and_then(|()| app::touch_config_file())?,
+            cmd::ConfigSub::Dump  => {
+                println!("{}", serde_yaml::to_string(&app::load_or_touch_cache_file(true)?)?);
+                println!("{}", serde_yaml::to_string(&app::load_or_touch_config_file(true)?)?);
+            },
+            cmd::ConfigSub::Clear => app::remove_dynein_files()?,
         },
 
         cmd::Sub::Bootstrap { list, sample } => {

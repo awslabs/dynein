@@ -101,7 +101,14 @@ pub async fn list_tables_all_regions(cx: app::Context) {
     let input: DescribeRegionsRequest = DescribeRegionsRequest { ..Default::default() };
     match ec2.describe_regions(input).await {
         Err(e) => { error!("{}", e.to_string()); std::process::exit(1); },
-        Ok(res) => join_all(res.regions.unwrap().iter().map(|r| list_tables(cx.clone().with_region(r)) )).await,
+        Ok(res) => {
+            join_all(
+                res.regions.expect("regions should exist") // Vec<Region>
+                   .iter().map(|r|
+                        list_tables(cx.clone().with_region(r))
+                   )
+            ).await;
+        },
     };
 }
 
@@ -109,12 +116,13 @@ pub async fn list_tables_all_regions(cx: app::Context) {
 pub async fn list_tables(cx: app::Context) {
     let table_names = list_tables_api(cx.clone()).await;
 
-    println!("DynamoDB tables in region: {}", &cx.effective_region().name());
+    println!("DynamoDB tables in region: {}", cx.effective_region().name());
     if table_names.len() == 0 { return println!("  No table in this region."); }
 
-    if let Some(table_in_config) = cx.clone().config.and_then(|x| x.table) {
+    // if let Some(table_in_config) = cx.clone().config.and_then(|x| x.table) {
+    if let Some(table_in_config) = cx.clone().cached_using_table_schema() {
         for table_name in table_names {
-            if cx.effective_region().name() == table_in_config.region && table_name == table_in_config.name {
+            if cx.clone().effective_region().name() == table_in_config.region && table_name == table_in_config.name {
                 println!("* {}", table_name);
             } else {
                 println!("  {}", table_name);
@@ -128,6 +136,7 @@ pub async fn list_tables(cx: app::Context) {
 
 
 /// Executed when you call `$ dy desc --all-tables`.
+/// Note that `describe_table` function calls are executed in parallel (async + join_all).
 pub async fn describe_all_tables(cx: app::Context) {
     let table_names = list_tables_api(cx.clone()).await;
     join_all(table_names.iter().map(|t| describe_table(cx.clone().with_table(t)) )).await;
@@ -141,8 +150,12 @@ pub async fn describe_table(cx: app::Context) {
     let desc: TableDescription = app::describe_table_api(&cx.effective_region(), cx.effective_table_name()).await;
     debug!("Retrieved table to describe is: '{}' table in '{}' region.", &desc.clone().table_name.unwrap(), &cx.effective_region().name());
 
-    // update table information stored in config dir
-    app::save_table(cx.effective_region(), app::Config { table: None }, desc.clone());
+    // save described table info into cache for future use.
+    // Note that when this functiono is called from describe_all_tables, not all tables would be cached as calls are parallel.
+    match app::insert_to_table_cache(&cx, desc.clone()) {
+        Ok(_) => { debug!("Described table schema was written to the cache file.") },
+        Err(e) => println!("Failed to write table schema to the cache with follwoing error: {:?}", e),
+    };
 
     match cx.clone().output.as_ref().map(|x| x.as_str() ) {
         None | Some("yaml") => print_table_description(cx.effective_region(), desc),

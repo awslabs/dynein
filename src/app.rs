@@ -20,12 +20,15 @@ use log::{debug,error,info};
 use rusoto_core::Region;
 use rusoto_dynamodb::*;
 use serde_yaml::Error as SerdeYAMLError;
-use std::error;
-use std::fmt::{self, Display, Formatter, Error as FmtError};
-use std::fs;
-use std::io::Error as IOError;
-use std::path;
-use std::str::FromStr;
+use std::{
+    collections::HashMap,
+    error,
+    fmt::{self, Display, Formatter, Error as FmtError},
+    fs,
+    io::Error as IOError,
+    path,
+    str::FromStr,
+};
 
 use super::control;
 
@@ -35,6 +38,13 @@ use super::control;
 
 const CONFIG_DIR: &'static str = ".dynein";
 const CONFIG_FILE_NAME: &'static str = "config.yml";
+const CACHE_FILE_NAME: &'static str  = "cache.yml";
+
+
+pub enum DyneinFileType {
+    ConfigFile,
+    CacheFile,
+}
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -131,25 +141,35 @@ impl fmt::Display for Messages {
         write!(f, "{}", match self {
             Messages::NoEffectiveTable => "
 To execute commands you must specify target table one of following ways:
-    * $ dy --region <region> use <your_table> ... save target region and table. After that you don't need to pass region/table [RECOMMENDED].
-    * $ dy --region <region> --table <your_table> scan ... data operations like 'scan', use --region and --table options.
-    * $ dy --region <region> desc <your_table> ... to describe a table, you have to specify table name.
-To list all tables in all regions, try:
+    * [RECOMMENDED] $ dy use <your_table> ... save target region and table.
+    * Or, optionally you can pass --region (-r) and --table (-t) options every time to specify target for your commands.
+To find all tables in all regions, try:
     * $ dy ls --all-regions",
         })
     }
 }
 
 
-/*
-* This is a struct for dynein configuration.
-* Currently the only information in the config file is the table information that being used,
-* but in future it's possible that we separate cached table information from configurations,
-* which may contain "expiration time for cached table", "default region", and "default table name" etc.
-*/
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/// Config is saved at `~/.dynein/config.yml`.
+/// using_region and using_table are changed when you execute `dy use` command.
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Config {
-    pub table: Option<TableSchema>,
+    pub using_region: Option<String>,
+    pub using_table:  Option<String>,
+    // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
+}
+
+/// Cache is saved at `~/.dynein/cache.yml`
+/// Cache contains retrieved info of tables, and how fresh they are (cache_created_at).
+/// Currently Cache struct doesn't manage freshness of each table.
+/// i.e. Entire cache will be removed after cache_expiration_time in Config has passed.
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct Cache {
+    /// cached table schema information.
+    /// table schemas are stored in keys to identify the target table "<Region>/<TableName>" -- e.g. "ap-northeast-1/Employee"
+    pub tables: Option<HashMap<String, TableSchema>>,
+    // pub cache_updated_at: String,
+    // pub cache_created_at: String,
 }
 
 
@@ -157,6 +177,7 @@ pub struct Config {
 pub struct Context {
     pub region: Option<Region>,
     pub config: Option<Config>,
+    pub cache:  Option<Cache>,
     pub overwritten_region: Option<Region>, // --region option
     pub overwritten_table_name: Option<String>,  // --table option
     pub output: Option<String>,
@@ -173,8 +194,11 @@ impl Context {
         // if region is overwritten by --region comamnd, use it.
         if let Some(ow_region) = &self.overwritten_region { return ow_region.to_owned(); };
 
-        // next, if there's a region name in currently using table, use it.
-        if let Some(table) = self.config.as_ref().and_then(|x| x.clone().table ) { return region_from_str(Some(table.region)).unwrap(); };
+        // next, if there's an `using_region` field in the config file, use it.
+        if let Some(using_region_name_in_config) = &self.config.to_owned().and_then(|x| x.using_region ) {
+            return region_from_str(Some(using_region_name_in_config.to_owned())) // Option<Region>
+                   .expect("Region name in the config file is invalid.");
+        };
 
         // otherwise, come down to "default region" of your environment.
         // e.g. region set via AWS CLI (check: $ aws configure get region), or environment variable `AWS_DEFAULT_REGION`.
@@ -184,14 +208,27 @@ impl Context {
     }
 
     pub fn effective_table_name(&self) -> String {
-        // if table is overwritten by --table command, use it.
+        // if table is overwritten by --table option, use it.
         if let Some(ow_table_name) = &self.overwritten_table_name { return ow_table_name.to_owned(); };
-        // otherwise, retrieve table name from config file.
-        return match self.config.as_ref().and_then(|x| x.table.to_owned() ) {
-            Some(table) => table.name,
-            // if both of data sources above are not available, raise error and exit the command.
-            None => { error!("{}", Messages::NoEffectiveTable); std::process::exit(1); },
-        }
+        // otherwise, retrieve an `using_table` from config file.
+        return self.to_owned().config.and_then(|x| x.using_table )
+                          .unwrap_or_else(|| { // if both --option nor config file are not available, raise error and exit the command.
+                              error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
+                          });
+    }
+
+    pub fn effective_cache_key(&self) -> String {
+        return format!("{}/{}", &self.effective_region().name(), &self.effective_table_name());
+    }
+
+    pub fn cached_using_table_schema(&self) -> Option<TableSchema> {
+        let cached_tables: HashMap<String, TableSchema> = match self.cache.to_owned().and_then(|c| c.tables) {
+            Some(cts) => cts,
+            None => return None, // return None for this "cached_using_table_schema" function
+        };
+        let found_table_schema: Option<&TableSchema> = cached_tables.get(&self.effective_cache_key());
+        // NOTE: HashMap's `get` returns a reference to the value / (&self, k: &Q) -> Option<&V>
+        return found_table_schema.map(|schema| schema.to_owned());
     }
 
     pub fn with_region(mut self, ec2_region: &rusoto_ec2::Region) -> Self {
@@ -266,9 +303,9 @@ fn region_dynamodb_local(port: u32) -> Region {
 }
 
 /// Loads dynein config file (YAML format) and return config struct as a result.
-/// If it cannot find config file, create blank config.
+/// Creates the file with default if the file couldn't be found.
 pub fn load_or_touch_config_file(first_try: bool) -> Result<Config, DyneinConfigError> {
-    let path = retrieve_config_file_path();
+    let path = retrieve_dynein_file_path(DyneinFileType::ConfigFile)?;
     debug!("Loading Config File: {}", path);
 
     match fs::read_to_string(&path) {
@@ -280,37 +317,65 @@ pub fn load_or_touch_config_file(first_try: bool) -> Result<Config, DyneinConfig
         Err(e) => {
             if !first_try { return Err(DyneinConfigError::from(e)) };
             info!("Config file doesn't exist in the path, hence creating a blank file: {}", e);
-            touch_config_file()?;
+            let yaml_string = serde_yaml::to_string(&Config { ..Default::default() }).unwrap();
+            fs::write(&retrieve_dynein_file_path(DyneinFileType::ConfigFile)?, yaml_string)?;
             load_or_touch_config_file(false) // set fisrt_try flag to false in order to avoid infinite loop.
         }
     }
 }
 
 
-pub async fn use_table(cx: &Context) {
-    if let Some(tbl) = &cx.overwritten_table_name {
-        debug!("describing the table: {}", &tbl);
-        let region = cx.effective_region();
-        let desc: TableDescription = describe_table_api(&region, tbl.clone()).await;
-        let config = cx.config.clone().unwrap();
-        save_table(region, config, desc);
-    } else {
-        bye(1, "ERROR: You have to specify a tabel to use by --table/-t option.");
+/// Loads dynein cache file (YAML format) and return Cache struct as a result.
+/// Creates the file with default if the file couldn't be found.
+pub fn load_or_touch_cache_file(first_try: bool) -> Result<Cache, DyneinConfigError> {
+    let path = retrieve_dynein_file_path(DyneinFileType::CacheFile)?;
+    debug!("Loading Cache File: {}", path);
+
+    match fs::read_to_string(&path) {
+        Ok(_str) => {
+            let cache: Cache = serde_yaml::from_str(&_str)?;
+            debug!("Loaded current cache: {:?}", cache);
+            Ok(cache)
+        },
+        Err(e) => {
+            if !first_try { return Err(DyneinConfigError::from(e)) };
+            info!("Config file doesn't exist in the path, hence creating a blank file: {}", e);
+            let yaml_string = serde_yaml::to_string(&Cache { ..Default::default() }).unwrap();
+            fs::write(&retrieve_dynein_file_path(DyneinFileType::CacheFile)?, yaml_string)?;
+            load_or_touch_cache_file(false) // set fisrt_try flag to false in order to avoid infinite loop.
+        }
     }
 }
 
 
-/// Physicall remove config file.
-pub fn remove_config_file() -> std::io::Result<()> {
-    fs::remove_file(retrieve_config_file_path())?;
+/// You can use a table in two syntaxes:
+///   $ dy use --table mytable
+///   or
+///   $ dy use mytable
+pub async fn use_table(cx: &Context, positional_arg_table_name: Option<String>) -> Result<(), DyneinConfigError> {
+    // When context has "overwritten_table_name". i.e. you passed --table (-t) option.
+    // When you didn't pass --table option, check if you specified target table name directly, instead of --table option.
+    let target_table: Option<String> = cx.clone().overwritten_table_name.or(positional_arg_table_name);
+    match target_table {
+        Some(tbl) => {
+            debug!("describing the table: {}", &tbl);
+            let region = cx.effective_region();
+            let desc: TableDescription = describe_table_api(&region, tbl.clone()).await;
+
+            save_using_target(cx, desc)?;
+            println!("Now you're using the table '{}' ({}).", tbl, &region.name());
+        },
+        None => bye(1, "You have to specify a table. How to use (1). 'dy use --table mytable', or (2) 'dy use mytable'."),
+    };
+
     Ok(())
 }
 
 
-/// Create config file with blank (None) for each field.
-pub fn touch_config_file() -> std::io::Result<()> {
-    let yaml_string = serde_yaml::to_string(&Config { table: None }).unwrap();
-    fs::write(&retrieve_config_file_path(), yaml_string).expect("Could not write to file!");
+/// Physicall remove config and cache file.
+pub fn remove_dynein_files() -> Result<(), DyneinConfigError> {
+    fs::remove_file(retrieve_dynein_file_path(DyneinFileType::ConfigFile)?)?;
+    fs::remove_file(retrieve_dynein_file_path(DyneinFileType::CacheFile)?)?;
     Ok(())
 }
 
@@ -363,7 +428,10 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
         },
         None => { // simply maps config data into TableSchema struct.
             debug!("current context {:#?}", cx);
-            return cx.config.clone().unwrap().table.unwrap_or_else(|| {
+            let cache: Cache = cx.clone().cache.expect("Cache should exist in context"); // can refactor here using and_then
+            let cached_tables: HashMap<String, TableSchema> = cache.tables.expect("tables should exist in cache");
+            let schema_from_cache: Option<TableSchema> = cached_tables.get(&cx.effective_cache_key().clone()).map(|x| x.to_owned());
+            return schema_from_cache.unwrap_or_else(|| {
                 error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
             });
         },
@@ -429,32 +497,20 @@ pub fn bye(code: i32, msg: &str) {
 }
 
 
-pub fn save_table(region: Region, config: Config, desc: TableDescription) {
-    let path = retrieve_config_file_path();
-
-    let mut new_config = config.clone();
-    new_config.table = None; // reset existing table info
-    new_config.table = Some(TableSchema {
-        region: String::from(region.name()),
-        name: desc.table_name.clone().unwrap(),
-        pk: typed_key("HASH", &desc).expect("pk should exist"),
-        sk: typed_key("RANGE", &desc),
-        indexes: index_schemas(&desc),
-        mode: control::extract_mode(&desc.billing_mode_summary),
-    });
-
-    let yaml_string = serde_yaml::to_string(&new_config).expect("Failed to execute serde_yaml::to_string");
-    fs::write(path, yaml_string).expect("Could not write to file!");
-    debug!("Config Updated: {:#?}", &new_config);
-}
-
-
 /* =================================================
    Private functions
    ================================================= */
 
-fn retrieve_config_file_path () -> String { format!("{}/{}", retrieve_config_dir().unwrap(), CONFIG_FILE_NAME) }
-fn retrieve_config_dir() -> Result<String, DyneinConfigError> {
+fn retrieve_dynein_file_path (dft: DyneinFileType) -> Result<String, DyneinConfigError> {
+    let filename = match dft {
+        DyneinFileType::ConfigFile => CONFIG_FILE_NAME,
+        DyneinFileType::CacheFile => CACHE_FILE_NAME,
+    };
+
+    Ok(format!("{}/{}", retrieve_or_create_dynein_dir()?, filename))
+}
+
+fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
     return match dirs::home_dir() {
         None => Err(DyneinConfigError::HomeDir),
         Some(home) => {
@@ -466,6 +522,67 @@ fn retrieve_config_dir() -> Result<String, DyneinConfigError> {
             Ok(dir)
         },
     }
+}
+
+
+/// This function updates `using_region` and `using_table` in config.yml,
+/// and at the same time inserts TableDescription of the target table into cache.yml.
+fn save_using_target(cx: &Context, desc: TableDescription) -> Result<(), DyneinConfigError> {
+    let table_name: String = desc.table_name.clone().expect("desc should have table name");
+
+    // retrieve current config from Context and update "using target".
+    let mut config = cx.clone().config.expect("cx should have config").clone();
+    config.using_region = Some(String::from(cx.effective_region().name()));
+    config.using_table  = Some(table_name.clone());
+    debug!("config file will be updated with: {:?}", &config);
+
+    // write to config file
+    let config_yaml_string = serde_yaml::to_string(&config)?;
+    fs::write(retrieve_dynein_file_path(DyneinFileType::ConfigFile)?, config_yaml_string)?;
+
+    // save target table info into cache.
+    insert_to_table_cache(&cx, desc)?;
+
+    Ok(())
+}
+
+
+/// Inserts specified table description into cache file.
+pub fn insert_to_table_cache(cx: &Context, desc: TableDescription) -> Result<(), DyneinConfigError> {
+    let table_name: String = desc.table_name.clone().expect("desc should have table name");
+    let region: Region = cx.effective_region();
+    debug!("Under the region '{}', trying to save table schema of '{}'", &region.name(), &table_name);
+
+    // retrieve current cache from Context and update target table desc.
+    // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
+    let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
+    let cache_key = format!("{}/{}", region.name(), table_name.clone());
+
+    let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
+        Some(ts) => ts,
+        None => HashMap::<String, TableSchema>::new(),
+    };
+    debug!("table schema cache before insert: {:#?}", table_schema_hashmap);
+
+    table_schema_hashmap.insert(
+            cache_key,
+            TableSchema {
+                region: String::from(region.name()),
+                name: table_name.clone(),
+                pk: typed_key("HASH", &desc).expect("pk should exist"),
+                sk: typed_key("RANGE", &desc),
+                indexes: index_schemas(&desc),
+                mode: control::extract_mode(&desc.billing_mode_summary),
+            }
+        );
+    cache.tables = Some(table_schema_hashmap);
+
+    // write to cache file
+    let cache_yaml_string = serde_yaml::to_string(&cache)?;
+    debug!("this YAML will be written to the cache file: {:#?}", &cache_yaml_string);
+    fs::write(retrieve_dynein_file_path(DyneinFileType::CacheFile)?, cache_yaml_string)?;
+
+    Ok(())
 }
 
 
@@ -484,6 +601,7 @@ mod tests {
         let cx1 = Context {
             region: None,
             config: None,
+            cache: None,
             overwritten_region: None,
             overwritten_table_name: None,
             output: None,
@@ -494,15 +612,10 @@ mod tests {
         let cx2 = Context {
             region: None,
             config: Some(Config {
-                table: Some(TableSchema {
-                    region: String::from("ap-northeast-1"),
-                    name: String::from("cfgtbl"),
-                    pk: Key { name: String::from("pk"), kind: KeyType::S },
-                    sk: None,
-                    indexes: None,
-                    mode: control::Mode::OnDemand,
-                }),
+                using_region: Some(String::from("ap-northeast-1")),
+                using_table: Some(String::from("cfgtbl")),
             }),
+            cache: None,
             overwritten_region: None,
             overwritten_table_name: None,
             output: None,
