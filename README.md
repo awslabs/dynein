@@ -10,8 +10,8 @@ dynein - DynamoDB CLI
     - [Quick Start](#quick-start)
     - [For day-to-day tasks](#for-day-to-day-tasks)
 - [Installation](#installation)
-    - [Method 1. HomeBrew (MacOS)](#method-1-homebrew-macos)
-    - [Method 2. Download a binary](#method-2-download-a-binary)
+    - [Method 1. Download binaries](#method-1-download-binaries)
+    - [Method 2. Homebrew (MacOS)](#method-2-homebrew-macos)
     - [Method 3. Building from source](#method-3-building-from-source)
 - [How to Use](#how-to-use)
     - [Prerequisites - AWS Credentials](#prerequisites---aws-credentials)
@@ -35,6 +35,8 @@ dynein - DynamoDB CLI
         - [`dy import`](#dy-import)
     - [Using DynamoDB Local with `--region local` option](#using-dynamodb-local-with---region-local-option)
 - [Misc](#misc)
+    - [Asides](#asides)
+    - [Troubleshooting](#troubleshooting)
     - [Ideas for future works](#ideas-for-future-works)
 
 <!-- /TOC -->
@@ -105,7 +107,7 @@ You can move the binary file named "dy" to anywhere under your `$PATH`.
 
 ## Prerequisites - AWS Credentials
 
-First of all, please make sure you've already configured AWS Credentials in your environment. dynein depends on [rusoto](https://github.com/rusoto/rusoto) and rusoto [can utilize standard AWS credential toolchains](https://github.com/rusoto/rusoto/blob/master/AWS-CREDENTIALS.md) - for example `~/.aws/credentials` file, [IAM EC2 Instance Profile](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html), or environment variables such as `AWS_DEFAULT_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY`.
+First of all, please make sure you've already configured AWS Credentials in your environment. dynein depends on [rusoto](https://github.com/rusoto/rusoto) and rusoto [can utilize standard AWS credential toolchains](https://github.com/rusoto/rusoto/blob/master/AWS-CREDENTIALS.md) - for example `~/.aws/credentials` file, [IAM EC2 Instance Profile](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html), or environment variables such as `AWS_DEFAULT_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_PROFILE`.
 
 One convenient way to check if your AWS credential configuration is ok to use dynein is to install and try to execute [AWS CLI](https://aws.amazon.com/cli/) in your environment (e.g. `$ aws dynamodb list-tables`). Once you've [configured AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html), you should be ready to use dynein.
 
@@ -145,7 +147,7 @@ Here `Name` is [a primary key](https://docs.aws.amazon.com/amazondynamodb/latest
 You don't want to pass `--region` and `--table` everytime? Let's mark the table as "currently using" with the command `dy use`.
 
 ```
-$ dy use --region us-west-2 --table Forum
+$ dy use Forum --region us-west-2
 ```
 
 Now you can interact with the table without specifying a target.
@@ -163,32 +165,28 @@ To find more features, `dy help` will show you complete list of available comman
 $ dy --help
 dynein x.x.x
 dynein is a command line tool to interact with DynamoDB tables/data using concise interface.
+dynein looks for config files under $HOME/.dynein/ directory.
 
 USAGE:
     dy [OPTIONS] <SUBCOMMAND>
 
 FLAGS:
-    -h, --help
-            Prints help information
-
-    -V, --version
-            Prints version information
-
+    -h, --help       Prints help information
+    -V, --version    Prints version information
 
 OPTIONS:
-    -r, --region <region>
-            The region to use. When using DynamodB Local, `--region local` You can use --region option in both top-level
-            and subcommand-level
-    -t, --table <table>
-            Target table. By executing `$ dy use -t <table>` you can omit --table on every command. You can use --table
-            option in both top-level and subcommand-level
+    -r, --region <region>    The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region
+                             local`. You can use --region option in both top-level and subcommand-level
+    -t, --table <table>      Target table of the operation. You can use --table option in both top-level and subcommand-
+                             level. You can store table schema locally by executing `$ dy use`, after that
+                             you need not to specify --table on every command
 
 SUBCOMMANDS:
-    admin        <sub> Admin operations such as creating/updating table or index
+    admin        <sub> Admin operations such as creating/updating table or GSI
     backup       Take backup of a DynamoDB table using on-demand backup
     bootstrap    Create sample tables and load test data for bootstrapping
     bwrite       Put or Delete multiple items at one time, up to 25 requests. [API: BatchWriteItem]
-    config       <sub> Manage configuration file (~/.dynein/config.yml) from command line
+    config       <sub> Manage configuration files (config.yml and cache.yml) from command line
     del          Delete an existing item. [API: DeleteItem]
     desc         Show detailed information of a table. [API: DescribeTable]
     export       Export items from a DynamoDB table and save them as CSV/JSON file
@@ -201,7 +199,8 @@ SUBCOMMANDS:
     restore      Restore a DynamoDB table from backup data
     scan         Retrieve items in a table without any condition. [API: Scan]
     upd          Update an existing item. [API: UpdateItem]
-    use          Switch target table context. You can overwrite the context with --table
+    use          Switch target table context. After you use the command you don't need to specify table every time,
+                 but you may overwrite the target table with --table (-t) option
 ```
 
 dynein consists of multiple layers of subcommands. For example, `dy admin` and `dy config` require you to give additional action to run.
@@ -214,15 +213,9 @@ dy-admin x.x.x
 USAGE:
     dy admin [OPTIONS] <SUBCOMMAND>
 
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+FLAGS: ...
 
-OPTIONS:
-    -r, --region <region>    The region to use. When using DynamodB Local, `--region local` You can use --region option
-                             in both top-level and subcommand-level
-    -t, --table <table>      Target table. By executing `$ dy use -t <table>` you can omit --table on every command. You
-                             can use --table option in both top-level and subcommand-level
+OPTIONS: ...
 
 SUBCOMMANDS:
     create    Create new DynamoDB table or GSI
@@ -272,7 +265,7 @@ Now all tables have sample data. Try following commands to play with dynein. Enj
   $ dy --region us-west-2 use --table Thread
   $ dy scan
 
-After you 'use' a table like above, dynein assume you're using the same region & table, which info is stored at ~/.dynein/config.yml
+After you 'use' a table like above, dynein assume you're using the same region & table, which info is stored at ~/.dynein/config.yml and ~/.dynein/cache.yml
 Let's move on with the 'us-west-2' region you've just 'use'd...
   $ dy scan --table Forum
   $ dy scan -t ProductCatalog
@@ -310,7 +303,7 @@ created_at: "2020-03-03T13:34:43+00:00"
 After the table get ready (= `ACTIVE` status), you can write-to and read-from the table.
 
 ```
-$ dy use -t app_users
+$ dy use app_users
 $ dy desc
 ---
 name: app_users
@@ -389,24 +382,31 @@ However, dynein assume that tipically you're interested in only one table at som
 By using `dy use` for a table, you can call commands such as `scan`, `get`, `query`, and `put` without specifying table name.
 
 ```
-$ dy use -t customers
+$ dy use customers
 $ dy scan
 ... display items in the "customers" table ...
 ```
 
-In detail, when you execute `dy use` command, dynein saves your table usage information under `~/.dynein/config.yml`. You can dump the info with `dy config dump` command.
+In detail, when you execute `dy use` command, dynein saves your table usage information in `~/.dynein/config.yml` and caches table schema in `~/.dynein/cache.yml`. You can dump them with `dy config dump` command.
 
 ```
+$ ls ~/.dynein/
+cache.yml   config.yml
+
 $ dy config dump
 ---
-table:
-  region: ap-northeast-1
-  name: customers
-  pk:
-    name: user_id
-    kind: S
-  sk: ~
-  indexes: ~
+tables:
+  ap-northeast-1/customers:
+    region: ap-northeast-1
+    name: customers
+    pk:
+      name: user_id
+      kind: S
+    sk: ~
+    indexes: ~
+---
+using_region: ap-northeast-1
+using_table: customers
 ```
 
 To clear current table configuration, simply execute `dy config clear`.
@@ -415,7 +415,10 @@ To clear current table configuration, simply execute `dy config clear`.
 $ dy config clear
 $ dy config dump
 ---
-table: ~
+tables: ~
+---
+using_region: ~
+using_table: ~
 ```
 
 
@@ -426,10 +429,10 @@ As an example let's assume you have [official "Movie" sample data](https://docs.
 ```
 $ dy bootstrap --sample movie
 ... wait some time while dynein loading data ...
-$ dy use -t Movie
+$ dy use Movie
 ```
 
-After executing `dy use -t <your_table>` command, dynein recognize keyscheme and data type of the table. It means that some of the arguments you need to pass to access data (items) is automatically inferred when possible.
+After executing `dy use <your_table>` command, dynein recognize keyscheme and data type of the table. It means that some of the arguments you need to pass to access data (items) is automatically inferred when possible.
 
 
 Before diving deep into each command, let me describe DynamoDB's "reserved words". One of the traps that beginners can easily fall into is that you cannot use [certain reserved words](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html) in DynamoDB APIs. DynamoDB reserved words contains common words that you may want to use in your application. For example "name", "year", "url", "token", "error", "date", "group" -- all of them are reserved so you cannot use them in expressions directly.
@@ -547,7 +550,7 @@ dynein provides subcommands to write to DynamoDB tables as well.
 
 ```
 $ dy admin create table write_test --keys id,N
-$ dy use -t write_test
+$ dy use write_test
 
 $ dy put 123
 Successfully put an item to the table 'write_test'.
@@ -704,7 +707,7 @@ count: 0
 size_bytes: 0
 created_at: "2020-06-02T14:22:56+00:00"
 
-$ dy use -t app_users
+$ dy use app_users
 $ dy scan --index top_rank_users_index
 ```
 
@@ -790,7 +793,24 @@ $ dy scan
 
 # Misc
 
+## Asides
+
 dynein is named after [a motor protein](https://en.wikipedia.org/wiki/Dynein).
+
+## Troubleshooting
+
+If you encounter troubles, the first option worth trying is removing files in `~/.dynein/` or the directory itself. Doing this just clears "cached" info stored locally for dynein and won't affect your data stored in DynamoDB tables.
+
+```
+$ rm -rf ~/.dynein/
+```
+
+To see verbose output for troubleshooting purpose, you can change log level by `RUST_LOG` environment variable. For example:
+
+```
+$ RUST_LOG=debug RUST_BACKTRACE=1 dy scan --table your_table
+```
+
 
 ## Ideas for future works
 

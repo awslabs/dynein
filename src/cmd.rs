@@ -24,7 +24,7 @@ use structopt::StructOpt;
 
 const ABOUT_DYNEIN: &'static str = "\
 dynein is a command line tool to interact with DynamoDB tables/data using concise interface.\n\
-dynein looks for a config file under $HOME/.dynein directory.";
+dynein looks for config files under $HOME/.dynein/ directory.";
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "dynein", about = ABOUT_DYNEIN)]
@@ -32,12 +32,13 @@ pub struct Dynein {
     #[structopt(subcommand)]
     pub child: Sub,
 
-    /// The region to use. When using DynamodB Local, `--region local`
+    /// The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
     /// You can use --region option in both top-level and subcommand-level.
     #[structopt(short, long, global = true)]
     pub region: Option<String>,
 
-    /// Target table. By executing `$ dy use -t <table>` you can omit --table on every command. You can use --table option in both top-level and subcommand-level.
+    /// Target table of the operation. You can use --table option in both top-level and subcommand-level.
+    /// You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
     #[structopt(short, long, global = true)]
     pub table: Option<String>,
 }
@@ -242,14 +243,17 @@ pub enum Sub {
        Dynein utility commands
        ================================================= */
 
-    /// Switch target table context. You can overwrite the context with --table.
+    /// Switch target table context. After you use the command you don't need to specify table every time, but you may overwrite the target table with --table (-t) option.
     ///
-    /// When you execute `use` dynein stores table information in ~/.dynein/ directory.
-    /// Table information would be retrieved via DescribeTable API.
+    /// When you execute `use`, dynein retrieves table schema info via DescribeTable API
+    /// and stores it in ~/.dynein/ directory.
     #[structopt()]
-    Use { },
+    Use {
+        /// Target table name to use. Optionally you may specify the target table by --table (-t) option.
+        target_table_to_use: Option<String>
+    },
 
-    /// <sub> Manage configuration file (~/.dynein/config.yml) from command line
+    /// <sub> Manage configuration files (config.yml and cache.yml) from command line
     #[structopt()]
     Config {
         #[structopt(subcommand)]
@@ -459,11 +463,11 @@ pub enum DeleteSub {
 
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum ConfigSub {
-    /// Show all configuration in the config file (`~/.dynein/config.yml`).
+    /// Show all configuration in config (config.yml) and cache (cache.yml) files.
     #[structopt(aliases = &["show", "current-context"])] // for now, as config content is not so large, showing current context == dump all config.
     Dump,
 
-    /// Reset all configuration. The config file (`~/.dynein/config.yml`) would be initialized.
+    /// Reset all dynein configuration in the `~/.dynein/` directory. This command initializes dynein related files only and won't remove your data stored in DynamoDB tables.
     #[structopt()]
     Clear,
 }

@@ -259,7 +259,7 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
     println!("  $ dy --region {} scan --table Thread", &cx.effective_region().name());
     println!("  $ dy --region {} use --table Thread", &cx.effective_region().name());
     println!("  $ dy scan");
-    println!("\nAfter you 'use' a table like above, dynein assume you're using the same region & table, which info is stored at ~/.dynein/config.yml");
+    println!("\nAfter you 'use' a table like above, dynein assume you're using the same region & table, which info is stored at ~/.dynein/config.yml and ~/.dynein/cache.yml");
     println!("Let's move on with the '{}' region you've just 'use'd...", &cx.effective_region().name());
     println!("  $ dy scan --table Forum");
     println!("  $ dy scan -t ProductCatalog");
