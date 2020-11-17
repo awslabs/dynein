@@ -293,15 +293,6 @@ pub fn region_from_str(s: Option<String>) -> Option<Region> {
 }
 
 
-fn region_dynamodb_local(port: u32) -> Region {
-    let endpoint_url = format!("http://localhost:{}", port);
-    debug!("setting DynamoDB Local '{}' as target region.", &endpoint_url);
-    return Region::Custom {
-        name: "local".to_owned(),
-        endpoint: endpoint_url.to_owned(),
-    };
-}
-
 /// Loads dynein config file (YAML format) and return config struct as a result.
 /// Creates the file with default if the file couldn't be found.
 pub fn load_or_touch_config_file(first_try: bool) -> Result<Config, DyneinConfigError> {
@@ -367,6 +358,45 @@ pub async fn use_table(cx: &Context, positional_arg_table_name: Option<String>) 
         },
         None => bye(1, "You have to specify a table. How to use (1). 'dy use --table mytable', or (2) 'dy use mytable'."),
     };
+
+    Ok(())
+}
+
+
+/// Inserts specified table description into cache file.
+pub fn insert_to_table_cache(cx: &Context, desc: TableDescription) -> Result<(), DyneinConfigError> {
+    let table_name: String = desc.table_name.clone().expect("desc should have table name");
+    let region: Region = cx.effective_region();
+    debug!("Under the region '{}', trying to save table schema of '{}'", &region.name(), &table_name);
+
+    // retrieve current cache from Context and update target table desc.
+    // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
+    let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
+    let cache_key = format!("{}/{}", region.name(), table_name.clone());
+
+    let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
+        Some(ts) => ts,
+        None => HashMap::<String, TableSchema>::new(),
+    };
+    debug!("table schema cache before insert: {:#?}", table_schema_hashmap);
+
+    table_schema_hashmap.insert(
+            cache_key,
+            TableSchema {
+                region: String::from(region.name()),
+                name: table_name.clone(),
+                pk: typed_key("HASH", &desc).expect("pk should exist"),
+                sk: typed_key("RANGE", &desc),
+                indexes: index_schemas(&desc),
+                mode: control::extract_mode(&desc.billing_mode_summary),
+            }
+        );
+    cache.tables = Some(table_schema_hashmap);
+
+    // write to cache file
+    let cache_yaml_string = serde_yaml::to_string(&cache)?;
+    debug!("this YAML will be written to the cache file: {:#?}", &cache_yaml_string);
+    fs::write(retrieve_dynein_file_path(DyneinFileType::CacheFile)?, cache_yaml_string)?;
 
     Ok(())
 }
@@ -501,6 +531,16 @@ pub fn bye(code: i32, msg: &str) {
    Private functions
    ================================================= */
 
+fn region_dynamodb_local(port: u32) -> Region {
+    let endpoint_url = format!("http://localhost:{}", port);
+    debug!("setting DynamoDB Local '{}' as target region.", &endpoint_url);
+    return Region::Custom {
+        name: "local".to_owned(),
+        endpoint: endpoint_url.to_owned(),
+    };
+}
+
+
 fn retrieve_dynein_file_path (dft: DyneinFileType) -> Result<String, DyneinConfigError> {
     let filename = match dft {
         DyneinFileType::ConfigFile => CONFIG_FILE_NAME,
@@ -542,45 +582,6 @@ fn save_using_target(cx: &Context, desc: TableDescription) -> Result<(), DyneinC
 
     // save target table info into cache.
     insert_to_table_cache(&cx, desc)?;
-
-    Ok(())
-}
-
-
-/// Inserts specified table description into cache file.
-pub fn insert_to_table_cache(cx: &Context, desc: TableDescription) -> Result<(), DyneinConfigError> {
-    let table_name: String = desc.table_name.clone().expect("desc should have table name");
-    let region: Region = cx.effective_region();
-    debug!("Under the region '{}', trying to save table schema of '{}'", &region.name(), &table_name);
-
-    // retrieve current cache from Context and update target table desc.
-    // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
-    let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
-    let cache_key = format!("{}/{}", region.name(), table_name.clone());
-
-    let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
-        Some(ts) => ts,
-        None => HashMap::<String, TableSchema>::new(),
-    };
-    debug!("table schema cache before insert: {:#?}", table_schema_hashmap);
-
-    table_schema_hashmap.insert(
-            cache_key,
-            TableSchema {
-                region: String::from(region.name()),
-                name: table_name.clone(),
-                pk: typed_key("HASH", &desc).expect("pk should exist"),
-                sk: typed_key("RANGE", &desc),
-                indexes: index_schemas(&desc),
-                mode: control::extract_mode(&desc.billing_mode_summary),
-            }
-        );
-    cache.tables = Some(table_schema_hashmap);
-
-    // write to cache file
-    let cache_yaml_string = serde_yaml::to_string(&cache)?;
-    debug!("this YAML will be written to the cache file: {:#?}", &cache_yaml_string);
-    fs::write(retrieve_dynein_file_path(DyneinFileType::CacheFile)?, cache_yaml_string)?;
 
     Ok(())
 }
