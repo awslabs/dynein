@@ -70,10 +70,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if all_tables { control::describe_all_tables(context).await }
                 else { control::describe_table(context).await }
             },
-            // cmd::AdminSub::Apply  { } => cfn::apply(context).await?,
             cmd::AdminSub::Create { target_type } => match target_type {
                 cmd::CreateSub::Table { new_table_name, keys } => control::create_table(context, new_table_name, keys).await,
                 cmd::CreateSub::Index { index_name, keys } => control::create_index(context, index_name, keys).await,
+            },
+            cmd::AdminSub::Update { target_type } => match target_type {
+                cmd::UpdateSub::Table { table_name_to_update, mode, wcu, rcu } => control::update_table(context, table_name_to_update, mode, wcu, rcu).await,
             },
             cmd::AdminSub::Delete { target_type } => match target_type {
                 cmd::DeleteSub::Table { table_name_to_delete, yes } => control::delete_table(context, table_name_to_delete, yes).await,
