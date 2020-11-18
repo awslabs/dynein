@@ -237,7 +237,7 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
                     false /* keys_only */, Some(1) /* limit */, None /* esk */
                 ).await.items.expect("items should be 'Some' even if there's no item in the table.");
 
-    if !items.is_empty() { app::bye(0, "No item to export in this table. Quit the operation."); }
+    if items.is_empty() { app::bye(0, "No item to export in this table. Quit the operation."); }
 
     // Filter out primary keys. i.e. select attributes that aren't required by the table's keyschema.
     let primary_keys = vec![Some(ts.pk.name.to_owned()), ts.sk.to_owned().map(|x| x.name)];
