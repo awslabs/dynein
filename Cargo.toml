@@ -15,7 +15,7 @@
 [package]
 name = "dynein"
 description = "DynamoDB Command Line Interface"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Takuya Hashimoto <thash@amazon.com>"]
 edition = "2018"
 license = "Apache-2.0"
