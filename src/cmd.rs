@@ -371,14 +371,21 @@ pub enum AdminSub {
         output: Option<String>,
     },
 
-    /// Create new DynamoDB table or GSI.
+    /// Create new DynamoDB table or GSI. [API: CreateTable, UpdateTable]
     #[structopt()]
     Create {
         #[structopt(subcommand)]
         target_type: CreateSub,
     },
 
-    /// Delete a DynamoDB table or GSI.
+    /// Update a DynamoDB table. [API: UpdateTable etc]
+    #[structopt()]
+    Update {
+        #[structopt(subcommand)]
+        target_type: UpdateSub,
+    },
+
+    /// Delete a DynamoDB table or GSI. [API: DeleteTable]
     #[structopt()]
     Delete {
         #[structopt(subcommand)]
@@ -415,7 +422,7 @@ pub enum AdminSub {
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum CreateSub {
 
-    /// Create new DynamoDB table with given primary key(s).
+    /// Create new DynamoDB table with given primary key(s). [API: CreateTable]
     #[structopt()]
     Table {
         /// table name to create
@@ -427,7 +434,7 @@ pub enum CreateSub {
         keys: Vec<String>,
     },
 
-    /// Create new GSI (global secondary index) for a table with given primary key(s).
+    /// Create new GSI (global secondary index) for a table with given primary key(s). [API: UpdateTable]
     #[structopt()]
     Index {
         /// index name to create
@@ -438,6 +445,37 @@ pub enum CreateSub {
         #[structopt(short, long, required = true)]
         keys: Vec<String>,
     }
+}
+
+
+#[derive(StructOpt, Debug, Serialize, Deserialize)]
+pub enum UpdateSub {
+
+    /// Update a DynamoDB table.
+    #[structopt()]
+    Table {
+        /// table name to update
+        table_name_to_update: String,
+
+        /// DynamoDB capacity mode. Availablle values: [provisioned, ondemand].
+        /// When you switch from OnDemand to Provisioned mode, you can pass WCU and RCU as well (NOTE: default capacity unit for Provisioned mode is 5).
+        #[structopt(short, long, possible_values = &["provisioned", "ondemand"])]
+        mode: Option<String>,
+
+        /// WCU (write capacity units) for the table. Acceptable only on Provisioned mode.
+        #[structopt(long)]
+        wcu: Option<i64>,
+
+        /// RCU (read capacity units) for the table. Acceptable only on Provisioned mode.
+        #[structopt(long)]
+        rcu: Option<i64>,
+
+        // TODO: support following parameters
+        // - sse_enabled: bool, (default false) ... UpdateTable API
+        // - stream_enabled: bool, (default false) ... UpdateTable API
+        // - ttl_enabled: bool, UpdateTimeToLive API
+        // - pitr_enabled: bool, UpdateContinuousBackups API (PITR)
+    },
 }
 
 

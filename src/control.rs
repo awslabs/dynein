@@ -64,6 +64,7 @@ struct PrintDescribeTable {
     created_at: String,
 }
 
+const PROVISIONED_API_SPEC: &'static str = "PROVISIONED";
 const ONDEMAND_API_SPEC: &'static str = "PAY_PER_REQUEST";
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -229,7 +230,7 @@ pub async fn create_table_api(cx: app::Context, name: String, given_keys: Vec<St
         ..Default::default()
     };
 
-    return ddb.create_table(req).await.map(|res| res.table_description.unwrap());
+    return ddb.create_table(req).await.map(|res| res.table_description.expect("Table Description returned from API should be valid."));
 }
 
 
@@ -275,6 +276,100 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
 }
 
 
+pub async fn update_table(cx: app::Context, table_name_to_update: String,
+                          mode_string: Option<String>, wcu: Option<i64>, rcu: Option<i64>) {
+    // Retrieve TableDescription of the table to update, current (before update) status.
+    let desc: TableDescription = app::describe_table_api(&cx.effective_region(), table_name_to_update.clone()).await;
+
+    // Map given string into "Mode" enum. Note that in cmd.rs structopt already limits acceptable values.
+    let switching_to_mode: Option<Mode> = match mode_string {
+        None => None,
+        Some(ms) => match ms.as_str() {
+            "provisioned" => Some(Mode::Provisioned),
+            "ondemand"    => Some(Mode::OnDemand),
+            _ => panic!("You shouldn't see this message as --mode can takes only 'provisioned' or 'ondemand'."),
+        },
+    };
+
+    // Configure ProvisionedThroughput struct based on argumsnts (mode/wcu/rcu).
+    let provisioned_throughput: Option<ProvisionedThroughput> = match &switching_to_mode {
+        // when --mode is not given, no mode switch happens. Check the table's current mode.
+        None => {
+            match extract_mode(&desc.clone().billing_mode_summary) {
+                // When currently OnDemand mode and you're not going to change the it, set None for CU.
+                Mode::OnDemand => {
+                    if wcu.is_some() || rcu.is_some() { println!("Ignoring --rcu/--wcu options as the table mode is OnDemand."); };
+                    None
+                },
+                // When currently Provisioned mode and you're not going to change the it,
+                // pass given rcu/wcu, and use current values if missing. Provisioned table should have valid capacity units so unwrap() here.
+                Mode::Provisioned => Some(ProvisionedThroughput {
+                    read_capacity_units: rcu.unwrap_or(desc.clone().provisioned_throughput.unwrap().read_capacity_units.unwrap()),
+                    write_capacity_units: wcu.unwrap_or(desc.clone().provisioned_throughput.unwrap().write_capacity_units.unwrap()),
+                }),
+            }
+        },
+        // When the user trying to switch mode.
+        Some(target_mode) => match target_mode {
+            // when switching Provisioned->OnDemand mode, ProvisionedThroughput can be None.
+            Mode::OnDemand => {
+                if wcu.is_some() || rcu.is_some() { println!("Ignoring --rcu/--wcu options as --mode ondemand."); };
+                None
+            },
+            // when switching OnDemand->Provisioned mode, set given wcu/rcu, fill with "5" as a default if not given.
+            Mode::Provisioned => Some(ProvisionedThroughput {
+                read_capacity_units: rcu.unwrap_or(5),
+                write_capacity_units: wcu.unwrap_or(5),
+            }),
+        },
+    };
+
+    // TODO: support updating CU of the table with GSI. If the table has GSIs, you must specify CU for them at the same time.
+    // error message: One or more parameter values were invalid: ProvisionedThroughput must be specified for index: xyz_index,abc_index2
+    //   if table has gsi
+    //     build GlobalSecondaryIndexUpdates { [... current values ...] }
+
+    match update_table_api(cx.clone(), table_name_to_update, switching_to_mode, provisioned_throughput).await {
+        Ok(desc) => print_table_description(cx.effective_region(), desc),
+        Err(e) => {
+            debug!("UpdateTable API call got an error -- {:#?}", e);
+            error!("{}", e.to_string());
+            std::process::exit(1);
+        },
+    }
+}
+
+
+/// UpdateTable API accepts following parameters (ref: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html):
+///   * [x] TableName (required)
+///   * [x] BillingMode
+///   * [x] ProvisionedThroughput > obj
+///   * [-] AttributeDefinitions > array of AttributeDefinition obj
+///   * [-] GlobalSecondaryIndexUpdates > Create/Update/Delete and details of the update on GSIs
+///   * [-] ReplicaUpdates > Create/Update/Delete and details of the update on Global Tbles replicas
+///   * [] SSESpecification > obj
+///   * [] StreamSpecification > obj
+/// [+] = supported, [-] = implemented (or plan to so) in another location, [] = not yet supported
+/// Especially note that you should explicitly pass GSI update parameter to make any change on GSI.
+async fn update_table_api(cx: app::Context, table_name_to_update: String, switching_to_mode: Option<Mode>, provisioned_throughput: Option<ProvisionedThroughput>)
+                              -> Result<TableDescription, rusoto_core::RusotoError<rusoto_dynamodb::UpdateTableError>> {
+    debug!("Trying to update the table '{}'.", &table_name_to_update);
+
+    let ddb = DynamoDbClient::new(cx.effective_region());
+
+    let req: UpdateTableInput = UpdateTableInput {
+        table_name: table_name_to_update,
+        billing_mode: switching_to_mode.map(|m| mode_to_billing_mode_api_spec(m)),
+        provisioned_throughput: provisioned_throughput,
+        // NOTE: In this function we set `global_secondary_index_updates` to None. GSI update is handled in different commands (e.g. dy admin create index xxx --keys)
+        global_secondary_index_updates: None /* intentional */,
+        ..Default::default()
+    };
+
+    return ddb.update_table(req).await.map(|res| res.table_description.expect("Table Description returned from API should be valid."))
+}
+
+
 pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: bool) {
     debug!("Trying to delete a table '{}'", &name);
 
@@ -295,7 +390,7 @@ pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: boo
         },
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
-            println!("DynamoDB table '{}' has been deleted successfully.", res.table_description.unwrap().table_name.unwrap());
+            println!("Delete operation for the table '{}' has been started.", res.table_description.unwrap().table_name.unwrap());
         }
     }
 }
@@ -356,16 +451,6 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
     }
     tw.flush()?;
     Ok(())
-}
-
-
-fn fetch_arn_from_backup_name(backup_name: String, available_backups: Vec<BackupSummary>) -> String {
-    available_backups.into_iter().find(|b|
-        b.to_owned().backup_name.unwrap() == backup_name
-    ) /* Option<BackupSummary */
-    .unwrap() /* BackupSummary */
-    .backup_arn /* Option<String> */
-    .unwrap()
 }
 
 
@@ -445,6 +530,22 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
 }
 
 
+/// Map "BilingModeSummary" field in table description returned from DynamoDB API,
+/// into convenient mode name ("Provisioned" or "OnDemand")
+pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
+    let provisioned_mode = Mode::Provisioned;
+    let ondemand_mode    = Mode::OnDemand;
+    match bs {
+        // if BillingModeSummary field doesn't exist, the table is Provisioned Mode.
+        None => provisioned_mode,
+        Some(x) => {
+            if x.clone().billing_mode.unwrap() == ONDEMAND_API_SPEC { ondemand_mode }
+            else { provisioned_mode }
+        },
+    }
+}
+
+
 /* =================================================
    Private functions
    ================================================= */
@@ -517,23 +618,31 @@ async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSumm
 }
 
 
+fn fetch_arn_from_backup_name(backup_name: String, available_backups: Vec<BackupSummary>) -> String {
+    available_backups.into_iter().find(|b|
+        b.to_owned().backup_name.unwrap() == backup_name
+    ) /* Option<BackupSummary */
+    .unwrap() /* BackupSummary */
+    .backup_arn /* Option<String> */
+    .unwrap()
+}
+
+
 fn epoch_to_rfc3339(epoch: f64) -> String {
     let utc_datetime = NaiveDateTime::from_timestamp(epoch as i64, 0);
     return DateTime::<Utc>::from_utc(utc_datetime, Utc).to_rfc3339();
 }
 
-pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
-    let provisioned_mode = Mode::Provisioned;
-    let ondemand_mode    = Mode::OnDemand;
-    match bs {
-        // if BillingModeSummary field doesn't exist, the table is Provisioned Mode.
-        None => provisioned_mode,
-        Some(x) => {
-            if x.clone().billing_mode.unwrap() == ONDEMAND_API_SPEC { ondemand_mode }
-            else { provisioned_mode }
-        },
+
+/// Takes "Mode" enum and return exact string value required by DynamoDB API.
+/// i.e. this function returns "PROVISIONED" or "PAY_PER_REQUEST".
+fn mode_to_billing_mode_api_spec(mode: Mode) -> String {
+    match mode {
+        Mode::OnDemand => String::from(ONDEMAND_API_SPEC),
+        Mode::Provisioned => String::from(PROVISIONED_API_SPEC),
     }
 }
+
 
 fn extract_capacity(mode: &Mode, cap_desc: &Option<ProvisionedThroughputDescription>)
                     -> Option<PrintCapacityUnits> {

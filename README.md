@@ -218,11 +218,12 @@ FLAGS: ...
 OPTIONS: ...
 
 SUBCOMMANDS:
-    create    Create new DynamoDB table or GSI
-    delete    Delete a DynamoDB table or GSI
+    create    Create new DynamoDB table or GSI. [API: CreateTable, UpdateTable]
+    delete    Delete a DynamoDB table or GSI. [API: DeleteTable]
     desc      Show detailed information of a table. [API: DescribeTable]
     help      Prints this message or the help of the given subcommand(s)
     list      List tables in the region. [API: ListTables]
+    update    Update a DynamoDB table. [API: UpdateTable etc]
 ```
 
 By executing following command, you can create a DynamoDB table.
@@ -300,7 +301,7 @@ size_bytes: 0
 created_at: "2020-03-03T13:34:43+00:00"
 ```
 
-After the table get ready (= `ACTIVE` status), you can write-to and read-from the table.
+After the table get ready (i.e. `status: CREATING` changed to `ACTIVE`), you can write-to and read-from the table.
 
 ```
 $ dy use app_users
@@ -332,7 +333,7 @@ myapp   1234     {"rank":99}
 Similarly you can update tables with dynein.
 
 ```
-(currently not available) $ dy admin update table --mode provisioned --wcu 10 --rcu 25
+$ dy admin update table app_users --mode provisioned --wcu 10 --rcu 25
 ```
 
 
@@ -814,7 +815,6 @@ $ RUST_LOG=debug RUST_BACKTRACE=1 dy scan --table your_table
 
 ## Ideas for future works
 
-- `dy admin update table` command
 - `dy admin plan` & `dy admin apply` commands to manage tables through CloudFormation.
   - These subcommand names are inspired by [HashiCorp's Terraform](https://www.terraform.io/).
 - Linux's `top` -like experience to monitor table status. e.g. `dy top tables`
@@ -828,3 +828,4 @@ $ RUST_LOG=debug RUST_BACKTRACE=1 dy scan --table your_table
 - Support Transaction APIs (TransactGetItems, TransactWriteItems)
 - simple load testing. e.g. `dy load --tps 100`
 - import/export tool supports LTSV, TSV
+- PITR configuration enable/disable (UpdateContinuousBackups) and exporting/restoring tables ([ExportTableToPointInTime](https://aws.amazon.com/blogs/aws/new-export-amazon-dynamodb-table-data-to-data-lake-amazon-s3/), RestoreTableToPointInTime)
