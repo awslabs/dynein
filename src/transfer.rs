@@ -56,7 +56,7 @@ pub async fn export(cx: app::Context, given_attributes: Option<String>, keys_onl
     // TODO: Parallel scan to make it faster https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.ParallelScan
     // TODO: Show rough progress bar (sum(scan_output.scanned_item)/item_size_of_the_table(6hr)) to track progress.
     let ts: app::TableSchema = app::table_schema(&cx).await;
-    let format_str: Option<&str> = format.as_ref().map(|x| x.as_str() );
+    let format_str: Option<&str> = format.as_deref();
 
     if ts.mode == control::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
@@ -114,7 +114,7 @@ pub async fn export(cx: app::Context, given_attributes: Option<String>, keys_onl
                 let mut s:String = String::new();
                 for item in &items {
                     s.push_str(&serde_json::to_string(&data::convert_to_json(&item))?);
-                    s.push_str("\n");
+                    s.push('\n');
                 };
                 tmp_output_file.write_all(s.as_bytes())?;
             },
@@ -154,7 +154,7 @@ pub async fn export(cx: app::Context, given_attributes: Option<String>, keys_onl
 
 
 pub async fn import(cx: app::Context, input_file: String, format: Option<String>) -> Result<(), batch::DyneinBatchError> {
-    let format_str: Option<&str> = format.as_ref().map(|x| x.as_str() );
+    let format_str: Option<&str> = format.as_deref();
 
     let ts: app::TableSchema = app::table_schema(&cx).await;
     if ts.mode == control::Mode::Provisioned {
@@ -181,13 +181,13 @@ pub async fn import(cx: app::Context, input_file: String, format: Option<String>
             write_array_of_jsons_with_chunked_25(cx, array_of_valid_json_obj).await?;
         },
         Some("csv") => {
-            let lines: Vec<&str> = input_string.split("\n").collect::<Vec<&str>>() // split by "\n" and get lines
-                                               .iter().filter(|&x| x.len() > 0).cloned().collect::<Vec<&str>>(); // remove blank line (e.g. last line)
-            let headers: Vec<&str> = lines[0].split(",").collect::<Vec<&str>>();
+            let lines: Vec<&str> = input_string.split('\n').collect::<Vec<&str>>() // split by "\n" and get lines
+                                               .iter().filter(|&x| !x.is_empty()).cloned().collect::<Vec<&str>>(); // remove blank line (e.g. last line)
+            let headers: Vec<&str> = lines[0].split(',').collect::<Vec<&str>>();
             let mut matrix: Vec<Vec<&str>> = vec![];
             // Iterate over lines (from index = 1, as index = 0 is the header line)
-            for i in 1..lines.len() {
-                let cells: Vec<&str> = lines[i].split(",").collect::<Vec<&str>>();
+            for (i, line) in lines.iter().enumerate().skip(1) {
+                let cells: Vec<&str> = line.split(',').collect::<Vec<&str>>();
                 debug!("splitted line => {:?}", cells);
                 matrix.push(cells);
                 if i % 25 == 0 {
@@ -196,7 +196,7 @@ pub async fn import(cx: app::Context, input_file: String, format: Option<String>
                 }
             }
             debug!("rest of matrix => {:?}", matrix);
-            if matrix.len() > 0 { write_csv_matrix(&cx, matrix.clone(), &headers).await?; }
+            if !matrix.is_empty() { write_csv_matrix(&cx, matrix.clone(), &headers).await?; }
         },
         Some(o) => panic!("Invalid input format is given: {}", o),
     }
@@ -237,7 +237,7 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
                     false /* keys_only */, Some(1) /* limit */, None /* esk */
                 ).await.items.expect("items should be 'Some' even if there's no item in the table.");
 
-    if items.len() == 0 { app::bye(0, "No item to export in this table. Quit the operation."); }
+    if !items.is_empty() { app::bye(0, "No item to export in this table. Quit the operation."); }
 
     // Filter out primary keys. i.e. select attributes that aren't required by the table's keyschema.
     let primary_keys = vec![Some(ts.pk.name.to_owned()), ts.sk.to_owned().map(|x| x.name)];
@@ -259,7 +259,7 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
 
 
 fn attrs_to_append(ts: &app::TableSchema, attributes: &Option<String>) -> Option<Vec<String>> {
-    return attributes.clone().map(|ats|
+    attributes.clone().map(|ats|
         filter_attributes_to_append(&ts, ats)
     )
 }
@@ -271,13 +271,13 @@ fn filter_attributes_to_append(ts: &app::TableSchema, ats: String) -> Vec<String
     let splitted_attributes: Vec<String> = ats.split(',').map(|x| x.trim().to_owned()).collect();
     for attr in splitted_attributes {
         // skip if attributes contain primary key(s)
-        if &attr == &ts.pk.name || (ts.sk.is_some() && &attr == &ts.clone().sk.unwrap().name) {
+        if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.clone().sk.unwrap().name) {
             println!("NOTE: primary keys are included by default and you don't need to give them as a part of --attributes.");
             continue;
         }
         attributes_to_append.push(attr);
     }
-    return attributes_to_append;
+    attributes_to_append
 }
 
 
@@ -294,7 +294,7 @@ fn connectable_json(mut s: String, compact: bool) -> String {
         s.truncate(len - 2); // remove last char "]" and newline
     }
     s.push(','); // add last "," so that continue to next iteration
-    return s;
+    s
 }
 
 
@@ -342,8 +342,8 @@ fn build_csv_header(ts: &app::TableSchema, attributes_to_append: Option<Vec<Stri
         header_str.push_str(&attrs.join(","));
     }
 
-    header_str.push_str("\n");
-    return header_str;
+    header_str.push('\n');
+    header_str
 }
 
 
