@@ -322,7 +322,7 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
         }
     }
 
-    return Ok(tmpdir);
+    Ok(tmpdir)
 }
 
 

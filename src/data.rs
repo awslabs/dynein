@@ -128,11 +128,11 @@ pub async fn scan_api(cx: app::Context, index: Option<String>, consistent_read: 
         ..Default::default()
     };
 
-    return ddb.scan(req).await.unwrap_or_else(|e| {
+    ddb.scan(req).await.unwrap_or_else(|e| {
         debug!("Scan API call got an error -- {:?}", e);
         error!("{}", e.to_string());
         std::process::exit(1);
-    });
+    })
 }
 
 
@@ -485,7 +485,7 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
     debug!("generated ExpressionAttributeNames: {:?}", names);
     debug!("generated ExpressionAttributeValues: {:?}", vals);
 
-    return GeneratedUpdateParams {
+    GeneratedUpdateParams {
         exp: Some(expression),
         names: if names.len() == 0 { None } else { Some(names) },
         vals: if vals.len() == 0 { None } else { Some(vals) },
@@ -530,7 +530,7 @@ fn str_to_attrval(s: &str) -> Result<AttributeValue, serde_json::Error> {
     debug!("Trying to convert given string '{}' into DynamoDB AttributeValue.", s);
     let json_value: JsonValue = serde_json::from_str(s)?;
     let attrval = dispatch_jsonvalue_to_attrval(&json_value);
-    return Ok(attrval);
+    Ok(attrval)
 }
 
 
@@ -552,7 +552,7 @@ fn json_str_to_attributes(s: &str) -> Result<HashMap<String, AttributeValue>, se
     let result = convert_jsonval_to_attrvals_in_hashmap_val(hashmap);
     debug!("JSON has been converted to AttributeValue(s): {:?}", result);
 
-    return Ok(result);
+    Ok(result)
 }
 
 
@@ -563,7 +563,7 @@ fn convert_jsonval_to_attrvals_in_hashmap_val(hashmap: HashMap<String, JsonValue
         debug!("working on key '{}', and value '{:?}'", k, v);
         result.insert(k, dispatch_jsonvalue_to_attrval(&v));
     }
-    return result;
+    result
 }
 
 
@@ -582,7 +582,7 @@ fn build_attrval_scalar(_ktype: &String, _kval: &String) -> AttributeValue {
         _ => panic!("ERROR: Unknown DynamoDB Data Type: {}", _ktype),
     }
 
-    return attrval;
+    attrval
 }
 
 
@@ -601,7 +601,7 @@ fn build_attrval_set(ktype: &String, kval: &Vec<JsonValue>) -> AttributeValue {
         _ => panic!("ERROR: Unknown DynamoDB Data Type: {}", ktype),
     }
 
-    return attrval;
+    attrval
 }
 
 
@@ -617,7 +617,7 @@ fn build_attrval_list(vec: &Vec<JsonValue>) -> AttributeValue {
     }
     attrval.l = Some(inside_attrvals);
 
-    return attrval;
+    attrval
 }
 
 
@@ -633,13 +633,13 @@ fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>)
     }
     result.m = Some(mapval);
 
-    return result;
+    result
 }
 
 
 /// Convert from serde_json::Value (standard JSON values) into DynamoDB style AttributeValue
 pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
-    return match jv {
+    match jv {
         // scalar types
         JsonValue::String(val) => AttributeValue { s: Some(val.to_string()), ..Default::default() },
         JsonValue::Number(val) => AttributeValue { n: Some(val.to_string()), ..Default::default() },
@@ -667,7 +667,7 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
 /// `strip_items` calls `strip_item` for each item.
 fn strip_items(items: &Vec<HashMap<String, rusoto_dynamodb::AttributeValue>>)
                     -> Vec<HashMap<String, serde_json::Value>> {
-  return items.iter().map(|item| strip_item(item)).collect();
+  items.iter().map(|item| strip_item(item)).collect()
 }
 
 
@@ -695,10 +695,10 @@ fn strip_items(items: &Vec<HashMap<String, rusoto_dynamodb::AttributeValue>>)
 /// https://docs.rs/rusoto_dynamodb/0.42.0/rusoto_dynamodb/struct.AttributeValue.html
 fn strip_item(item: &HashMap<String, rusoto_dynamodb::AttributeValue>)
                     -> HashMap<String, serde_json::Value> {
-    return item.iter().map(|attr|
+    item.iter().map(|attr|
         // Serialization: `serde_json::to_value(sth: rusoto_dynamodb::AttributeValue)`
         (attr.0.to_string(), serde_json::to_value(&attr.1).unwrap())
-    ).collect();
+    ).collect()
 }
 
 
@@ -743,16 +743,16 @@ fn generate_query_expressions(ts: &app::TableSchema, pval: &String, sort_key_exp
     debug!("Before appending sort key expression ... exp='{}', names='{:?}', vals={:?}", &expression, &names, &vals);
     match sort_key_expression {
         None => /* No --sort-key option given. proceed with partition key condition only. */ {
-            return Ok(GeneratedQueryParams {
+            Ok(GeneratedQueryParams {
                 exp: Some(expression),
                 names: if names.len() == 0 { None } else { Some(names) },
                 vals: Some(vals),
             })
         },
         Some(ske) => /* As --sort-key option is given, parse it and append the built SK related condition to required PK expression. */ {
-            return append_sort_key_expression(sort_key_of_target_table_or_index, &expression, &ske, names, vals)
+            append_sort_key_expression(sort_key_of_target_table_or_index, &expression, &ske, names, vals)
         },
-    };
+    }
 }
 
 
@@ -848,7 +848,7 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
     };
     debug!("Finished to build KeyConditionExpression. Currently built: '{}'", &built);
 
-    return Ok(GeneratedQueryParams {
+    Ok(GeneratedQueryParams {
         exp: Some(built),
         names: if names.len() == 0 { None } else { Some(names) },
         vals: Some(vals),
@@ -932,7 +932,7 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
 /// This function takes Option<AttributeValue> and return string,
 /// so that it can be shown in a "cell" of table format, which has only single-line, small area.
 fn attrval_to_cell_print(optional_attrval: Option<AttributeValue>) -> String {
-    return match optional_attrval {
+    match optional_attrval {
         None => String::from(""),
         Some(attrval) => {
                  if let Some(v) = &attrval.s { String::from(v) }
@@ -951,28 +951,27 @@ fn attrval_to_cell_print(optional_attrval: Option<AttributeValue>) -> String {
 
 /// https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html
 pub fn attrval_to_type(attrval: &AttributeValue) -> Option<String> {
-    return {
-             if let Some(_) = attrval.s    { Some(String::from("String")) }
-        else if let Some(_) = attrval.n    { Some(String::from("Number")) }
-        else if let Some(_) = attrval.b    { Some(String::from("Binary")) }
-        else if let Some(_) = attrval.bool { Some(String::from("Boolian")) }
-        else if let Some(_) = attrval.null { Some(String::from("Null")) }
-        else if let Some(_) = attrval.ss   { Some(String::from("Set (String)")) }
-        else if let Some(_) = attrval.ns   { Some(String::from("Set (Number)")) }
-        else if let Some(_) = attrval.bs   { Some(String::from("Set (Binary)")) }
-        else if let Some(_) = attrval.m    { Some(String::from("Map")) }
-        else if let Some(_) = attrval.l    { Some(String::from("List")) }
-        else { None }
-    }
+    // following list of if-else statements would be return value of this function.
+         if let Some(_) = attrval.s    { Some(String::from("String")) }
+    else if let Some(_) = attrval.n    { Some(String::from("Number")) }
+    else if let Some(_) = attrval.b    { Some(String::from("Binary")) }
+    else if let Some(_) = attrval.bool { Some(String::from("Boolian")) }
+    else if let Some(_) = attrval.null { Some(String::from("Null")) }
+    else if let Some(_) = attrval.ss   { Some(String::from("Set (String)")) }
+    else if let Some(_) = attrval.ns   { Some(String::from("Set (Number)")) }
+    else if let Some(_) = attrval.bs   { Some(String::from("Set (Binary)")) }
+    else if let Some(_) = attrval.m    { Some(String::from("Map")) }
+    else if let Some(_) = attrval.l    { Some(String::from("List")) }
+    else { None }
 }
 
 
 /// This function takes items and returns values in multiple lines - one line for one item.
 pub fn convert_items_to_csv_lines(items: &Vec<HashMap<String, AttributeValue>>,
                                   ts: &app::TableSchema, attributes_to_append: &Option<Vec<String>>, keys_only: bool) -> String {
-    return items.iter().map(|item|
+    items.iter().map(|item|
         convert_item_to_csv_line(item, ts, attributes_to_append, keys_only)
-    ).collect::<Vec<String>>().join("\n");
+    ).collect::<Vec<String>>().join("\n")
 }
 
 
@@ -1005,28 +1004,28 @@ fn convert_item_to_csv_line(item: &HashMap<String, AttributeValue>,
         }
     }
 
-    return line;
+    line
 }
 
 
 pub fn convert_to_json_vec(items: &Vec<HashMap<String, AttributeValue>>)
                 -> Vec<HashMap<String, serde_json::Value>> {
-    return items.iter().map(|item|
+    items.iter().map(|item|
         convert_to_json(&item)
-    ).collect();
+    ).collect()
 }
 
 
 pub fn convert_to_json(item: &HashMap<String, AttributeValue>)
                  -> HashMap<String, serde_json::Value> {
-    return item.iter().map(|attr|
+    item.iter().map(|attr|
         (attr.0.to_string(), attrval_to_jsonval(&attr.1))
-    ).collect();
+    ).collect()
 }
 
 
 fn str_to_json_num(s: &str) -> JsonValue {
-    return match s.parse::<u64>() {
+    match s.parse::<u64>() {
         Ok(i) => serde_json::to_value(i).unwrap(),
         Err(_) => match s.parse::<f64>() {
             Ok(f) => serde_json::to_value(f).unwrap(),
@@ -1038,7 +1037,7 @@ fn str_to_json_num(s: &str) -> JsonValue {
 
 fn attrval_to_jsonval(attrval: &AttributeValue) -> JsonValue {
     let unsupported: &str = "<<<JSON output doesn't support this type attributes>>>";
-    return
+    //  following list of if-else statements would be return value of this function.
          if let Some(v) = &attrval.s { serde_json::to_value(v).unwrap() }
     else if let Some(v) = &attrval.n { str_to_json_num(v) }
     else if let Some(v) = &attrval.bool { serde_json::to_value(v).unwrap() }
@@ -1062,7 +1061,7 @@ fn attrval_to_json_map(attrval_map: &HashMap<String, AttributeValue>) -> JsonVal
         debug!("working on key '{}', and value '{:?}'", k, v);
         result.insert(k.to_string(), attrval_to_jsonval(v));
     }
-    return serde_json::to_value(result).unwrap();
+    serde_json::to_value(result).unwrap()
 }
 
 
@@ -1103,7 +1102,7 @@ fn generate_scan_expressions(ts: &app::TableSchema, attributes: &Option<String>,
     debug!("generated ProjectionExpression: {}", &expression);
     debug!("generated ExpressionAttributeNames: {:?}", &names);
 
-    return GeneratedScanParams {
+    GeneratedScanParams {
         exp: Some(expression),
         names: Some(names),
     }

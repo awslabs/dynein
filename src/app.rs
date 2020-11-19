@@ -204,17 +204,17 @@ impl Context {
         // e.g. region set via AWS CLI (check: $ aws configure get region), or environment variable `AWS_DEFAULT_REGION`.
         //      ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#282-290
         //      ref: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-        return Region::default();
+        Region::default()
     }
 
     pub fn effective_table_name(&self) -> String {
         // if table is overwritten by --table option, use it.
         if let Some(ow_table_name) = &self.overwritten_table_name { return ow_table_name.to_owned(); };
         // otherwise, retrieve an `using_table` from config file.
-        return self.to_owned().config.and_then(|x| x.using_table )
-                          .unwrap_or_else(|| { // if both --option nor config file are not available, raise error and exit the command.
-                              error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
-                          });
+        self.to_owned().config.and_then(|x| x.using_table )
+            .unwrap_or_else(|| { // if both --option nor config file are not available, raise error and exit the command.
+                error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
+            })
     }
 
     pub fn effective_cache_key(&self) -> String {
@@ -228,17 +228,17 @@ impl Context {
         };
         let found_table_schema: Option<&TableSchema> = cached_tables.get(&self.effective_cache_key());
         // NOTE: HashMap's `get` returns a reference to the value / (&self, k: &Q) -> Option<&V>
-        return found_table_schema.map(|schema| schema.to_owned());
+        found_table_schema.map(|schema| schema.to_owned())
     }
 
     pub fn with_region(mut self, ec2_region: &rusoto_ec2::Region) -> Self {
         self.overwritten_region = Some(Region::from_str(&ec2_region.to_owned().region_name.unwrap()).unwrap());
-        return self;
+        self
     }
 
     pub fn with_table(mut self, table: &String) -> Self {
         self.overwritten_table_name = Some(table.to_owned());
-        return self;
+        self
     }
 }
 
@@ -415,7 +415,7 @@ pub fn remove_dynein_files() -> Result<(), DyneinConfigError> {
 pub fn typed_key(pk_or_sk: &str, desc: &TableDescription) -> Option<Key> {
     // extracting key schema of "base table" here
     let ks = desc.clone().key_schema.unwrap();
-    return typed_key_for_schema(pk_or_sk, &ks, &desc.clone().attribute_definitions.unwrap());
+    typed_key_for_schema(pk_or_sk, &ks, &desc.clone().attribute_definitions.unwrap())
 }
 
 
@@ -424,7 +424,7 @@ pub fn typed_key(pk_or_sk: &str, desc: &TableDescription) -> Option<Key> {
 pub fn typed_key_for_schema(pk_or_sk: &str, ks: &Vec<KeySchemaElement>, attrs: &Vec<AttributeDefinition>) -> Option<Key> {
     // Fetch Partition Key ("HASH") or Sort Key ("RANGE") from given Key Schema. pk should always exists, but sk may not.
     let target_key = ks.iter().find(|x| x.key_type == pk_or_sk);
-    return target_key.map(|key|
+    target_key.map(|key|
         Key {
             name: key.clone().attribute_name,
             // kind should be one of S/N/B, Which can be retrieved from AttributeDefinition's attribute_type.
@@ -433,7 +433,7 @@ pub fn typed_key_for_schema(pk_or_sk: &str, ks: &Vec<KeySchemaElement>, attrs: &
                                    .expect("primary key should be in AttributeDefinition.").attribute_type
                   ).unwrap(),
         }
-    );
+    )
 }
 
 
@@ -447,7 +447,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             // TODO: reduce # of DescribeTable API calls. table_schema function is called every time you do something.
             let desc: TableDescription = describe_table_api(&cx.effective_region(), table_name /* should be equal to 'cx.effective_table_name()' */).await;
 
-            return TableSchema {
+            TableSchema {
                 region: String::from(cx.effective_region().name()),
                 name: desc.clone().table_name.clone().unwrap().to_string(),
                 pk: typed_key("HASH",  &desc).expect("pk should exist"),
@@ -461,9 +461,9 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             let cache: Cache = cx.clone().cache.expect("Cache should exist in context"); // can refactor here using and_then
             let cached_tables: HashMap<String, TableSchema> = cache.tables.expect("tables should exist in cache");
             let schema_from_cache: Option<TableSchema> = cached_tables.get(&cx.effective_cache_key().clone()).map(|x| x.to_owned());
-            return schema_from_cache.unwrap_or_else(|| {
+            schema_from_cache.unwrap_or_else(|| {
                 error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
-            });
+            })
         },
     }
 }
@@ -496,7 +496,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
         };
     };
 
-    return if indexes.len() == 0 { None } else { Some(indexes) };
+    if indexes.len() == 0 { None } else { Some(indexes) }
 }
 
 
@@ -515,7 +515,7 @@ pub async fn describe_table_api(region: &Region, table_name: String) -> TableDes
         Ok(res) => {
             let desc: TableDescription = res.table.expect("This message should not be shown.");
             debug!("Received DescribeTable Result: {:?}\n", desc);
-            return desc;
+            desc
         }
     }
 }
@@ -534,10 +534,10 @@ pub fn bye(code: i32, msg: &str) {
 fn region_dynamodb_local(port: u32) -> Region {
     let endpoint_url = format!("http://localhost:{}", port);
     debug!("setting DynamoDB Local '{}' as target region.", &endpoint_url);
-    return Region::Custom {
+    Region::Custom {
         name: "local".to_owned(),
         endpoint: endpoint_url.to_owned(),
-    };
+    }
 }
 
 
@@ -551,7 +551,7 @@ fn retrieve_dynein_file_path (dft: DyneinFileType) -> Result<String, DyneinConfi
 }
 
 fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
-    return match dirs::home_dir() {
+    match dirs::home_dir() {
         None => Err(DyneinConfigError::HomeDir),
         Some(home) => {
             let dir = format!("{}/{}", home.to_str().unwrap(), CONFIG_DIR);

@@ -223,7 +223,7 @@ async fn overwrite_attributes_or_exit(cx: &app::Context, ts: &app::TableSchema) 
     }
 
     // Overwrite given attributes with suggested attributes beased on a sampled item
-    return Ok(Some(suggested_attributes.into_iter().map(|sa| sa.name ).collect::<Vec<String>>().join(",")))
+    Ok(Some(suggested_attributes.into_iter().map(|sa| sa.name ).collect::<Vec<String>>().join(",")))
 }
 
 

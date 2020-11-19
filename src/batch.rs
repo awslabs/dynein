@@ -156,7 +156,7 @@ pub fn build_batch_request_items(raw_json_content: String) -> Result<HashMap<Str
         results.insert(tbl.to_string(), write_requests);
     } // end loop over a "table" key. will take a look at next table if any.
 
-    return Ok(results);
+    Ok(results)
 }
 
 
@@ -315,7 +315,7 @@ fn ddbjson_attributes_to_attrvals(ddbjson_attributes: &JsonValue) -> HashMap<Str
             None => { error!("[skip] invalid/unsupported DynamoDB JSON format: {:?}", body) },
         };
     }
-    return built_attributes;
+    built_attributes
 }
 
 
@@ -347,7 +347,7 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
                       .map(|el| el.as_str().expect("should -> str").to_string()).collect::<Vec<String>>()
     };
 
-    return
+    // following list of if-else statements would be return value of this function.
          if let Some(x) = ddb_jsonval.get("S") { Some(AttributeValue { s: Some(x.as_str().unwrap().to_string()), ..Default::default() }) }
     else if let Some(x) = ddb_jsonval.get("N") { Some(AttributeValue { n: Some(x.as_str().unwrap().to_string()), ..Default::default() }) }
     // else if let Some(x) = ddb_jsonval.get("B") { Some(AttributeValue { b: Some(Bytes::from(x.as_str().unwrap())), ..Default::default() }) }
@@ -366,5 +366,5 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
         let inner_map: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(x);
         Some(AttributeValue { m: Some(inner_map), ..Default::default() })
     }
-    else { None };
+    else { None }
 }
