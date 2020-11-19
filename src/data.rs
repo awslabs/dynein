@@ -1048,8 +1048,7 @@ fn attrval_to_jsonval(attrval: &AttributeValue) -> JsonValue {
     else if let Some(vmap) = &attrval.m { attrval_to_json_map(vmap) }
     else if attrval.null.is_some() { serde_json::to_value(()).unwrap() }
     // Binary (B) and BinarySet (BS) attributes are not supported to display in JSON output format.
-    else if attrval.b.is_some() { serde_json::to_value(unsupported).unwrap() }
-    else if attrval.bs.is_some() { serde_json::to_value(unsupported).unwrap() }
+    else if attrval.b.is_some() || attrval.bs.is_some() { serde_json::to_value(unsupported).unwrap() }
     else { panic!("DynamoDB AttributeValue is not in valid status: {:#?}", &attrval); }
 }
 
