@@ -438,7 +438,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
     let backups = list_backups_api(&cx, all_tables).await;
     let mut tw = TabWriter::new(io::stdout());
     // First defining header
-    tw.write(((vec![ "Table", "Status", "CreatedAt", "BackupName (size)" ].join("\t")) + "\n").as_bytes())?;
+    tw.write_all(((vec![ "Table", "Status", "CreatedAt", "BackupName (size)" ].join("\t")) + "\n").as_bytes())?;
     for backup in backups {
         let line = vec![
             backup.table_name.expect("table name should exist"),
@@ -447,7 +447,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
             backup.backup_name.expect("backup name should exist") + &format!(" ({} bytes)", backup.backup_size_bytes.expect("size should exist")),
             String::from("\n")
         ];
-        tw.write(line.join("\t").as_bytes())?;
+        tw.write_all(line.join("\t").as_bytes())?;
     }
     tw.flush()?;
     Ok(())

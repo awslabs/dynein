@@ -883,7 +883,7 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
     debug!("built header elements: {:?}", header);
 
     let mut tw = TabWriter::new(io::stdout());
-    tw.write((header.join("\t") + "\n").as_bytes()).unwrap();
+    tw.write_all((header.join("\t") + "\n").as_bytes()).unwrap();
 
     // `cells` is sth like: ["item1-pk\titem1-attr1\titem1-attr2", "item2-pk\titem2-attr1\titem2-attr2"]
     let mut cells: Vec<String> = vec![]; // may be able to use with_capacity to initialize the vec.
@@ -924,7 +924,7 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
         }
     }
 
-    tw.write((cells.join("\n") + "\n").as_bytes()).unwrap();
+    tw.write_all((cells.join("\n") + "\n").as_bytes()).unwrap();
     tw.flush().unwrap();
 }
 
