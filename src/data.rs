@@ -938,11 +938,11 @@ fn attrval_to_cell_print(optional_attrval: Option<AttributeValue>) -> String {
                  if let Some(v) = &attrval.s { String::from(v) }
             else if let Some(v) = &attrval.n { String::from(v) }
             else if let Some(v) = &attrval.bool { v.to_string() }
-            else if let Some(_) = &attrval.null { String::from("null") }
             else if let Some(vs) = &attrval.ss { serde_json::to_string(&vs).unwrap() }
             else if let Some(vs) = &attrval.ns {
                 format!("{}", serde_json::to_string(&vs.iter().map(|v| str_to_json_num(v) ).collect::<Vec<JsonValue>>()).unwrap() )
             }
+            else if attrval.null.is_some() { String::from("null") }
             else { String::from("(snip)") } // B, BS, L, and M are not shown.
         },
     }
@@ -952,16 +952,16 @@ fn attrval_to_cell_print(optional_attrval: Option<AttributeValue>) -> String {
 /// https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html
 pub fn attrval_to_type(attrval: &AttributeValue) -> Option<String> {
     // following list of if-else statements would be return value of this function.
-         if let Some(_) = attrval.s    { Some(String::from("String")) }
-    else if let Some(_) = attrval.n    { Some(String::from("Number")) }
-    else if let Some(_) = attrval.b    { Some(String::from("Binary")) }
-    else if let Some(_) = attrval.bool { Some(String::from("Boolian")) }
-    else if let Some(_) = attrval.null { Some(String::from("Null")) }
-    else if let Some(_) = attrval.ss   { Some(String::from("Set (String)")) }
-    else if let Some(_) = attrval.ns   { Some(String::from("Set (Number)")) }
-    else if let Some(_) = attrval.bs   { Some(String::from("Set (Binary)")) }
-    else if let Some(_) = attrval.m    { Some(String::from("Map")) }
-    else if let Some(_) = attrval.l    { Some(String::from("List")) }
+         if attrval.s.is_some()    { Some(String::from("String")) }
+    else if attrval.n.is_some()    { Some(String::from("Number")) }
+    else if attrval.b.is_some()    { Some(String::from("Binary")) }
+    else if attrval.bool.is_some() { Some(String::from("Boolian")) }
+    else if attrval.null.is_some() { Some(String::from("Null")) }
+    else if attrval.ss.is_some()   { Some(String::from("Set (String)")) }
+    else if attrval.ns.is_some()   { Some(String::from("Set (Number)")) }
+    else if attrval.bs.is_some()   { Some(String::from("Set (Binary)")) }
+    else if attrval.m.is_some()    { Some(String::from("Map")) }
+    else if attrval.l.is_some()    { Some(String::from("List")) }
     else { None }
 }
 
@@ -1041,15 +1041,15 @@ fn attrval_to_jsonval(attrval: &AttributeValue) -> JsonValue {
          if let Some(v) = &attrval.s { serde_json::to_value(v).unwrap() }
     else if let Some(v) = &attrval.n { str_to_json_num(v) }
     else if let Some(v) = &attrval.bool { serde_json::to_value(v).unwrap() }
-    else if let Some(_) = &attrval.null { serde_json::to_value(()).unwrap() }
     else if let Some(vs) = &attrval.ss { serde_json::to_value(vs).unwrap() }
     else if let Some(vs) = &attrval.ns { vs.iter().map(|v| str_to_json_num(v) ).collect() }
-    // Binary (B) and BinarySet (BS) attributes are not supported to display in JSON output format.
-    else if let Some(_) = &attrval.b { serde_json::to_value(unsupported).unwrap() }
-    else if let Some(_) = &attrval.bs { serde_json::to_value(unsupported).unwrap() }
     // In List (L) type, each element is a DynamoDB AttributeValue (e.g. {"S": "xxxx"}). recursively apply this method to elements.
     else if let Some(vlst) = &attrval.l { vlst.iter().map(|v| attrval_to_jsonval(v) ).collect() }
     else if let Some(vmap) = &attrval.m { attrval_to_json_map(vmap) }
+    else if attrval.null.is_some() { serde_json::to_value(()).unwrap() }
+    // Binary (B) and BinarySet (BS) attributes are not supported to display in JSON output format.
+    else if attrval.b.is_some() { serde_json::to_value(unsupported).unwrap() }
+    else if attrval.bs.is_some() { serde_json::to_value(unsupported).unwrap() }
     else { panic!("DynamoDB AttributeValue is not in valid status: {:#?}", &attrval); }
 }
 

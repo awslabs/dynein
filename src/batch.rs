@@ -352,7 +352,6 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
     else if let Some(x) = ddb_jsonval.get("N") { Some(AttributeValue { n: Some(x.as_str().unwrap().to_string()), ..Default::default() }) }
     // else if let Some(x) = ddb_jsonval.get("B") { Some(AttributeValue { b: Some(Bytes::from(x.as_str().unwrap())), ..Default::default() }) }
     else if let Some(x) = ddb_jsonval.get("BOOL") { Some(AttributeValue { bool: Some(x.as_bool().unwrap()), ..Default::default() }) }
-    else if let Some(_) = ddb_jsonval.get("NULL") { Some(AttributeValue { null: Some(true), ..Default::default() }) }
     else if let Some(x) = ddb_jsonval.get("SS") { Some(AttributeValue { ss: Some(set_logic(x)), ..Default::default() }) }
     else if let Some(x) = ddb_jsonval.get("NS") { Some(AttributeValue { ns: Some(set_logic(x)), ..Default::default() }) }
     else if let Some(x) = ddb_jsonval.get("L") {
@@ -366,5 +365,6 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
         let inner_map: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(x);
         Some(AttributeValue { m: Some(inner_map), ..Default::default() })
     }
+    else if ddb_jsonval.get("NULL").is_some() { Some(AttributeValue { null: Some(true), ..Default::default() }) }
     else { None }
 }
