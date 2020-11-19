@@ -552,7 +552,7 @@ pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
 
 /// Using Vec of String which is passed via command line,
 /// generate KeySchemaElement(s) & AttributeDefinition(s), that are essential information to create DynamoDB tables or GSIs.
-fn generate_essential_key_definitions(given_keys: &Vec<String>) -> (Vec<KeySchemaElement>, Vec<AttributeDefinition>) {
+fn generate_essential_key_definitions(given_keys: &[String]) -> (Vec<KeySchemaElement>, Vec<AttributeDefinition>) {
     let mut key_schema: Vec<KeySchemaElement> = vec![];
     let mut attribute_definitions: Vec<AttributeDefinition> = vec![];
     let mut key_id = 0;
@@ -682,7 +682,7 @@ impl IndexDesc for LocalSecondaryIndexDescription {
 // FYI: https://grammarist.com/usage/indexes-indices/
 fn extract_secondary_indexes<T: IndexDesc>(
     mode: &Mode,
-    attr_defs: &Vec<AttributeDefinition>,
+    attr_defs: &[AttributeDefinition],
     indexes: Option<Vec<T>>
 ) -> Option<Vec<PrintSecondaryIndex>> {
     if indexes.is_none() { None }

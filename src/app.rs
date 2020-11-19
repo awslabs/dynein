@@ -421,7 +421,7 @@ pub fn typed_key(pk_or_sk: &str, desc: &TableDescription) -> Option<Key> {
 
 /// Receives key data type (HASH or RANGE), KeySchemaElement(s), and AttributeDefinition(s),
 /// In many cases it's called by typed_key, but when retrieving index schema, this method can be used directly so put it as public.
-pub fn typed_key_for_schema(pk_or_sk: &str, ks: &Vec<KeySchemaElement>, attrs: &Vec<AttributeDefinition>) -> Option<Key> {
+pub fn typed_key_for_schema(pk_or_sk: &str, ks: &[KeySchemaElement], attrs: &[AttributeDefinition]) -> Option<Key> {
     // Fetch Partition Key ("HASH") or Sort Key ("RANGE") from given Key Schema. pk should always exists, but sk may not.
     let target_key = ks.iter().find(|x| x.key_type == pk_or_sk);
     target_key.map(|key|

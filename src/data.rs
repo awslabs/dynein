@@ -589,7 +589,7 @@ fn build_attrval_scalar(_ktype: &String, _kval: &String) -> AttributeValue {
 // for SS and NS DynamoDB Attributes.
 // :( serde_json::value::string -- to_string() --> "\"a\""
 // :) serde_json::value::string -- as_str() --> some("a") -- unwrap() --> "a"
-fn build_attrval_set(ktype: &String, kval: &Vec<JsonValue>) -> AttributeValue {
+fn build_attrval_set(ktype: &String, kval: &[JsonValue]) -> AttributeValue {
     debug!("Constructing an AttributeValue for (type: {:?}, val: {:#?})", ktype, kval);
 
     let mut attrval: AttributeValue = AttributeValue { ..Default::default() };
@@ -607,7 +607,7 @@ fn build_attrval_set(ktype: &String, kval: &Vec<JsonValue>) -> AttributeValue {
 
 /// for "L" DynamoDB Attributes
 /// used only for 'simplified JSON' format. Not compatible with DynamoDB JSON.
-fn build_attrval_list(vec: &Vec<JsonValue>) -> AttributeValue {
+fn build_attrval_list(vec: &[JsonValue]) -> AttributeValue {
     let mut attrval: AttributeValue = AttributeValue { ..Default::default() };
 
     let mut inside_attrvals = Vec::<AttributeValue>::new();
@@ -665,7 +665,7 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
 
 
 /// `strip_items` calls `strip_item` for each item.
-fn strip_items(items: &Vec<HashMap<String, rusoto_dynamodb::AttributeValue>>)
+fn strip_items(items: &[HashMap<String, rusoto_dynamodb::AttributeValue>])
                     -> Vec<HashMap<String, serde_json::Value>> {
   items.iter().map(|item| strip_item(item)).collect()
 }
@@ -967,7 +967,7 @@ pub fn attrval_to_type(attrval: &AttributeValue) -> Option<String> {
 
 
 /// This function takes items and returns values in multiple lines - one line for one item.
-pub fn convert_items_to_csv_lines(items: &Vec<HashMap<String, AttributeValue>>,
+pub fn convert_items_to_csv_lines(items: &[HashMap<String, AttributeValue>],
                                   ts: &app::TableSchema, attributes_to_append: &Option<Vec<String>>, keys_only: bool) -> String {
     items.iter().map(|item|
         convert_item_to_csv_line(item, ts, attributes_to_append, keys_only)
@@ -1008,7 +1008,7 @@ fn convert_item_to_csv_line(item: &HashMap<String, AttributeValue>,
 }
 
 
-pub fn convert_to_json_vec(items: &Vec<HashMap<String, AttributeValue>>)
+pub fn convert_to_json_vec(items: &[HashMap<String, AttributeValue>])
                 -> Vec<HashMap<String, serde_json::Value>> {
     items.iter().map(|item|
         convert_to_json(&item)

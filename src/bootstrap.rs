@@ -270,7 +270,7 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
 }
 
 
-async fn prepare_table(cx: &app::Context, table_name: &str, keys: &Vec<&str>) {
+async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
     match control::create_table_api(cx.clone(), table_name.to_string(), keys.iter().map(|k| k.to_string()).collect()).await {
         Ok(desc) => {
             println!("Started to create table '{}' in {} region. status: {}",

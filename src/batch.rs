@@ -255,7 +255,7 @@ pub async fn convert_jsonvals_to_request_items(cx: &app::Context, items_jsonval:
 /// [[John, 12, Apple],
 ///  [Ami, 23, Orange],
 ///  [Shu, 42, Banana]] ... matrix
-pub async fn csv_matrix_to_request_items(cx: &app::Context, matrix: &Vec<Vec<&str>>, headers: &Vec<&str>)
+pub async fn csv_matrix_to_request_items(cx: &app::Context, matrix: &[Vec<&str>], headers: &[&str])
                   -> Result<HashMap<String, Vec<WriteRequest>>, DyneinBatchError> {
     let total_elements_in_matrix: usize = matrix.iter().map(|x| x.len()).collect::<Vec<usize>>().iter().sum::<usize>();
     if !(headers.len() * matrix.len() == total_elements_in_matrix) {

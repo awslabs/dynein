@@ -364,7 +364,7 @@ async fn write_array_of_jsons_with_chunked_25(cx: app::Context, array_of_json_ob
 /// [[John, 12, Apple],
 ///  [Ami, 23, Orange],
 ///  [Shu, 42, Banana]] ... matrix
-async fn write_csv_matrix(cx: &app::Context, matrix: Vec<Vec<&str>>, headers: &Vec<&str>)
+async fn write_csv_matrix(cx: &app::Context, matrix: Vec<Vec<&str>>, headers: &[&str])
                           -> Result<(), batch::DyneinBatchError> {
     let request_items: HashMap<String, Vec<WriteRequest>> = batch::csv_matrix_to_request_items(&cx, &matrix, &headers).await?;
     batch::batch_write_untill_processed(cx.clone(), request_items).await?;
