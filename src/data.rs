@@ -773,7 +773,7 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
     debug!("Start building KeyConditionExpression. Currently built: '{}'", &built);
 
     // iterate over splitted tokens and build expression and mappings.
-    let mut iter = sort_key_expression.trim().clone().split_whitespace();
+    let mut iter = sort_key_expression.trim().split_whitespace();
     // Query API https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html#DDB-Query-request-KeyConditionExpression
     match iter.next() {
         // sortKeyName = :sortkeyval - true if the sort key value is equal to :sortkeyval.
