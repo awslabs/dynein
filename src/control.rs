@@ -685,12 +685,11 @@ impl IndexDesc for LocalSecondaryIndexDescription {
 fn extract_secondary_indexes<T: IndexDesc>(
     mode: &Mode,
     attr_defs: &[AttributeDefinition],
-    indexes: Option<Vec<T>>
+    option_indexes: Option<Vec<T>>
 ) -> Option<Vec<PrintSecondaryIndex>> {
-    if indexes.is_none() { None }
-    else {
+    if let Some(indexes) = option_indexes {
         let mut xs = Vec::<PrintSecondaryIndex>::new();
-        for idx in &indexes.unwrap() {
+        for idx in &indexes {
             let ks = &idx.retrieve_key_schema().as_ref().unwrap();
             let idx = PrintSecondaryIndex {
                 name: String::from(idx.retrieve_index_name().as_ref().unwrap()),
@@ -703,6 +702,8 @@ fn extract_secondary_indexes<T: IndexDesc>(
             xs.push(idx);
         }
         Some(xs)
+    } else {
+        None
     }
 }
 
