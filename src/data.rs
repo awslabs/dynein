@@ -936,7 +936,7 @@ fn attrval_to_cell_print(optional_attrval: Option<AttributeValue>) -> String {
             else if let Some(v) = &attrval.bool { v.to_string() }
             else if let Some(vs) = &attrval.ss { serde_json::to_string(&vs).unwrap() }
             else if let Some(vs) = &attrval.ns {
-                format!("{}", serde_json::to_string(&vs.iter().map(|v| str_to_json_num(v) ).collect::<Vec<JsonValue>>()).unwrap() )
+                serde_json::to_string(&vs.iter().map(|v| str_to_json_num(v) ).collect::<Vec<JsonValue>>()).unwrap()
             }
             else if attrval.null.is_some() { String::from("null") }
             else { String::from("(snip)") } // B, BS, L, and M are not shown.
