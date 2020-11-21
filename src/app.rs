@@ -372,7 +372,7 @@ pub fn insert_to_table_cache(cx: &Context, desc: TableDescription) -> Result<(),
     // retrieve current cache from Context and update target table desc.
     // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
     let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
-    let cache_key = format!("{}/{}", region.name(), table_name.clone());
+    let cache_key = format!("{}/{}", region.name(), table_name);
 
     let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
         Some(ts) => ts,
@@ -384,7 +384,7 @@ pub fn insert_to_table_cache(cx: &Context, desc: TableDescription) -> Result<(),
             cache_key,
             TableSchema {
                 region: String::from(region.name()),
-                name: table_name.clone(),
+                name: table_name,
                 pk: typed_key("HASH", &desc).expect("pk should exist"),
                 sk: typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
@@ -449,7 +449,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
 
             TableSchema {
                 region: String::from(cx.effective_region().name()),
-                name: desc.clone().table_name.clone().unwrap().to_string(),
+                name: desc.clone().table_name.unwrap(),
                 pk: typed_key("HASH",  &desc).expect("pk should exist"),
                 sk: typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
@@ -460,7 +460,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             debug!("current context {:#?}", cx);
             let cache: Cache = cx.clone().cache.expect("Cache should exist in context"); // can refactor here using and_then
             let cached_tables: HashMap<String, TableSchema> = cache.tables.expect("tables should exist in cache");
-            let schema_from_cache: Option<TableSchema> = cached_tables.get(&cx.effective_cache_key().clone()).map(|x| x.to_owned());
+            let schema_from_cache: Option<TableSchema> = cached_tables.get(&cx.effective_cache_key()).map(|x| x.to_owned());
             schema_from_cache.unwrap_or_else(|| {
                 error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
             })
@@ -536,7 +536,7 @@ fn region_dynamodb_local(port: u32) -> Region {
     debug!("setting DynamoDB Local '{}' as target region.", &endpoint_url);
     Region::Custom {
         name: "local".to_owned(),
-        endpoint: endpoint_url.to_owned(),
+        endpoint: endpoint_url,
     }
 }
 
@@ -571,9 +571,9 @@ fn save_using_target(cx: &Context, desc: TableDescription) -> Result<(), DyneinC
     let table_name: String = desc.table_name.clone().expect("desc should have table name");
 
     // retrieve current config from Context and update "using target".
-    let mut config = cx.clone().config.expect("cx should have config").clone();
+    let mut config = cx.clone().config.expect("cx should have config");
     config.using_region = Some(String::from(cx.effective_region().name()));
-    config.using_table  = Some(table_name.clone());
+    config.using_table  = Some(table_name);
     debug!("config file will be updated with: {:?}", &config);
 
     // write to config file
