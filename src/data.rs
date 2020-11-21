@@ -446,7 +446,7 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
                     // --set 'Attr = 123', where right_hand_operands = ["val"], of which length is 1.
                     expression.push_str(val_placeholder.as_str());
                     vals.insert(val_placeholder, str_to_attrval(right_hand)
-                                                 .expect(&format!("failed to parse right hand object '{}' into AttributeValue.", &right_hand)));
+                                                 .unwrap_or_else(|_| panic!("failed to parse right hand object '{}' into AttributeValue.", &right_hand)));
                 } else if right_hand_operands.len() == 2 &&
                           right_hand_operands[0] == left_hand {
                     // --set 'Attr = Attr + 100', where right_hand_operands = ["val", 100], of which length is 2.
@@ -455,7 +455,7 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
                     else if right_hand.contains("-") { expression.push_str(" - ") };
                     expression.push_str(val_placeholder.as_str());
                     vals.insert(val_placeholder, str_to_attrval(right_hand_operands[1])
-                                                 .expect(&format!("failed to parse right hand object '{}' into AttributeValue.", &right_hand_operands[1])));
+                                                 .unwrap_or_else(|_| panic!("failed to parse right hand object '{}' into AttributeValue.", &right_hand_operands[1])));
                 } else {
                     error!("failed to parse a right hand statement '{}'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'", &right_hand);
                     std::process::exit(1);
