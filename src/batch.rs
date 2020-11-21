@@ -258,7 +258,7 @@ pub async fn convert_jsonvals_to_request_items(cx: &app::Context, items_jsonval:
 pub async fn csv_matrix_to_request_items(cx: &app::Context, matrix: &[Vec<&str>], headers: &[&str])
                   -> Result<HashMap<String, Vec<WriteRequest>>, DyneinBatchError> {
     let total_elements_in_matrix: usize = matrix.iter().map(|x| x.len()).collect::<Vec<usize>>().iter().sum::<usize>();
-    if !(headers.len() * matrix.len() == total_elements_in_matrix) {
+    if (headers.len() * matrix.len()) != total_elements_in_matrix {
         error!("cells in the 'matrix' should have exact the same number of elements of 'headers'"); std::process::exit(1);
     }
 
