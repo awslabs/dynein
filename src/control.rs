@@ -359,7 +359,7 @@ async fn update_table_api(cx: app::Context, table_name_to_update: String, switch
 
     let req: UpdateTableInput = UpdateTableInput {
         table_name: table_name_to_update,
-        billing_mode: switching_to_mode.map(|m| mode_to_billing_mode_api_spec(m)),
+        billing_mode: switching_to_mode.map(mode_to_billing_mode_api_spec),
         provisioned_throughput,
         // NOTE: In this function we set `global_secondary_index_updates` to None. GSI update is handled in different commands (e.g. dy admin create index xxx --keys)
         global_secondary_index_updates: None /* intentional */,
