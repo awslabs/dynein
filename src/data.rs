@@ -643,7 +643,7 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
         // scalar types
         JsonValue::String(val) => AttributeValue { s: Some(val.to_string()), ..Default::default() },
         JsonValue::Number(val) => AttributeValue { n: Some(val.to_string()), ..Default::default() },
-        JsonValue::Bool(val)   => AttributeValue { bool: Some(val.clone()), ..Default::default() },
+        JsonValue::Bool(val)   => AttributeValue { bool: Some(*val), ..Default::default() },
         JsonValue::Null        => AttributeValue { null: Some(true), ..Default::default() },
 
         // document types. they can be recursive.
