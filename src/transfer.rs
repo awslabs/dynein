@@ -336,7 +336,7 @@ fn build_csv_header(ts: &app::TableSchema, attributes_to_append: Option<Vec<Stri
         header_str.push_str(&sk.name);
     };
 
-    if keys_only { () }
+    if keys_only {}
     else if let Some(attrs) = attributes_to_append {
         header_str.push(',');
         header_str.push_str(&attrs.join(","));

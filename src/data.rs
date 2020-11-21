@@ -867,7 +867,7 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
     // Print no item message and return if items length is 0.
     if items.is_empty() {
         println!("No item to show in the table '{}'", ts.name.to_string());
-        return ();
+        return;
     };
 
     // build header - first, primary key(s). Even index, key(s) are always projected.
@@ -994,7 +994,7 @@ fn convert_item_to_csv_line(item: &HashMap<String, AttributeValue>,
         line.push_str(&attrval_to_jsonval(sk_attrval).to_string());
     }
 
-    if keys_only { () }
+    if keys_only {}
     else if let Some(attrs) = attributes_to_append {
         for attr /* String */ in attrs {
             let attrval: &AttributeValue = item.iter().find(|x| x.0 == attr).expect("Specified attribute not found in the item.").1;
@@ -1082,7 +1082,7 @@ fn generate_scan_expressions(ts: &app::TableSchema, attributes: &Option<String>,
     };
 
     // if keys_only flag is true, no more attribute would be added.
-    if keys_only { () }
+    if keys_only {}
     else if let Some(_attributes) = attributes {
         let mut i: usize = 0;
         let attrs: Vec<&str> = _attributes.split(',').map(|x| x.trim()).collect();
