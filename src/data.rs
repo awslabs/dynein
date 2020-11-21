@@ -101,7 +101,7 @@ pub async fn scan(cx: app::Context, index: Option<String>, consistent_read: bool
 
     let items = scan_api(cx.clone(), index, consistent_read, attributes, keys_only, Some(limit), None).await
                 .items.expect("items should be 'Some' even if there's no item in the table.");
-    match cx.output.as_ref().map(|x| x.as_str() ) {
+    match cx.output.as_deref() {
         None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
         Some("json") => println!("{}", serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()),
         Some("raw") =>  println!("{}", serde_json::to_string_pretty(&strip_items(&items)).unwrap()),
@@ -168,7 +168,7 @@ pub async fn query(cx: app::Context, pval: String, sort_key_expression: Option<S
         Ok(res) => {
             match res.items {
                 None => panic!("This message should not be shown"), // as Query returns 'Some([])' if there's no item to return.
-                Some(items) => match cx.output.as_ref().map(|x| x.as_str() ) {
+                Some(items) => match cx.output.as_deref() {
                     None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
                     Some("json") => println!("{}", serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()),
                     Some("raw") => println!("{}", serde_json::to_string_pretty(&strip_items(&items)).unwrap()),
@@ -207,7 +207,7 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
         Ok(res) => {
             match res.item {
                 None => println!("No item found."),
-                Some(item) => match cx.output.as_ref().map(|x| x.as_str() ) {
+                Some(item) => match cx.output.as_deref() {
                     None | Some("json") => println!("{}", serde_json::to_string_pretty(&convert_to_json(&item)).unwrap()),
                     Some("yaml") => println!("{}", serde_yaml::to_string(&convert_to_json(&item)).unwrap()),
                     Some("raw") => println!("{}", serde_json::to_string_pretty(&strip_item(&item)).unwrap()),

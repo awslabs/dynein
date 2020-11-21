@@ -158,7 +158,7 @@ pub async fn describe_table(cx: app::Context) {
         Err(e) => println!("Failed to write table schema to the cache with follwoing error: {:?}", e),
     };
 
-    match cx.clone().output.as_ref().map(|x| x.as_str() ) {
+    match cx.clone().output.as_deref() {
         None | Some("yaml") => print_table_description(cx.effective_region(), desc),
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => { println!("ERROR: unsupported output type."); std::process::exit(1); },

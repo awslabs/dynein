@@ -284,7 +284,7 @@ impl From<SerdeYAMLError> for DyneinConfigError { fn from(e: SerdeYAMLError) -> 
 
 // Receives given --region option string, including "local", return Region struct.
 pub fn region_from_str(s: Option<String>) -> Option<Region> {
-    match s.as_ref().map(|x| x.as_str()) {
+    match s.as_deref() {
         Some("local") => Some(region_dynamodb_local(8000)),
         Some(x) => Region::from_str(&x).ok(), // convert Result<T, E> into Option<T>
         None => None,
