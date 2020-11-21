@@ -1088,7 +1088,7 @@ fn generate_scan_expressions(ts: &app::TableSchema, attributes: &Option<String>,
         let attrs: Vec<&str> = _attributes.split(',').map(|x| x.trim()).collect();
         for attr in attrs {
             // skip if attributes contain primary key(s) as they're already included in the expression.
-            if attr == &ts.pk.name || (ts.sk.is_some() && attr == &ts.clone().sk.unwrap().name) { continue; }
+            if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.clone().sk.unwrap().name) { continue; }
 
             let placeholder = String::from("#DYNEIN_ATTRNAME") + &i.to_string();
             returning_attributes.push(placeholder.clone());
