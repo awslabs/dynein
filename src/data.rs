@@ -418,8 +418,7 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
 
             expression.push_str("SET ");
 
-            let mut i: usize = 0;
-            for statement in statements {
+            for (i, statement) in statements.into_iter().enumerate() {
                 debug!("parsing a statement: {}", &statement);
                 let path_and_value: Vec<&str> = statement.split('=').map(|x| x.trim()).collect();
                 if path_and_value.len() != 2 {
@@ -460,7 +459,6 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
                     error!("failed to parse a right hand statement '{}'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'", &right_hand);
                     std::process::exit(1);
                 }
-                i += 1;
             }
         },
         UpdateActionType::REMOVE => {
@@ -469,12 +467,10 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
             let mut returning_attributes: Vec<String> = vec![];
             let attributes: Vec<&str> = given_expression.split(',').map(|x| x.trim()).collect();
             debug!("given_expression splitted by ',': {:?}", attributes);
-            let mut i: usize = 0;
-            for attr in attributes {
+            for (i, attr) in attributes.into_iter().enumerate() {
                 let placeholder = String::from("#DYNEIN_ATTRNAME") + &i.to_string();
                 returning_attributes.push(placeholder.clone());
                 names.insert(placeholder, String::from(attr));
-                i += 1;
             };
             expression.push_str("REMOVE ");
             expression.push_str(&returning_attributes.join(","));

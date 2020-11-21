@@ -560,8 +560,7 @@ pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
 fn generate_essential_key_definitions(given_keys: &[String]) -> (Vec<KeySchemaElement>, Vec<AttributeDefinition>) {
     let mut key_schema: Vec<KeySchemaElement> = vec![];
     let mut attribute_definitions: Vec<AttributeDefinition> = vec![];
-    let mut key_id = 0;
-    for key_str in given_keys {
+    for (key_id, key_str) in given_keys.iter().enumerate() {
         let key_and_type = key_str.split(',').collect::<Vec<&str>>();
         if key_and_type.len() >= 3 {
             error!("Invalid format for --keys option: '{}'. Valid format is '--keys myPk,S mySk,N'", &key_str);
@@ -579,8 +578,6 @@ fn generate_essential_key_definitions(given_keys: &[String]) -> (Vec<KeySchemaEl
             attribute_name: String::from(key_and_type[0]),
             attribute_type: if key_and_type.len() == 2 { key_and_type[1].to_uppercase() } else { String::from("S")},
         });
-
-        key_id += 1;
     };
     (key_schema, attribute_definitions)
 }
