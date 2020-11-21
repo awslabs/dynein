@@ -22,7 +22,7 @@ use std::{
 };
 
 use log::{debug,error};
-use dialoguer::Confirmation;
+use dialoguer::Confirm;
 use serde_json::{
     Value as JsonValue,
     de::StrRead,
@@ -60,7 +60,7 @@ pub async fn export(cx: app::Context, given_attributes: Option<String>, keys_onl
 
     if ts.mode == control::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
-        if !Confirmation::new().with_text(msg).interact()? { app::bye(0, "Operation has been cancelled."); }
+        if !Confirm::new().with_prompt(msg).interact()? { app::bye(0, "Operation has been cancelled."); }
     }
 
     // Basically given_attributes would be used, but on CSV format, it can be overwritten by suggested attributes
@@ -78,7 +78,7 @@ pub async fn export(cx: app::Context, given_attributes: Option<String>, keys_onl
     // Though final output file is created here, it would be blank until scan all items. You can see progress in temporary output file.
     let f: fs::File = if Path::new(&output_file).exists() {
         let msg = "Specified output file already exists. Is it OK to truncate contents?";
-        if !Confirmation::new().with_text(msg).interact()? { app::bye(0, "Operation has been cancelled."); }
+        if !Confirm::new().with_prompt(msg).interact()? { app::bye(0, "Operation has been cancelled."); }
         debug!("truncating existing output file.");
         let _f = fs::OpenOptions::new().append(true).open(&output_file)?; _f.set_len(0)?;
         _f
@@ -159,7 +159,7 @@ pub async fn import(cx: app::Context, input_file: String, format: Option<String>
     let ts: app::TableSchema = app::table_schema(&cx).await;
     if ts.mode == control::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
-        if !Confirmation::new().with_text(msg).interact()? { println!("Operation has been cancelled."); return Ok(()); }
+        if !Confirm::new().with_prompt(msg).interact()? { println!("Operation has been cancelled."); return Ok(()); }
     }
 
     let input_string: String = if Path::new(&input_file).exists() {
@@ -218,7 +218,7 @@ async fn overwrite_attributes_or_exit(cx: &app::Context, ts: &app::TableSchema) 
         println!("  - {} ({})", preview_attribute.name, preview_attribute.type_str);
     }
     let msg = "Are you OK to export items in CSV with columns(attributes) above?";
-    if !Confirmation::new().with_text(msg).interact()? {
+    if !Confirm::new().with_prompt(msg).interact()? {
         app::bye(0, "Operation has been cancelled. You can use --keys-only or --attributes option to specify columns explicitly.");
     }
 

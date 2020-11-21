@@ -25,7 +25,6 @@ use std::{
     time,
 };
 
-use bytes::Bytes;
 use futures::future::join_all;
 use log::{debug, error};
 use rusoto_core::{Region, RusotoError};
@@ -293,7 +292,7 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
     debug!("temporary download & unzip directory: {:?}", &tmpdir);
 
     println!("Temporarily downloading sample data from {}", target);
-    let res_bytes: Bytes = reqwest::get(target).await?.bytes().await?;
+    let res_bytes = reqwest::get(target).await?.bytes().await?;
     let fpath: PathBuf = tmpdir.path().join("downloaded_sampledata.zip");
     debug!("Downloading the file at: {}", &fpath.display());
     let mut zfile: File = File::create(fpath.clone())?;
@@ -304,8 +303,9 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
     debug!("Opened the zip archive File just written: {:?}", zarchive);
 
     for i in 0..zarchive.len() {
-        let mut f = zarchive.by_index(i)?;
-        let unzipped_fpath = tmpdir.path().join(f.sanitized_name());
+        let mut f: zip::read::ZipFile = zarchive.by_index(i)?;
+        debug!("target ZipFile name: {}", f.name());
+        let unzipped_fpath = tmpdir.path().join(f.name());
         debug!("[file #{}] file in the archive is: {}", &i, unzipped_fpath.display());
 
         // create a directory if target file is a directory (ends with '/').
