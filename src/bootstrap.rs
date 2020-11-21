@@ -326,18 +326,18 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
 }
 
 
-async fn wait_table_creation(cx: &app::Context, mut tables: Vec<&str>) {
-    debug!("tables: {:?}", tables);
+async fn wait_table_creation(cx: &app::Context, mut processing_tables: Vec<&str>) {
+    debug!("tables in progress: {:?}", processing_tables);
     loop {
         let r: &Region = &cx.effective_region();
-        let create_table_results = join_all(tables.iter().map(|t| app::describe_table_api(r, t.to_string()))).await;
+        let create_table_results = join_all(processing_tables.iter().map(|t| app::describe_table_api(r, t.to_string()))).await;
         let statuses: Vec<String> = create_table_results.iter().map(|desc| desc.table_status.to_owned().unwrap()).collect();
         debug!("Current table statues: {:?}", statuses);
-        tables = tables.iter().zip(statuses.iter()).into_iter()
+        processing_tables = processing_tables.iter().zip(statuses.iter()).into_iter()
                                                    .filter(|(_,s)| s.as_str() != "ACTIVE")
                                                    .map(|(t,_)| *t).collect();
-        println!("Still CREATING following tables: {:?}", tables);
-        if tables.len() == 0 { println!("All tables are in ACTIVE."); break; }
+        println!("Still CREATING following tables: {:?}", processing_tables);
+        if processing_tables.is_empty() { println!("All tables are in ACTIVE."); break; }
         println!("Waiting for tables to be ACTIVE status...");
         thread::sleep(time::Duration::from_millis(5000));
     }

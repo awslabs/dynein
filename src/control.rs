@@ -118,7 +118,7 @@ pub async fn list_tables(cx: app::Context) {
     let table_names = list_tables_api(cx.clone()).await;
 
     println!("DynamoDB tables in region: {}", cx.effective_region().name());
-    if table_names.len() == 0 { return println!("  No table in this region."); }
+    if table_names.is_empty() { return println!("  No table in this region."); }
 
     // if let Some(table_in_config) = cx.clone().config.and_then(|x| x.table) {
     if let Some(table_in_config) = cx.clone().cached_using_table_schema() {
@@ -199,7 +199,7 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
 /// This function is designed to be called from dynein command, mapped in main.rs.
 /// Note that it simply ignores --table option if specified. Newly created table name should be given by the 1st argument "name".
 pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String>) {
-    if given_keys.len() == 0 || given_keys.len() > 2 {
+    if given_keys.is_empty() || given_keys.len() >= 3 {
         error!("You should pass one or two key definitions with --keys option");
         std::process::exit(1);
     };
@@ -235,7 +235,7 @@ pub async fn create_table_api(cx: app::Context, name: String, given_keys: Vec<St
 
 
 pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<String>) {
-    if given_keys.len() == 0 || given_keys.len() > 2 {
+    if given_keys.is_empty() || given_keys.len() >= 3 {
         error!("You should pass one or two key definitions with --keys option");
         std::process::exit(1);
     };
@@ -466,7 +466,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
                                                     .backup_status
                                                     .unwrap() == "AVAILABLE").collect();
     // let available_backups: Vec<BackupSummary> = backups.iter().filter(|b| b.backup_status.to_owned().unwrap() == "AVAILABLE").collect();
-    if available_backups.len() == 0 { app::bye(0, "No AVAILABLE state backup found for the table."); };
+    if available_backups.is_empty() { app::bye(0, "No AVAILABLE state backup found for the table."); };
 
     let source_table_name = cx.effective_table_name();
     let backup_arn = match backup_name {
@@ -558,7 +558,7 @@ fn generate_essential_key_definitions(given_keys: &[String]) -> (Vec<KeySchemaEl
     let mut key_id = 0;
     for key_str in given_keys {
         let key_and_type = key_str.split(',').collect::<Vec<&str>>();
-        if key_and_type.len() > 2 {
+        if key_and_type.len() >= 3 {
             error!("Invalid format for --keys option: '{}'. Valid format is '--keys myPk,S mySk,N'", &key_str);
             std::process::exit(1);
         }

@@ -487,8 +487,8 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
 
     GeneratedUpdateParams {
         exp: Some(expression),
-        names: if names.len() == 0 { None } else { Some(names) },
-        vals: if vals.len() == 0 { None } else { Some(vals) },
+        names: if names.is_empty() { None } else { Some(names) },
+        vals: if vals.is_empty() { None } else { Some(vals) },
     }
 }
 
@@ -734,7 +734,7 @@ fn generate_query_expressions(ts: &app::TableSchema, pval: &String, sort_key_exp
             // Exit with error if no effective secondary index found. Here "names" can be blank if:
             //   (1). no index is defined for the table, or
             //   (2). there're some index(es) but couldn't find specified name index
-            if names.len() == 0 {
+            if names.is_empty() {
                 return Err(DyneinQueryParamsError::NoSuchIndex(idx.to_string(), ts.clone().name));
             }
         }
@@ -745,7 +745,7 @@ fn generate_query_expressions(ts: &app::TableSchema, pval: &String, sort_key_exp
         None => /* No --sort-key option given. proceed with partition key condition only. */ {
             Ok(GeneratedQueryParams {
                 exp: Some(expression),
-                names: if names.len() == 0 { None } else { Some(names) },
+                names: if names.is_empty() { None } else { Some(names) },
                 vals: Some(vals),
             })
         },
@@ -850,7 +850,7 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
 
     Ok(GeneratedQueryParams {
         exp: Some(built),
-        names: if names.len() == 0 { None } else { Some(names) },
+        names: if names.is_empty() { None } else { Some(names) },
         vals: Some(vals),
     })
 }
@@ -865,8 +865,8 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
 fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::TableSchema,
                        selected_attributes: &Option<String>, keys_only: bool) {
     // Print no item message and return if items length is 0.
-    if items.len() == 0 {
-        println!("No result to show in the table '{}'", ts.name.to_string());
+    if items.is_empty() {
+        println!("No item to show in the table '{}'", ts.name.to_string());
         return ();
     };
 

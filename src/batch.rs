@@ -193,7 +193,7 @@ pub fn batch_write_untill_processed(cx: app::Context, request_items: HashMap<Str
             Ok(result) => {
                 let unprocessed_items: HashMap<String, Vec<WriteRequest>> = result.expect("alwasy wrapped by Some");
                 // if there's any unprocessed items, recursively call this function itself.
-                if unprocessed_items.len() > 0 {
+                if !unprocessed_items.is_empty() {
                     debug!("UnprocessedItems: {:?}", &unprocessed_items);
                     batch_write_untill_processed(cx, unprocessed_items).await
                 }

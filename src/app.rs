@@ -496,7 +496,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
         };
     };
 
-    if indexes.len() == 0 { None } else { Some(indexes) }
+    if indexes.is_empty() { None } else { Some(indexes) }
 }
 
 
