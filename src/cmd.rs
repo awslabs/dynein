@@ -75,6 +75,9 @@ pub enum Sub {
     /// Show detailed information of a table. [API: DescribeTable]
     #[structopt(aliases = &["show", "describe", "info"])]
     Desc {
+        /// Target table name. Optionally you may specify the target table by --table (-t) option.
+        target_table_to_desc: Option<String>,
+
         /// Show details of all tables in the region
         #[structopt(long)]
         all_tables: bool,
@@ -362,6 +365,9 @@ pub enum AdminSub {
     /// Show detailed information of a table. [API: DescribeTable]
     #[structopt(aliases = &["show", "describe", "info"])]
     Desc {
+        /// Target table name. Optionally you may specify the target table by --table (-t) option.
+        target_table_to_desc: Option<String>,
+
         /// Show details of all tables in the region
         #[structopt(long)]
         all_tables: bool,
