@@ -333,7 +333,7 @@ async fn wait_table_creation(cx: &app::Context, mut processing_tables: Vec<&str>
         let create_table_results = join_all(processing_tables.iter().map(|t| app::describe_table_api(r, t.to_string()))).await;
         let statuses: Vec<String> = create_table_results.iter().map(|desc| desc.table_status.to_owned().unwrap()).collect();
         debug!("Current table statues: {:?}", statuses);
-        processing_tables = processing_tables.iter().zip(statuses.iter()).into_iter()
+        processing_tables = processing_tables.iter().zip(statuses.iter())
                                                    .filter(|(_,s)| s.as_str() != "ACTIVE")
                                                    .map(|(t,_)| *t).collect();
         println!("Still CREATING following tables: {:?}", processing_tables);

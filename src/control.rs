@@ -188,8 +188,8 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
         lsi: extract_secondary_indexes(&mode, &attr_defs, desc.local_secondary_indexes),
         stream: extract_stream(desc.latest_stream_arn, desc.stream_specification),
 
-        size_bytes: i64::from(desc.table_size_bytes.unwrap()),
-        count: i64::from(desc.item_count.unwrap()),
+        size_bytes: desc.table_size_bytes.unwrap(),
+        count: desc.item_count.unwrap(),
         created_at: epoch_to_rfc3339(desc.creation_date_time.unwrap()),
     };
     println!("{}", serde_yaml::to_string(&print_table).unwrap());
@@ -572,7 +572,7 @@ fn generate_essential_key_definitions(given_keys: &[String]) -> (Vec<KeySchemaEl
         // If data type of key is omitted, dynein assumes it as String (S).
         attribute_definitions.push(AttributeDefinition {
             attribute_name: String::from(key_and_type[0]),
-            attribute_type: if key_and_type.len() == 2 { String::from(key_and_type[1].to_uppercase()) } else { String::from("S")},
+            attribute_type: if key_and_type.len() == 2 { key_and_type[1].to_uppercase() } else { String::from("S")},
         });
 
         key_id += 1;
