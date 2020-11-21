@@ -25,7 +25,6 @@ extern crate serde_json;
 extern crate serde_yaml;
 
 use log::{debug};
-use tokio;
 
 mod app;
 mod batch;

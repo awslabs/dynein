@@ -15,7 +15,6 @@
  */
 
 use ::serde::{Serialize, Deserialize};
-use dirs;
 use log::{debug,error,info};
 use rusoto_core::Region;
 use rusoto_dynamodb::*;
@@ -36,9 +35,9 @@ use super::control;
    struct / enum / const
    ================================================= */
 
-const CONFIG_DIR: &'static str = ".dynein";
-const CONFIG_FILE_NAME: &'static str = "config.yml";
-const CACHE_FILE_NAME: &'static str  = "cache.yml";
+const CONFIG_DIR: &str = ".dynein";
+const CONFIG_FILE_NAME: &str = "config.yml";
+const CACHE_FILE_NAME: &str  = "cache.yml";
 
 
 pub enum DyneinFileType {
@@ -204,17 +203,17 @@ impl Context {
         // e.g. region set via AWS CLI (check: $ aws configure get region), or environment variable `AWS_DEFAULT_REGION`.
         //      ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#282-290
         //      ref: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-        return Region::default();
+        Region::default()
     }
 
     pub fn effective_table_name(&self) -> String {
         // if table is overwritten by --table option, use it.
         if let Some(ow_table_name) = &self.overwritten_table_name { return ow_table_name.to_owned(); };
         // otherwise, retrieve an `using_table` from config file.
-        return self.to_owned().config.and_then(|x| x.using_table )
-                          .unwrap_or_else(|| { // if both --option nor config file are not available, raise error and exit the command.
-                              error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
-                          });
+        self.to_owned().config.and_then(|x| x.using_table )
+            .unwrap_or_else(|| { // if both --option nor config file are not available, raise error and exit the command.
+                error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
+            })
     }
 
     pub fn effective_cache_key(&self) -> String {
@@ -228,17 +227,17 @@ impl Context {
         };
         let found_table_schema: Option<&TableSchema> = cached_tables.get(&self.effective_cache_key());
         // NOTE: HashMap's `get` returns a reference to the value / (&self, k: &Q) -> Option<&V>
-        return found_table_schema.map(|schema| schema.to_owned());
+        found_table_schema.map(|schema| schema.to_owned())
     }
 
     pub fn with_region(mut self, ec2_region: &rusoto_ec2::Region) -> Self {
         self.overwritten_region = Some(Region::from_str(&ec2_region.to_owned().region_name.unwrap()).unwrap());
-        return self;
+        self
     }
 
-    pub fn with_table(mut self, table: &String) -> Self {
+    pub fn with_table(mut self, table: &str) -> Self {
         self.overwritten_table_name = Some(table.to_owned());
-        return self;
+        self
     }
 }
 
@@ -285,7 +284,7 @@ impl From<SerdeYAMLError> for DyneinConfigError { fn from(e: SerdeYAMLError) -> 
 
 // Receives given --region option string, including "local", return Region struct.
 pub fn region_from_str(s: Option<String>) -> Option<Region> {
-    match s.as_ref().map(|x| x.as_str()) {
+    match s.as_deref() {
         Some("local") => Some(region_dynamodb_local(8000)),
         Some(x) => Region::from_str(&x).ok(), // convert Result<T, E> into Option<T>
         None => None,
@@ -372,7 +371,7 @@ pub fn insert_to_table_cache(cx: &Context, desc: TableDescription) -> Result<(),
     // retrieve current cache from Context and update target table desc.
     // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
     let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
-    let cache_key = format!("{}/{}", region.name(), table_name.clone());
+    let cache_key = format!("{}/{}", region.name(), table_name);
 
     let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
         Some(ts) => ts,
@@ -384,7 +383,7 @@ pub fn insert_to_table_cache(cx: &Context, desc: TableDescription) -> Result<(),
             cache_key,
             TableSchema {
                 region: String::from(region.name()),
-                name: table_name.clone(),
+                name: table_name,
                 pk: typed_key("HASH", &desc).expect("pk should exist"),
                 sk: typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
@@ -415,16 +414,16 @@ pub fn remove_dynein_files() -> Result<(), DyneinConfigError> {
 pub fn typed_key(pk_or_sk: &str, desc: &TableDescription) -> Option<Key> {
     // extracting key schema of "base table" here
     let ks = desc.clone().key_schema.unwrap();
-    return typed_key_for_schema(pk_or_sk, &ks, &desc.clone().attribute_definitions.unwrap());
+    typed_key_for_schema(pk_or_sk, &ks, &desc.clone().attribute_definitions.unwrap())
 }
 
 
 /// Receives key data type (HASH or RANGE), KeySchemaElement(s), and AttributeDefinition(s),
 /// In many cases it's called by typed_key, but when retrieving index schema, this method can be used directly so put it as public.
-pub fn typed_key_for_schema(pk_or_sk: &str, ks: &Vec<KeySchemaElement>, attrs: &Vec<AttributeDefinition>) -> Option<Key> {
+pub fn typed_key_for_schema(pk_or_sk: &str, ks: &[KeySchemaElement], attrs: &[AttributeDefinition]) -> Option<Key> {
     // Fetch Partition Key ("HASH") or Sort Key ("RANGE") from given Key Schema. pk should always exists, but sk may not.
     let target_key = ks.iter().find(|x| x.key_type == pk_or_sk);
-    return target_key.map(|key|
+    target_key.map(|key|
         Key {
             name: key.clone().attribute_name,
             // kind should be one of S/N/B, Which can be retrieved from AttributeDefinition's attribute_type.
@@ -433,7 +432,7 @@ pub fn typed_key_for_schema(pk_or_sk: &str, ks: &Vec<KeySchemaElement>, attrs: &
                                    .expect("primary key should be in AttributeDefinition.").attribute_type
                   ).unwrap(),
         }
-    );
+    )
 }
 
 
@@ -447,9 +446,9 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             // TODO: reduce # of DescribeTable API calls. table_schema function is called every time you do something.
             let desc: TableDescription = describe_table_api(&cx.effective_region(), table_name /* should be equal to 'cx.effective_table_name()' */).await;
 
-            return TableSchema {
+            TableSchema {
                 region: String::from(cx.effective_region().name()),
-                name: desc.clone().table_name.clone().unwrap().to_string(),
+                name: desc.clone().table_name.unwrap(),
                 pk: typed_key("HASH",  &desc).expect("pk should exist"),
                 sk: typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
@@ -460,10 +459,10 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             debug!("current context {:#?}", cx);
             let cache: Cache = cx.clone().cache.expect("Cache should exist in context"); // can refactor here using and_then
             let cached_tables: HashMap<String, TableSchema> = cache.tables.expect("tables should exist in cache");
-            let schema_from_cache: Option<TableSchema> = cached_tables.get(&cx.effective_cache_key().clone()).map(|x| x.to_owned());
-            return schema_from_cache.unwrap_or_else(|| {
+            let schema_from_cache: Option<TableSchema> = cached_tables.get(&cx.effective_cache_key()).map(|x| x.to_owned());
+            schema_from_cache.unwrap_or_else(|| {
                 error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
-            });
+            })
         },
     }
 }
@@ -496,7 +495,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
         };
     };
 
-    return if indexes.len() == 0 { None } else { Some(indexes) };
+    if indexes.is_empty() { None } else { Some(indexes) }
 }
 
 
@@ -504,7 +503,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
 /// however it turned out that DescribeTable API result is useful in various logic, separated API into this standalone function.
 pub async fn describe_table_api(region: &Region, table_name: String) -> TableDescription {
     let ddb = DynamoDbClient::new(region.clone());
-    let req: DescribeTableInput = DescribeTableInput { table_name: table_name };
+    let req: DescribeTableInput = DescribeTableInput { table_name };
 
     match ddb.describe_table(req).await {
         Err(e) => {
@@ -515,7 +514,7 @@ pub async fn describe_table_api(region: &Region, table_name: String) -> TableDes
         Ok(res) => {
             let desc: TableDescription = res.table.expect("This message should not be shown.");
             debug!("Received DescribeTable Result: {:?}\n", desc);
-            return desc;
+            desc
         }
     }
 }
@@ -534,10 +533,10 @@ pub fn bye(code: i32, msg: &str) {
 fn region_dynamodb_local(port: u32) -> Region {
     let endpoint_url = format!("http://localhost:{}", port);
     debug!("setting DynamoDB Local '{}' as target region.", &endpoint_url);
-    return Region::Custom {
+    Region::Custom {
         name: "local".to_owned(),
-        endpoint: endpoint_url.to_owned(),
-    };
+        endpoint: endpoint_url,
+    }
 }
 
 
@@ -551,7 +550,7 @@ fn retrieve_dynein_file_path (dft: DyneinFileType) -> Result<String, DyneinConfi
 }
 
 fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
-    return match dirs::home_dir() {
+    match dirs::home_dir() {
         None => Err(DyneinConfigError::HomeDir),
         Some(home) => {
             let dir = format!("{}/{}", home.to_str().unwrap(), CONFIG_DIR);
@@ -571,9 +570,9 @@ fn save_using_target(cx: &Context, desc: TableDescription) -> Result<(), DyneinC
     let table_name: String = desc.table_name.clone().expect("desc should have table name");
 
     // retrieve current config from Context and update "using target".
-    let mut config = cx.clone().config.expect("cx should have config").clone();
+    let mut config = cx.clone().config.expect("cx should have config");
     config.using_region = Some(String::from(cx.effective_region().name()));
-    config.using_table  = Some(table_name.clone());
+    config.using_table  = Some(table_name);
     debug!("config file will be updated with: {:?}", &config);
 
     // write to config file

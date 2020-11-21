@@ -114,7 +114,7 @@ pub fn build_batch_request_items(raw_json_content: String) -> Result<HashMap<Str
                         },)
                     */
                     let item: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(raw_item);
-                    write_requests.push(WriteRequest { put_request: Some(PutRequest { item: item }), delete_request: None });
+                    write_requests.push(WriteRequest { put_request: Some(PutRequest { item }), delete_request: None });
                 } else {
                     error!("[skip] no field named 'Item' under PutRequest");
                 }
@@ -143,7 +143,7 @@ pub fn build_batch_request_items(raw_json_content: String) -> Result<HashMap<Str
                         },)
                     */
                     let key: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(raw_key);
-                    write_requests.push(WriteRequest { put_request: None, delete_request: Some(DeleteRequest { key: key }) });
+                    write_requests.push(WriteRequest { put_request: None, delete_request: Some(DeleteRequest { key }) });
                 } else {
                     error!("[skip] no field named 'Key' under DeleteRequest");
                 }
@@ -156,7 +156,7 @@ pub fn build_batch_request_items(raw_json_content: String) -> Result<HashMap<Str
         results.insert(tbl.to_string(), write_requests);
     } // end loop over a "table" key. will take a look at next table if any.
 
-    return Ok(results);
+    Ok(results)
 }
 
 
@@ -173,7 +173,7 @@ async fn batch_write_item_api(cx: app::Context, request_items: HashMap<String, V
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: BatchWriteItemInput = BatchWriteItemInput {
-        request_items: request_items,
+        request_items,
         ..Default::default()
     };
 
@@ -193,7 +193,7 @@ pub fn batch_write_untill_processed(cx: app::Context, request_items: HashMap<Str
             Ok(result) => {
                 let unprocessed_items: HashMap<String, Vec<WriteRequest>> = result.expect("alwasy wrapped by Some");
                 // if there's any unprocessed items, recursively call this function itself.
-                if unprocessed_items.len() > 0 {
+                if !unprocessed_items.is_empty() {
                     debug!("UnprocessedItems: {:?}", &unprocessed_items);
                     batch_write_untill_processed(cx, unprocessed_items).await
                 }
@@ -237,7 +237,7 @@ pub async fn convert_jsonvals_to_request_items(cx: &app::Context, items_jsonval:
         };
 
         // Fill meaningful put_request here, then push it to the write_requests. Then go to the next item.
-        write_request.put_request = Some(PutRequest { item: item });
+        write_request.put_request = Some(PutRequest { item });
         write_requests.push(write_request);
     }
 
@@ -255,10 +255,10 @@ pub async fn convert_jsonvals_to_request_items(cx: &app::Context, items_jsonval:
 /// [[John, 12, Apple],
 ///  [Ami, 23, Orange],
 ///  [Shu, 42, Banana]] ... matrix
-pub async fn csv_matrix_to_request_items(cx: &app::Context, matrix: &Vec<Vec<&str>>, headers: &Vec<&str>)
+pub async fn csv_matrix_to_request_items(cx: &app::Context, matrix: &[Vec<&str>], headers: &[&str])
                   -> Result<HashMap<String, Vec<WriteRequest>>, DyneinBatchError> {
     let total_elements_in_matrix: usize = matrix.iter().map(|x| x.len()).collect::<Vec<usize>>().iter().sum::<usize>();
-    if !(headers.len() * matrix.len() == total_elements_in_matrix) {
+    if (headers.len() * matrix.len()) != total_elements_in_matrix {
         error!("cells in the 'matrix' should have exact the same number of elements of 'headers'"); std::process::exit(1);
     }
 
@@ -278,7 +278,7 @@ pub async fn csv_matrix_to_request_items(cx: &app::Context, matrix: &Vec<Vec<&st
         }
 
         // Fill meaningful put_request here, then push it to the write_requests. Then go to the next item.
-        write_request.put_request = Some(PutRequest { item: item });
+        write_request.put_request = Some(PutRequest { item });
         write_requests.push(write_request);
     }
 
@@ -315,7 +315,7 @@ fn ddbjson_attributes_to_attrvals(ddbjson_attributes: &JsonValue) -> HashMap<Str
             None => { error!("[skip] invalid/unsupported DynamoDB JSON format: {:?}", body) },
         };
     }
-    return built_attributes;
+    built_attributes
 }
 
 
@@ -347,24 +347,29 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
                       .map(|el| el.as_str().expect("should -> str").to_string()).collect::<Vec<String>>()
     };
 
-    return
-         if let Some(x) = ddb_jsonval.get("S") { Some(AttributeValue { s: Some(x.as_str().unwrap().to_string()), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("N") { Some(AttributeValue { n: Some(x.as_str().unwrap().to_string()), ..Default::default() }) }
-    // else if let Some(x) = ddb_jsonval.get("B") { Some(AttributeValue { b: Some(Bytes::from(x.as_str().unwrap())), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("BOOL") { Some(AttributeValue { bool: Some(x.as_bool().unwrap()), ..Default::default() }) }
-    else if let Some(_) = ddb_jsonval.get("NULL") { Some(AttributeValue { null: Some(true), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("SS") { Some(AttributeValue { ss: Some(set_logic(x)), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("NS") { Some(AttributeValue { ns: Some(set_logic(x)), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("L") {
+    // following list of if-else statements would be return value of this function.
+    if let Some(x) = ddb_jsonval.get("S") {
+        Some(AttributeValue { s: Some(x.as_str().unwrap().to_string()), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("N") {
+        Some(AttributeValue { n: Some(x.as_str().unwrap().to_string()), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("BOOL") {
+        Some(AttributeValue { bool: Some(x.as_bool().unwrap()), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("SS") {
+        Some(AttributeValue { ss: Some(set_logic(x)), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("NS") {
+        Some(AttributeValue { ns: Some(set_logic(x)), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("L") {
         let list_element = x.as_array().unwrap().iter()
                             .map(|el| ddbjson_val_to_attrval(el).expect("failed to digest a list element"))
                             .collect::<Vec<AttributeValue>>();
         debug!("List Element: {:?}", list_element);
         Some(AttributeValue { l: Some(list_element), ..Default::default() })
-    }
-    else if let Some(x) = ddb_jsonval.get("M") {
+    } else if let Some(x) = ddb_jsonval.get("M") {
         let inner_map: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(x);
         Some(AttributeValue { m: Some(inner_map), ..Default::default() })
+    } else if ddb_jsonval.get("NULL").is_some() {
+        Some(AttributeValue { null: Some(true), ..Default::default() })
+    } else {
+        None
     }
-    else { None };
 }

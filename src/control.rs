@@ -64,8 +64,8 @@ struct PrintDescribeTable {
     created_at: String,
 }
 
-const PROVISIONED_API_SPEC: &'static str = "PROVISIONED";
-const ONDEMAND_API_SPEC: &'static str = "PAY_PER_REQUEST";
+const PROVISIONED_API_SPEC: &str = "PROVISIONED";
+const ONDEMAND_API_SPEC: &str = "PAY_PER_REQUEST";
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Mode {
@@ -118,7 +118,7 @@ pub async fn list_tables(cx: app::Context) {
     let table_names = list_tables_api(cx.clone()).await;
 
     println!("DynamoDB tables in region: {}", cx.effective_region().name());
-    if table_names.len() == 0 { return println!("  No table in this region."); }
+    if table_names.is_empty() { return println!("  No table in this region."); }
 
     // if let Some(table_in_config) = cx.clone().config.and_then(|x| x.table) {
     if let Some(table_in_config) = cx.clone().cached_using_table_schema() {
@@ -158,7 +158,7 @@ pub async fn describe_table(cx: app::Context) {
         Err(e) => println!("Failed to write table schema to the cache with follwoing error: {:?}", e),
     };
 
-    match cx.clone().output.as_ref().map(|x| x.as_str() ) {
+    match cx.clone().output.as_deref() {
         None | Some("yaml") => print_table_description(cx.effective_region(), desc),
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => { println!("ERROR: unsupported output type."); std::process::exit(1); },
@@ -188,8 +188,8 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
         lsi: extract_secondary_indexes(&mode, &attr_defs, desc.local_secondary_indexes),
         stream: extract_stream(desc.latest_stream_arn, desc.stream_specification),
 
-        size_bytes: i64::from(desc.table_size_bytes.unwrap()),
-        count: i64::from(desc.item_count.unwrap()),
+        size_bytes: desc.table_size_bytes.unwrap(),
+        count: desc.item_count.unwrap(),
         created_at: epoch_to_rfc3339(desc.creation_date_time.unwrap()),
     };
     println!("{}", serde_yaml::to_string(&print_table).unwrap());
@@ -199,7 +199,7 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
 /// This function is designed to be called from dynein command, mapped in main.rs.
 /// Note that it simply ignores --table option if specified. Newly created table name should be given by the 1st argument "name".
 pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String>) {
-    if given_keys.len() == 0 || given_keys.len() > 2 {
+    if given_keys.is_empty() || given_keys.len() >= 3 {
         error!("You should pass one or two key definitions with --keys option");
         std::process::exit(1);
     };
@@ -225,17 +225,17 @@ pub async fn create_table_api(cx: app::Context, name: String, given_keys: Vec<St
     let req: CreateTableInput = CreateTableInput {
         table_name: name,
         billing_mode: Some(String::from(ONDEMAND_API_SPEC)),
-        key_schema: key_schema, // Vec<KeySchemaElement>
-        attribute_definitions: attribute_definitions, // Vec<AttributeDefinition>
+        key_schema, // Vec<KeySchemaElement>
+        attribute_definitions, // Vec<AttributeDefinition>
         ..Default::default()
     };
 
-    return ddb.create_table(req).await.map(|res| res.table_description.expect("Table Description returned from API should be valid."));
+    ddb.create_table(req).await.map(|res| res.table_description.expect("Table Description returned from API should be valid."))
 }
 
 
 pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<String>) {
-    if given_keys.len() == 0 || given_keys.len() > 2 {
+    if given_keys.is_empty() || given_keys.len() >= 3 {
         error!("You should pass one or two key definitions with --keys option");
         std::process::exit(1);
     };
@@ -245,8 +245,8 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let create_gsi_action = CreateGlobalSecondaryIndexAction {
-        index_name: index_name,
-        key_schema: key_schema,
+        index_name,
+        key_schema,
         projection: Projection { projection_type: Some(String::from("ALL")), non_key_attributes: None, },
         provisioned_throughput: None, // TODO: assign default rcu/wcu if base table is Provisioned mode. currently it works only for OnDemand talbe.
     };
@@ -304,8 +304,8 @@ pub async fn update_table(cx: app::Context, table_name_to_update: String,
                 // When currently Provisioned mode and you're not going to change the it,
                 // pass given rcu/wcu, and use current values if missing. Provisioned table should have valid capacity units so unwrap() here.
                 Mode::Provisioned => Some(ProvisionedThroughput {
-                    read_capacity_units: rcu.unwrap_or(desc.clone().provisioned_throughput.unwrap().read_capacity_units.unwrap()),
-                    write_capacity_units: wcu.unwrap_or(desc.clone().provisioned_throughput.unwrap().write_capacity_units.unwrap()),
+                    read_capacity_units: rcu.unwrap_or_else(|| desc.clone().provisioned_throughput.unwrap().read_capacity_units.unwrap()),
+                    write_capacity_units: wcu.unwrap_or_else(|| desc.clone().provisioned_throughput.unwrap().write_capacity_units.unwrap()),
                 }),
             }
         },
@@ -359,14 +359,14 @@ async fn update_table_api(cx: app::Context, table_name_to_update: String, switch
 
     let req: UpdateTableInput = UpdateTableInput {
         table_name: table_name_to_update,
-        billing_mode: switching_to_mode.map(|m| mode_to_billing_mode_api_spec(m)),
-        provisioned_throughput: provisioned_throughput,
+        billing_mode: switching_to_mode.map(mode_to_billing_mode_api_spec),
+        provisioned_throughput,
         // NOTE: In this function we set `global_secondary_index_updates` to None. GSI update is handled in different commands (e.g. dy admin create index xxx --keys)
         global_secondary_index_updates: None /* intentional */,
         ..Default::default()
     };
 
-    return ddb.update_table(req).await.map(|res| res.table_description.expect("Table Description returned from API should be valid."))
+    ddb.update_table(req).await.map(|res| res.table_description.expect("Table Description returned from API should be valid."))
 }
 
 
@@ -380,7 +380,10 @@ pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: boo
     }
 
     let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: DeleteTableInput = DeleteTableInput { table_name: name, ..Default::default() };
+
+    // The only argument can be passed to DeleteTable operation is "table_name".
+    // https://rusoto.github.io/rusoto/rusoto_dynamodb/struct.DeleteTableInput.html
+    let req: DeleteTableInput = DeleteTableInput { table_name: name };
 
     match ddb.delete_table(req).await {
         Err(e) => {
@@ -408,10 +411,12 @@ pub async fn backup(cx: app::Context, all_tables: bool) {
                      .expect("should be able to generate UNIX EPOCH").as_secs();
 
     let ddb = DynamoDbClient::new(cx.effective_region());
+
+    // You need to pass "table_name" and "backup_name". There's no other fields.
+    // https://rusoto.github.io/rusoto/rusoto_dynamodb/struct.CreateBackupInput.html
     let req: CreateBackupInput = CreateBackupInput {
         table_name: cx.effective_table_name(),
         backup_name: format!("{}--dynein-{}", cx.effective_table_name(), epoch),
-        ..Default::default()
     };
 
     debug!("this is the req: {:?}", req);
@@ -438,7 +443,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
     let backups = list_backups_api(&cx, all_tables).await;
     let mut tw = TabWriter::new(io::stdout());
     // First defining header
-    tw.write(((vec![ "Table", "Status", "CreatedAt", "BackupName (size)" ].join("\t")) + "\n").as_bytes())?;
+    tw.write_all(((vec![ "Table", "Status", "CreatedAt", "BackupName (size)" ].join("\t")) + "\n").as_bytes())?;
     for backup in backups {
         let line = vec![
             backup.table_name.expect("table name should exist"),
@@ -447,7 +452,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
             backup.backup_name.expect("backup name should exist") + &format!(" ({} bytes)", backup.backup_size_bytes.expect("size should exist")),
             String::from("\n")
         ];
-        tw.write(line.join("\t").as_bytes())?;
+        tw.write_all(line.join("\t").as_bytes())?;
     }
     tw.flush()?;
     Ok(())
@@ -466,7 +471,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
                                                     .backup_status
                                                     .unwrap() == "AVAILABLE").collect();
     // let available_backups: Vec<BackupSummary> = backups.iter().filter(|b| b.backup_status.to_owned().unwrap() == "AVAILABLE").collect();
-    if available_backups.len() == 0 { app::bye(0, "No AVAILABLE state backup found for the table."); };
+    if available_backups.is_empty() { app::bye(0, "No AVAILABLE state backup found for the table."); };
 
     let source_table_name = cx.effective_table_name();
     let backup_arn = match backup_name {
@@ -508,7 +513,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
     // https://docs.rs/rusoto_dynamodb/0.44.0/rusoto_dynamodb/struct.RestoreTableFromBackupInput.html
     let req: RestoreTableFromBackupInput = RestoreTableFromBackupInput {
         backup_arn: backup_arn.clone(),
-        target_table_name: target_table_name,
+        target_table_name,
         ..Default::default()
     };
 
@@ -552,13 +557,12 @@ pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
 
 /// Using Vec of String which is passed via command line,
 /// generate KeySchemaElement(s) & AttributeDefinition(s), that are essential information to create DynamoDB tables or GSIs.
-fn generate_essential_key_definitions(given_keys: &Vec<String>) -> (Vec<KeySchemaElement>, Vec<AttributeDefinition>) {
+fn generate_essential_key_definitions(given_keys: &[String]) -> (Vec<KeySchemaElement>, Vec<AttributeDefinition>) {
     let mut key_schema: Vec<KeySchemaElement> = vec![];
     let mut attribute_definitions: Vec<AttributeDefinition> = vec![];
-    let mut key_id = 0;
-    for key_str in given_keys {
+    for (key_id, key_str) in given_keys.iter().enumerate() {
         let key_and_type = key_str.split(',').collect::<Vec<&str>>();
-        if key_and_type.len() > 2 {
+        if key_and_type.len() >= 3 {
             error!("Invalid format for --keys option: '{}'. Valid format is '--keys myPk,S mySk,N'", &key_str);
             std::process::exit(1);
         }
@@ -572,12 +576,10 @@ fn generate_essential_key_definitions(given_keys: &Vec<String>) -> (Vec<KeySchem
         // If data type of key is omitted, dynein assumes it as String (S).
         attribute_definitions.push(AttributeDefinition {
             attribute_name: String::from(key_and_type[0]),
-            attribute_type: if key_and_type.len() == 2 { String::from(key_and_type[1].to_uppercase()) } else { String::from("S")},
+            attribute_type: if key_and_type.len() == 2 { key_and_type[1].to_uppercase() } else { String::from("S")},
         });
-
-        key_id += 1;
     };
-    return (key_schema, attribute_definitions);
+    (key_schema, attribute_definitions)
 }
 
 
@@ -606,7 +608,7 @@ async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSumm
         ..Default::default()
     };
 
-    return match ddb.list_backups(req).await {
+    match ddb.list_backups(req).await {
         Err(e) => {
             debug!("ListBackups API call got an error -- {:#?}", e);
             // app::bye(1, &e.to_string()) // it doesn't meet return value requirement.
@@ -630,7 +632,7 @@ fn fetch_arn_from_backup_name(backup_name: String, available_backups: Vec<Backup
 
 fn epoch_to_rfc3339(epoch: f64) -> String {
     let utc_datetime = NaiveDateTime::from_timestamp(epoch as i64, 0);
-    return DateTime::<Utc>::from_utc(utc_datetime, Utc).to_rfc3339();
+    DateTime::<Utc>::from_utc(utc_datetime, Utc).to_rfc3339()
 }
 
 
@@ -646,10 +648,10 @@ fn mode_to_billing_mode_api_spec(mode: Mode) -> String {
 
 fn extract_capacity(mode: &Mode, cap_desc: &Option<ProvisionedThroughputDescription>)
                     -> Option<PrintCapacityUnits> {
-    if mode == &Mode::OnDemand { return None }
+    if mode == &Mode::OnDemand { None }
     else {
         let desc = cap_desc.as_ref().unwrap();
-        return Some(PrintCapacityUnits {
+        Some(PrintCapacityUnits {
             wcu: desc.write_capacity_units.unwrap(),
             rcu: desc.read_capacity_units.unwrap(),
         })
@@ -663,32 +665,31 @@ trait IndexDesc {
 }
 
 impl IndexDesc for GlobalSecondaryIndexDescription {
-    fn retrieve_index_name(&self) -> &Option<String> { return &self.index_name; }
-    fn retrieve_key_schema(&self) -> &Option<Vec<KeySchemaElement>> { return &self.key_schema; }
+    fn retrieve_index_name(&self) -> &Option<String> { &self.index_name }
+    fn retrieve_key_schema(&self) -> &Option<Vec<KeySchemaElement>> { &self.key_schema }
     fn extract_index_capacity(&self, m: &Mode) -> Option<PrintCapacityUnits> {
-        if m == &Mode::OnDemand { return None }
-        else { return extract_capacity(m, &self.provisioned_throughput); }
+        if m == &Mode::OnDemand { None }
+        else { extract_capacity(m, &self.provisioned_throughput) }
     }
 }
 
 impl IndexDesc for LocalSecondaryIndexDescription {
-    fn retrieve_index_name(&self) -> &Option<String> { return &self.index_name; }
-    fn retrieve_key_schema(&self) -> &Option<Vec<KeySchemaElement>> { return &self.key_schema; }
+    fn retrieve_index_name(&self) -> &Option<String> { &self.index_name }
+    fn retrieve_key_schema(&self) -> &Option<Vec<KeySchemaElement>> { &self.key_schema }
     fn extract_index_capacity(&self, _: &Mode) -> Option<PrintCapacityUnits> {
-        return None; // Unlike GSI, LSI doesn't have it's own capacity.
+        None // Unlike GSI, LSI doesn't have it's own capacity.
     }
 }
 
 // FYI: https://grammarist.com/usage/indexes-indices/
 fn extract_secondary_indexes<T: IndexDesc>(
     mode: &Mode,
-    attr_defs: &Vec<AttributeDefinition>,
-    indexes: Option<Vec<T>>
+    attr_defs: &[AttributeDefinition],
+    option_indexes: Option<Vec<T>>
 ) -> Option<Vec<PrintSecondaryIndex>> {
-    if indexes.is_none() { return None }
-    else {
+    if let Some(indexes) = option_indexes {
         let mut xs = Vec::<PrintSecondaryIndex>::new();
-        for idx in &indexes.unwrap() {
+        for idx in &indexes {
             let ks = &idx.retrieve_key_schema().as_ref().unwrap();
             let idx = PrintSecondaryIndex {
                 name: String::from(idx.retrieve_index_name().as_ref().unwrap()),
@@ -700,12 +701,14 @@ fn extract_secondary_indexes<T: IndexDesc>(
             };
             xs.push(idx);
         }
-        return Some(xs);
+        Some(xs)
+    } else {
+        None
     }
 }
 
 fn extract_stream(arn: Option<String>, spec: Option<StreamSpecification>) -> Option<String> {
-    if arn.is_none() { return None }
-    else { return Some(format!("{} ({})", arn.unwrap(),
-                                          spec.unwrap().stream_view_type.unwrap())); }
+    if arn.is_none() { None }
+    else { Some(format!("{} ({})", arn.unwrap(),
+                                   spec.unwrap().stream_view_type.unwrap())) }
 }

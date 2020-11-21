@@ -223,7 +223,7 @@ async fn overwrite_attributes_or_exit(cx: &app::Context, ts: &app::TableSchema) 
     }
 
     // Overwrite given attributes with suggested attributes beased on a sampled item
-    return Ok(Some(suggested_attributes.into_iter().map(|sa| sa.name ).collect::<Vec<String>>().join(",")))
+    Ok(Some(suggested_attributes.into_iter().map(|sa| sa.name ).collect::<Vec<String>>().join(",")))
 }
 
 
@@ -336,7 +336,7 @@ fn build_csv_header(ts: &app::TableSchema, attributes_to_append: Option<Vec<Stri
         header_str.push_str(&sk.name);
     };
 
-    if keys_only { () }
+    if keys_only {}
     else if let Some(attrs) = attributes_to_append {
         header_str.push(',');
         header_str.push_str(&attrs.join(","));
@@ -364,7 +364,7 @@ async fn write_array_of_jsons_with_chunked_25(cx: app::Context, array_of_json_ob
 /// [[John, 12, Apple],
 ///  [Ami, 23, Orange],
 ///  [Shu, 42, Banana]] ... matrix
-async fn write_csv_matrix(cx: &app::Context, matrix: Vec<Vec<&str>>, headers: &Vec<&str>)
+async fn write_csv_matrix(cx: &app::Context, matrix: Vec<Vec<&str>>, headers: &[&str])
                           -> Result<(), batch::DyneinBatchError> {
     let request_items: HashMap<String, Vec<WriteRequest>> = batch::csv_matrix_to_request_items(&cx, &matrix, &headers).await?;
     batch::batch_write_untill_processed(cx.clone(), request_items).await?;

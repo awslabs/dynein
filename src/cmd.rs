@@ -22,7 +22,7 @@ use structopt::StructOpt;
    struct / enum / const
    ================================================= */
 
-const ABOUT_DYNEIN: &'static str = "\
+const ABOUT_DYNEIN: &str = "\
 dynein is a command line tool to interact with DynamoDB tables/data using concise interface.\n\
 dynein looks for config files under $HOME/.dynein/ directory.";
 
@@ -44,7 +44,7 @@ pub struct Dynein {
 }
 
 // NOTE: need to be placed in the same module as Dynein struct
-pub fn initialize_from_args() -> Dynein { return Dynein::from_args(); }
+pub fn initialize_from_args() -> Dynein { Dynein::from_args() }
 
 // structopt derive supports enum(subcommands), or struct (single commands).
 // structopt support clap methods e.g. required_if/conflicts_with https://docs.rs/clap/2.32.0/clap/struct.Arg.html
