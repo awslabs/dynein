@@ -225,8 +225,8 @@ pub async fn create_table_api(cx: app::Context, name: String, given_keys: Vec<St
     let req: CreateTableInput = CreateTableInput {
         table_name: name,
         billing_mode: Some(String::from(ONDEMAND_API_SPEC)),
-        key_schema: key_schema, // Vec<KeySchemaElement>
-        attribute_definitions: attribute_definitions, // Vec<AttributeDefinition>
+        key_schema, // Vec<KeySchemaElement>
+        attribute_definitions, // Vec<AttributeDefinition>
         ..Default::default()
     };
 
@@ -245,8 +245,8 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let create_gsi_action = CreateGlobalSecondaryIndexAction {
-        index_name: index_name,
-        key_schema: key_schema,
+        index_name,
+        key_schema,
         projection: Projection { projection_type: Some(String::from("ALL")), non_key_attributes: None, },
         provisioned_throughput: None, // TODO: assign default rcu/wcu if base table is Provisioned mode. currently it works only for OnDemand talbe.
     };
@@ -360,7 +360,7 @@ async fn update_table_api(cx: app::Context, table_name_to_update: String, switch
     let req: UpdateTableInput = UpdateTableInput {
         table_name: table_name_to_update,
         billing_mode: switching_to_mode.map(|m| mode_to_billing_mode_api_spec(m)),
-        provisioned_throughput: provisioned_throughput,
+        provisioned_throughput,
         // NOTE: In this function we set `global_secondary_index_updates` to None. GSI update is handled in different commands (e.g. dy admin create index xxx --keys)
         global_secondary_index_updates: None /* intentional */,
         ..Default::default()
@@ -508,7 +508,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
     // https://docs.rs/rusoto_dynamodb/0.44.0/rusoto_dynamodb/struct.RestoreTableFromBackupInput.html
     let req: RestoreTableFromBackupInput = RestoreTableFromBackupInput {
         backup_arn: backup_arn.clone(),
-        target_table_name: target_table_name,
+        target_table_name,
         ..Default::default()
     };
 

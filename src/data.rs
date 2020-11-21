@@ -120,7 +120,7 @@ pub async fn scan_api(cx: app::Context, index: Option<String>, consistent_read: 
     let req: ScanInput = ScanInput {
         table_name: ts.name.to_string(),
         index_name: index,
-        limit: limit,
+        limit,
         projection_expression: scan_params.exp,
         expression_attribute_names: scan_params.names,
         consistent_read: Some(consistent_read),

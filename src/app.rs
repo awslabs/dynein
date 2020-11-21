@@ -504,7 +504,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
 /// however it turned out that DescribeTable API result is useful in various logic, separated API into this standalone function.
 pub async fn describe_table_api(region: &Region, table_name: String) -> TableDescription {
     let ddb = DynamoDbClient::new(region.clone());
-    let req: DescribeTableInput = DescribeTableInput { table_name: table_name };
+    let req: DescribeTableInput = DescribeTableInput { table_name };
 
     match ddb.describe_table(req).await {
         Err(e) => {

@@ -114,7 +114,7 @@ pub fn build_batch_request_items(raw_json_content: String) -> Result<HashMap<Str
                         },)
                     */
                     let item: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(raw_item);
-                    write_requests.push(WriteRequest { put_request: Some(PutRequest { item: item }), delete_request: None });
+                    write_requests.push(WriteRequest { put_request: Some(PutRequest { item }), delete_request: None });
                 } else {
                     error!("[skip] no field named 'Item' under PutRequest");
                 }
@@ -143,7 +143,7 @@ pub fn build_batch_request_items(raw_json_content: String) -> Result<HashMap<Str
                         },)
                     */
                     let key: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(raw_key);
-                    write_requests.push(WriteRequest { put_request: None, delete_request: Some(DeleteRequest { key: key }) });
+                    write_requests.push(WriteRequest { put_request: None, delete_request: Some(DeleteRequest { key }) });
                 } else {
                     error!("[skip] no field named 'Key' under DeleteRequest");
                 }
@@ -173,7 +173,7 @@ async fn batch_write_item_api(cx: app::Context, request_items: HashMap<String, V
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: BatchWriteItemInput = BatchWriteItemInput {
-        request_items: request_items,
+        request_items,
         ..Default::default()
     };
 
@@ -237,7 +237,7 @@ pub async fn convert_jsonvals_to_request_items(cx: &app::Context, items_jsonval:
         };
 
         // Fill meaningful put_request here, then push it to the write_requests. Then go to the next item.
-        write_request.put_request = Some(PutRequest { item: item });
+        write_request.put_request = Some(PutRequest { item });
         write_requests.push(write_request);
     }
 
@@ -278,7 +278,7 @@ pub async fn csv_matrix_to_request_items(cx: &app::Context, matrix: &[Vec<&str>]
         }
 
         // Fill meaningful put_request here, then push it to the write_requests. Then go to the next item.
-        write_request.put_request = Some(PutRequest { item: item });
+        write_request.put_request = Some(PutRequest { item });
         write_requests.push(write_request);
     }
 
