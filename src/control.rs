@@ -29,7 +29,7 @@ use rusoto_ec2::{Ec2, Ec2Client, DescribeRegionsRequest};
 
 extern crate dialoguer;
 use dialoguer::{
-    Confirmation,
+    Confirm,
     theme::ColorfulTheme,
     Select,
 };
@@ -374,7 +374,7 @@ pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: boo
     debug!("Trying to delete a table '{}'", &name);
 
     let msg = format!("You're trying to delete a table '{}'. Are you OK?", &name);
-    if !skip_confirmation && !Confirmation::new().with_text(&msg).interact().unwrap() {
+    if !skip_confirmation && !Confirm::new().with_prompt(&msg).interact().unwrap() {
         println!("The table delete operation has been canceled.");
         return;
     }
