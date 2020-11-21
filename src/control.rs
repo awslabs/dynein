@@ -380,7 +380,10 @@ pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: boo
     }
 
     let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: DeleteTableInput = DeleteTableInput { table_name: name, ..Default::default() };
+
+    // The only argument can be passed to DeleteTable operation is "table_name".
+    // https://rusoto.github.io/rusoto/rusoto_dynamodb/struct.DeleteTableInput.html
+    let req: DeleteTableInput = DeleteTableInput { table_name: name };
 
     match ddb.delete_table(req).await {
         Err(e) => {
@@ -408,10 +411,12 @@ pub async fn backup(cx: app::Context, all_tables: bool) {
                      .expect("should be able to generate UNIX EPOCH").as_secs();
 
     let ddb = DynamoDbClient::new(cx.effective_region());
+
+    // You need to pass "table_name" and "backup_name". There's no other fields.
+    // https://rusoto.github.io/rusoto/rusoto_dynamodb/struct.CreateBackupInput.html
     let req: CreateBackupInput = CreateBackupInput {
         table_name: cx.effective_table_name(),
         backup_name: format!("{}--dynein-{}", cx.effective_table_name(), epoch),
-        ..Default::default()
     };
 
     debug!("this is the req: {:?}", req);
