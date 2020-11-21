@@ -393,7 +393,7 @@ Support status of various examples ([x] = not available for now, [o] = supported
 - [o] "REMOVE Brand, InStock, QuantityOnHand" => in dynein: `$ dy update <keys> --remove 'Brand, InStock, QuantityOnHand'`.
 - [x] "REMOVE RelatedItems[1], RelatedItems[2]"
 */
-fn generate_update_expressions(action_type: UpdateActionType, given_expression: &String) -> GeneratedUpdateParams {
+fn generate_update_expressions(action_type: UpdateActionType, given_expression: &str) -> GeneratedUpdateParams {
     let mut expression: String = String::from("");
     let mut names = HashMap::<String, String>::new();
     let mut vals  = HashMap::<String, AttributeValue>::new();
@@ -493,7 +493,7 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
 }
 
 
-fn check_update_expression_compatibility(e: &String) {
+fn check_update_expression_compatibility(e: &str) {
     if Regex::new(r"\[\d+\]").unwrap().is_match(e) {
         error!("given expression '{}' contains at least one list element (e.g. [0]), which dynein doesn't support for now.", e);
         std::process::exit(1);
@@ -571,11 +571,11 @@ fn convert_jsonval_to_attrvals_in_hashmap_val(hashmap: HashMap<String, JsonValue
 //   ref: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html
 //        https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html#HowItWorks.DataTypes
 //        https://rusoto.github.io/rusoto/rusoto_dynamodb/struct.AttributeValue.html
-fn build_attrval_scalar(_ktype: &String, _kval: &String) -> AttributeValue {
+fn build_attrval_scalar(_ktype: &str, _kval: &str) -> AttributeValue {
     debug!("Constructing an AttributeValue for (type: {:?}, val: {:?})", _ktype, _kval);
 
     let mut attrval: AttributeValue = AttributeValue { ..Default::default() };
-    match _ktype.as_str() {
+    match _ktype {
         "S" => { attrval.s = Some(String::from(_kval)) },
         "N" => { attrval.n = Some(String::from(_kval)) }, // NOTE: pass string, not number
         // "B" => { attrval.b = Some(Bytes::from(_kval.clone().as_str())) },
@@ -589,11 +589,11 @@ fn build_attrval_scalar(_ktype: &String, _kval: &String) -> AttributeValue {
 // for SS and NS DynamoDB Attributes.
 // :( serde_json::value::string -- to_string() --> "\"a\""
 // :) serde_json::value::string -- as_str() --> some("a") -- unwrap() --> "a"
-fn build_attrval_set(ktype: &String, kval: &[JsonValue]) -> AttributeValue {
+fn build_attrval_set(ktype: &str, kval: &[JsonValue]) -> AttributeValue {
     debug!("Constructing an AttributeValue for (type: {:?}, val: {:#?})", ktype, kval);
 
     let mut attrval: AttributeValue = AttributeValue { ..Default::default() };
-    match ktype.as_str() {
+    match ktype {
         "SS" => { attrval.ss = Some(kval.iter().map(|x| x.as_str().unwrap().to_string() ).collect()) },
         "NS" => { attrval.ns = Some(kval.iter().map(|x| x.as_i64().unwrap().to_string() ).collect()) },
         // NOTE: Currently BS is not supported.
@@ -702,7 +702,7 @@ fn strip_item(item: &HashMap<String, rusoto_dynamodb::AttributeValue>)
 }
 
 
-fn generate_query_expressions(ts: &app::TableSchema, pval: &String, sort_key_expression: &Option<String>, index: &Option<String>)
+fn generate_query_expressions(ts: &app::TableSchema, pval: &str, sort_key_expression: &Option<String>, index: &Option<String>)
                               -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
     let expression: String = String::from("#DYNEIN_PKNAME = :DYNEIN_PKVAL");
     let mut names = HashMap::<String, String>::new();
@@ -758,7 +758,7 @@ fn generate_query_expressions(ts: &app::TableSchema, pval: &String, sort_key_exp
 
 /// Using existing key condition expr (e.g. "myId <= :idVal") and supplementary mappings (expression_attribute_names, expression_attribute_values),
 /// this method returns GeneratedQueryParams struct. Note that it's called only when sort key expression (ske) exists.
-fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expression: &String, sort_key_expression: &String,
+fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expression: &str, sort_key_expression: &str,
                               mut names: HashMap<String, String>, mut vals: HashMap::<String, AttributeValue> )
                               -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
     // Check if the target table/index key schema has sort key. If there's no sort key definition, return with Err immediately.

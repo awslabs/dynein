@@ -236,7 +236,7 @@ impl Context {
         self
     }
 
-    pub fn with_table(mut self, table: &String) -> Self {
+    pub fn with_table(mut self, table: &str) -> Self {
         self.overwritten_table_name = Some(table.to_owned());
         self
     }
