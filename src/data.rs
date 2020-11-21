@@ -902,7 +902,7 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
             if let Some(_attributes) = selected_attributes {
                 let attrs: Vec<&str> = _attributes.split(',').map(|x| x.trim()).collect();
                 for attr in attrs {
-                    let attrval: Option<AttributeValue> = item.get(attr).map(|x| x.clone());
+                    let attrval: Option<AttributeValue> = item.get(attr).cloned();
                     item_attributes.push(attrval_to_cell_print(attrval));
                 }
             } else if !keys_only {
