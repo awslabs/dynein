@@ -348,23 +348,28 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
     };
 
     // following list of if-else statements would be return value of this function.
-         if let Some(x) = ddb_jsonval.get("S") { Some(AttributeValue { s: Some(x.as_str().unwrap().to_string()), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("N") { Some(AttributeValue { n: Some(x.as_str().unwrap().to_string()), ..Default::default() }) }
-    // else if let Some(x) = ddb_jsonval.get("B") { Some(AttributeValue { b: Some(Bytes::from(x.as_str().unwrap())), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("BOOL") { Some(AttributeValue { bool: Some(x.as_bool().unwrap()), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("SS") { Some(AttributeValue { ss: Some(set_logic(x)), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("NS") { Some(AttributeValue { ns: Some(set_logic(x)), ..Default::default() }) }
-    else if let Some(x) = ddb_jsonval.get("L") {
+    if let Some(x) = ddb_jsonval.get("S") {
+        Some(AttributeValue { s: Some(x.as_str().unwrap().to_string()), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("N") {
+        Some(AttributeValue { n: Some(x.as_str().unwrap().to_string()), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("BOOL") {
+        Some(AttributeValue { bool: Some(x.as_bool().unwrap()), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("SS") {
+        Some(AttributeValue { ss: Some(set_logic(x)), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("NS") {
+        Some(AttributeValue { ns: Some(set_logic(x)), ..Default::default() })
+    } else if let Some(x) = ddb_jsonval.get("L") {
         let list_element = x.as_array().unwrap().iter()
                             .map(|el| ddbjson_val_to_attrval(el).expect("failed to digest a list element"))
                             .collect::<Vec<AttributeValue>>();
         debug!("List Element: {:?}", list_element);
         Some(AttributeValue { l: Some(list_element), ..Default::default() })
-    }
-    else if let Some(x) = ddb_jsonval.get("M") {
+    } else if let Some(x) = ddb_jsonval.get("M") {
         let inner_map: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(x);
         Some(AttributeValue { m: Some(inner_map), ..Default::default() })
+    } else if ddb_jsonval.get("NULL").is_some() {
+        Some(AttributeValue { null: Some(true), ..Default::default() })
+    } else {
+        None
     }
-    else if ddb_jsonval.get("NULL").is_some() { Some(AttributeValue { null: Some(true), ..Default::default() }) }
-    else { None }
 }
