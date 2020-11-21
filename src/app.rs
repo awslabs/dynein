@@ -36,9 +36,9 @@ use super::control;
    struct / enum / const
    ================================================= */
 
-const CONFIG_DIR: &'static str = ".dynein";
-const CONFIG_FILE_NAME: &'static str = "config.yml";
-const CACHE_FILE_NAME: &'static str  = "cache.yml";
+const CONFIG_DIR: &str = ".dynein";
+const CONFIG_FILE_NAME: &str = "config.yml";
+const CACHE_FILE_NAME: &str  = "cache.yml";
 
 
 pub enum DyneinFileType {

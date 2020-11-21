@@ -64,8 +64,8 @@ struct PrintDescribeTable {
     created_at: String,
 }
 
-const PROVISIONED_API_SPEC: &'static str = "PROVISIONED";
-const ONDEMAND_API_SPEC: &'static str = "PAY_PER_REQUEST";
+const PROVISIONED_API_SPEC: &str = "PROVISIONED";
+const ONDEMAND_API_SPEC: &str = "PAY_PER_REQUEST";
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Mode {
