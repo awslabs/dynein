@@ -139,9 +139,9 @@ impl fmt::Display for Messages {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", match self {
             Messages::NoEffectiveTable => "
-To execute commands you must specify target table one of following ways:
-    * [RECOMMENDED] $ dy use <your_table> ... save target region and table.
-    * Or, optionally you can pass --region (-r) and --table (-t) options every time to specify target for your commands.
+To execute the command you must specify target table in one of following ways:
+    * [RECOMMENDED] $ dy use <your_table> ... save target table to use.
+    * Or, optionally you can pass --region and --table options to specify target for your commands. Refer --help for more information.
 To find all tables in all regions, try:
     * $ dy ls --all-regions",
         })
@@ -458,7 +458,9 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
         None => { // simply maps config data into TableSchema struct.
             debug!("current context {:#?}", cx);
             let cache: Cache = cx.clone().cache.expect("Cache should exist in context"); // can refactor here using and_then
-            let cached_tables: HashMap<String, TableSchema> = cache.tables.expect("tables should exist in cache");
+            let cached_tables: HashMap<String, TableSchema> = cache.tables.unwrap_or_else(|| {
+                error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
+            });
             let schema_from_cache: Option<TableSchema> = cached_tables.get(&cx.effective_cache_key()).map(|x| x.to_owned());
             schema_from_cache.unwrap_or_else(|| {
                 error!("{}", Messages::NoEffectiveTable); std::process::exit(1)
