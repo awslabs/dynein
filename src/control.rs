@@ -140,26 +140,33 @@ pub async fn list_tables(cx: app::Context) {
 /// Note that `describe_table` function calls are executed in parallel (async + join_all).
 pub async fn describe_all_tables(cx: app::Context) {
     let table_names = list_tables_api(cx.clone()).await;
-    join_all(table_names.iter().map(|t| describe_table(cx.clone().with_table(t)) )).await;
+    join_all(table_names.into_iter().map(|t| describe_table(cx.clone(), Some(t)) )).await;
 }
 
 
 /// Executed when you call `$ dy desc (table)`. Retrieve TableDescription via describe_table_api function,
 /// then print them in convenient way using print_table_description function (default/yaml).
-pub async fn describe_table(cx: app::Context) {
+pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<String>) {
     debug!("context: {:#?}", &cx);
-    let desc: TableDescription = app::describe_table_api(&cx.effective_region(), cx.effective_table_name()).await;
-    debug!("Retrieved table to describe is: '{}' table in '{}' region.", &desc.clone().table_name.unwrap(), &cx.effective_region().name());
+    debug!("positional arg table name: {:?}", &target_table_to_desc);
+    let new_context = if let Some(t) = target_table_to_desc {
+        cx.with_table(t.as_str())
+    } else {
+        cx
+    };
+
+    let desc: TableDescription = app::describe_table_api(&new_context.effective_region(), new_context.effective_table_name()).await;
+    debug!("Retrieved table to describe is: '{}' table in '{}' region.", &new_context.effective_table_name(), &new_context.effective_region().name());
 
     // save described table info into cache for future use.
     // Note that when this functiono is called from describe_all_tables, not all tables would be cached as calls are parallel.
-    match app::insert_to_table_cache(&cx, desc.clone()) {
+    match app::insert_to_table_cache(&new_context, desc.clone()) {
         Ok(_) => { debug!("Described table schema was written to the cache file.") },
         Err(e) => println!("Failed to write table schema to the cache with follwoing error: {:?}", e),
     };
 
-    match cx.clone().output.as_deref() {
-        None | Some("yaml") => print_table_description(cx.effective_region(), desc),
+    match new_context.clone().output.as_deref() {
+        None | Some("yaml") => print_table_description(new_context.effective_region(), desc),
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => { println!("ERROR: unsupported output type."); std::process::exit(1); },
     }

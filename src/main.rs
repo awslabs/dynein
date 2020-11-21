@@ -64,10 +64,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if all_regions { control::list_tables_all_regions(context).await }
                 else { control::list_tables(context).await }
             },
-            cmd::AdminSub::Desc { all_tables, output } => {
+            cmd::AdminSub::Desc { target_table_to_desc, all_tables, output } => {
                 context.output = output;
                 if all_tables { control::describe_all_tables(context).await }
-                else { control::describe_table(context).await }
+                else { control::describe_table(context, target_table_to_desc).await }
             },
             cmd::AdminSub::Create { target_type } => match target_type {
                 cmd::CreateSub::Table { new_table_name, keys } => control::create_table(context, new_table_name, keys).await,
@@ -105,10 +105,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if all_regions { control::list_tables_all_regions(context).await }
             else { control::list_tables(context).await }
         },
-        cmd::Sub::Desc { all_tables, output } => {
+        cmd::Sub::Desc { target_table_to_desc, all_tables, output } => {
             context.output = output;
             if all_tables { control::describe_all_tables(context).await }
-            else { control::describe_table(context).await }
+            else { control::describe_table(context, target_table_to_desc).await }
         },
         cmd::Sub::Use { target_table_to_use }  => app::use_table(&context, target_table_to_use).await?,
         cmd::Sub::Config { grandchild } => match grandchild {
