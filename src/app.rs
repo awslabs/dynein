@@ -15,7 +15,6 @@
  */
 
 use ::serde::{Serialize, Deserialize};
-use dirs;
 use log::{debug,error,info};
 use rusoto_core::Region;
 use rusoto_dynamodb::*;

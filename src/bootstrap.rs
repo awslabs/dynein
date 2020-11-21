@@ -31,7 +31,6 @@ use log::{debug, error};
 use rusoto_core::{Region, RusotoError};
 use rusoto_dynamodb::*;
 use tempfile::Builder;
-use zip;
 
 use serde_json::Value as JsonValue;
 
