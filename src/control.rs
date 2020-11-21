@@ -304,8 +304,8 @@ pub async fn update_table(cx: app::Context, table_name_to_update: String,
                 // When currently Provisioned mode and you're not going to change the it,
                 // pass given rcu/wcu, and use current values if missing. Provisioned table should have valid capacity units so unwrap() here.
                 Mode::Provisioned => Some(ProvisionedThroughput {
-                    read_capacity_units: rcu.unwrap_or(desc.clone().provisioned_throughput.unwrap().read_capacity_units.unwrap()),
-                    write_capacity_units: wcu.unwrap_or(desc.clone().provisioned_throughput.unwrap().write_capacity_units.unwrap()),
+                    read_capacity_units: rcu.unwrap_or_else(|| desc.clone().provisioned_throughput.unwrap().read_capacity_units.unwrap()),
+                    write_capacity_units: wcu.unwrap_or_else(|| desc.clone().provisioned_throughput.unwrap().write_capacity_units.unwrap()),
                 }),
             }
         },
