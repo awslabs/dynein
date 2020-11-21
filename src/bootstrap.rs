@@ -270,7 +270,7 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
 
 
 async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
-    match control::create_table_api(cx.clone(), table_name.to_string(), keys.iter().map(|k| k.to_string()).collect()).await {
+    match control::create_table_api(cx.clone(), table_name.to_string(), keys.iter().map(|k| (*k).to_string()).collect()).await {
         Ok(desc) => {
             println!("Started to create table '{}' in {} region. status: {}",
                       &table_name, &cx.effective_region().name(), desc.table_status.unwrap());
@@ -329,7 +329,7 @@ async fn wait_table_creation(cx: &app::Context, mut processing_tables: Vec<&str>
     debug!("tables in progress: {:?}", processing_tables);
     loop {
         let r: &Region = &cx.effective_region();
-        let create_table_results = join_all(processing_tables.iter().map(|t| app::describe_table_api(r, t.to_string()))).await;
+        let create_table_results = join_all(processing_tables.iter().map(|t| app::describe_table_api(r, (*t).to_string()))).await;
         let statuses: Vec<String> = create_table_results.iter().map(|desc| desc.table_status.to_owned().unwrap()).collect();
         debug!("Current table statues: {:?}", statuses);
         processing_tables = processing_tables.iter().zip(statuses.iter())
