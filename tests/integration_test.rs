@@ -16,8 +16,8 @@
 
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use std::process::Command;  // Run programs
-// use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
+use std::process::Command; // Run programs
+                           // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
 use std::fs::File;
 use std::io::{self, Write}; // Used when check results by printing to stdout
@@ -32,9 +32,14 @@ fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Er
     let port = 8000;
     let mut docker = Command::new("docker");
 
-    let check_cmd = docker.args(&["ps", "-q",
-                                  "--filter", &format!("expose={}", port),
-                                  "--filter", "ancestor=amazon/dynamodb-local"]);
+    let check_cmd = docker.args(&[
+        "ps",
+        "-q",
+        "--filter",
+        &format!("expose={}", port),
+        "--filter",
+        "ancestor=amazon/dynamodb-local",
+    ]);
     let check_out = check_cmd.output().expect("failed to execut check cmd");
     if check_out.stdout.len() != 0 {
         println!("DynamoDB Local is already running.");
@@ -47,8 +52,11 @@ fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Er
     let docker_run = docker.args(&["run",
                                    "-p", &format!("{}:{}", port, port),
                                    "-d", "amazon/dynamodb-local" /*, "-jar", "DynamoDBLocal.jar", "-inMemory", "-port", &format!("{}", port) */]);
-    let output = docker_run.output().expect("failed to running Docker image amazon/dynamodb-local in setup().");
-    print!("DynamoDB Local is up as a container: "); io::stdout().write_all(&output.stdout).unwrap();
+    let output = docker_run
+        .output()
+        .expect("failed to running Docker image amazon/dynamodb-local in setup().");
+    print!("DynamoDB Local is up as a container: ");
+    io::stdout().write_all(&output.stdout).unwrap();
 
     Ok(Command::cargo_bin("dy")?)
 }
@@ -67,7 +75,9 @@ fn test_help() -> Result<(), Box<dyn std::error::Error>> {
     setup()?;
     let mut dynein_cmd = Command::cargo_bin("dy")?;
     let cmd = dynein_cmd.arg("--help");
-    cmd.assert().success().stdout(predicate::str::contains("dynein is a command line tool"));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("dynein is a command line tool"));
     Ok(())
 }
 
@@ -76,20 +86,45 @@ fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_create_table";
 
     // $ dy admin create table <table_name> --keys pk
-    let mut c = setup()?; let create_cmd = c.args(&["--region", "local", "admin", "create", "table", table_name, "--keys", "pk"]);
-    create_cmd.assert().success().stdout(predicate::str::contains(format!("name: {}\nregion: local", &table_name)));
+    let mut c = setup()?;
+    let create_cmd = c.args(&[
+        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
+    ]);
+    create_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "name: {}\nregion: local",
+            &table_name
+        )));
 
     // $ dy admin desc <table_name>
-    let mut c = setup()?; let desc_cmd = c.args(&["--region", "local", "table", "desc", table_name]);
-    desc_cmd.assert().success().stdout(predicate::str::contains(format!("name: {}\nregion: local", &table_name)));
+    let mut c = setup()?;
+    let desc_cmd = c.args(&["--region", "local", "table", "desc", table_name]);
+    desc_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "name: {}\nregion: local",
+            &table_name
+        )));
 
     Ok(cleanup(vec![table_name])?)
 }
 
 #[test]
 fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = setup()?; let cmd = c.args(&["--region", "local", "--table", "dummy-table-doent-exist", "scan"]);
-    cmd.assert().failure().stderr(predicate::str::contains("Cannot do operations on a non-existent table"));
+    let mut c = setup()?;
+    let cmd = c.args(&[
+        "--region",
+        "local",
+        "--table",
+        "dummy-table-doent-exist",
+        "scan",
+    ]);
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "Cannot do operations on a non-existent table",
+    ));
     Ok(())
 }
 
@@ -97,9 +132,17 @@ fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
 fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_scan_blank_table";
 
-    let mut c = setup()?; c.args(&["--region", "local", "table", "create", table_name, "--keys", "pk"]).output()?;
-    let mut c = setup()?; let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
-    scan_cmd.assert().success().stdout(predicate::str::contains("No items found."));
+    let mut c = setup()?;
+    c.args(&[
+        "--region", "local", "table", "create", table_name, "--keys", "pk",
+    ])
+    .output()?;
+    let mut c = setup()?;
+    let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
+    scan_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No items found."));
 
     Ok(cleanup(vec![table_name])?)
 }
@@ -108,11 +151,21 @@ fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
 fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_simple_scan";
 
-    let mut c = setup()?; c.args(&["--region", "local", "table", "create", table_name, "--keys", "pk"]).output()?;
-    let mut c = setup()?; c.args(&["--region", "local", "--table", table_name, "put", "abc"]).output()?;
+    let mut c = setup()?;
+    c.args(&[
+        "--region", "local", "table", "create", table_name, "--keys", "pk",
+    ])
+    .output()?;
+    let mut c = setup()?;
+    c.args(&["--region", "local", "--table", table_name, "put", "abc"])
+        .output()?;
 
-    let mut c = setup()?; let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
-    scan_cmd.assert().success().stdout(predicate::str::contains("pk  attributes\nabc"));
+    let mut c = setup()?;
+    let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
+    scan_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pk  attributes\nabc"));
 
     Ok(cleanup(vec![table_name])?)
 }
@@ -121,9 +174,13 @@ fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
 fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_batch_write";
 
-    let mut c = setup()?; c.args(&["--region", "local", "table", "create", table_name, "--keys", "pk"]).output()?;
+    let mut c = setup()?;
+    c.args(&[
+        "--region", "local", "table", "create", table_name, "--keys", "pk",
+    ])
+    .output()?;
 
-    let tmpdir  = Builder::new().tempdir()?; // defining stand alone variable here as tempfile::tempdir creates directory and deletes it when the destructor is run.
+    let tmpdir = Builder::new().tempdir()?; // defining stand alone variable here as tempfile::tempdir creates directory and deletes it when the destructor is run.
     let batch_input_file_path = tmpdir.path().join("test_batch_write.json");
     let mut f = File::create(tmpdir.path().join("test_batch_write.json"))?;
     f.write_all(b"
@@ -164,11 +221,24 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         ]
     }
     ")?;
-    let mut c = setup()?; c.args(&["--region", "local", "--table", table_name,
-                                   "bwrite", "--input", &batch_input_file_path.to_str().unwrap()]).output()?;
+    let mut c = setup()?;
+    c.args(&[
+        "--region",
+        "local",
+        "--table",
+        table_name,
+        "bwrite",
+        "--input",
+        &batch_input_file_path.to_str().unwrap(),
+    ])
+    .output()?;
 
-    let mut c = setup()?; let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
-    scan_cmd.assert().success().stdout(predicate::str::is_match("pk *attributes\nichi").unwrap());
+    let mut c = setup()?;
+    let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
+    scan_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::is_match("pk *attributes\nichi").unwrap());
 
     /*
     get output should looks like:
@@ -208,11 +278,15 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
           "ISBN": "111-1111111111"
         }
     */
-    let mut c = setup()?; let get_cmd = c.args(&["--region", "local", "--table", table_name, "get", "ichi"]);
+    let mut c = setup()?;
+    let get_cmd = c.args(&["--region", "local", "--table", table_name, "get", "ichi"]);
     let output = get_cmd.output()?.stdout;
 
     // more verification would be nice
-    assert_eq!(true, predicate::str::is_match("\"Dimensions\":")?.eval(String::from_utf8(output)?.as_str()));
+    assert_eq!(
+        true,
+        predicate::str::is_match("\"Dimensions\":")?.eval(String::from_utf8(output)?.as_str())
+    );
 
     Ok(cleanup(vec![table_name])?)
 }

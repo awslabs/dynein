@@ -25,7 +25,7 @@ use std::{
 
 extern crate regex;
 
-use log::{debug,error};
+use log::{debug, error};
 use regex::Regex;
 use rusoto_dynamodb::*;
 use serde_json::Value as JsonValue;
@@ -34,10 +34,9 @@ use tabwriter::TabWriter;
 
 use super::app;
 
-
 /* =================================================
-   struct / enum / const
-   ================================================= */
+struct / enum / const
+================================================= */
 
 #[derive(Debug)]
 struct GeneratedQueryParams {
@@ -46,13 +45,11 @@ struct GeneratedQueryParams {
     vals: Option<HashMap<String, AttributeValue>>,
 }
 
-
 #[derive(Debug)]
 struct GeneratedScanParams {
     exp: Option<String>,
     names: Option<HashMap<String, String>>,
 }
-
 
 #[derive(Debug)]
 struct GeneratedUpdateParams {
@@ -60,7 +57,6 @@ struct GeneratedUpdateParams {
     names: Option<HashMap<String, String>>,
     vals: Option<HashMap<String, AttributeValue>>,
 }
-
 
 enum UpdateActionType {
     SET,
@@ -75,7 +71,8 @@ pub enum DyneinQueryParamsError {
 }
 
 impl fmt::Display for DyneinQueryParamsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { match &self {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
         DyneinQueryParamsError::NoSuchIndex(idx, t) => {
             write!(f, "No index named '{}' found on the target table '{}'. Please execute 'dy desc' command to see indexes the table has.", idx, t)
         },
@@ -85,32 +82,65 @@ impl fmt::Display for DyneinQueryParamsError {
         DyneinQueryParamsError::InvalidSortKeyOption => {
             write!(f, "--sort-key syntax is invalid. This option accepts one of the following styles: '= 123', '> 123', '>= 123', '< 123', '<= 123', 'between 10 and 99', or 'begins_with myValue'.")
         },
-    } }
+    }
+    }
 }
-impl Error for DyneinQueryParamsError { }
-
+impl Error for DyneinQueryParamsError {}
 
 /* =================================================
-   Public functions
-   ================================================= */
+Public functions
+================================================= */
 
 /// This function calls Scan API and return mutiple items. By default it uses 'table' output format.
 /// Scan API retrieves all items in a given table, something like `SELECT * FROM mytable` in SQL world.
-pub async fn scan(cx: app::Context, index: Option<String>, consistent_read: bool, attributes: &Option<String>, keys_only: bool, limit: i64) {
+pub async fn scan(
+    cx: app::Context,
+    index: Option<String>,
+    consistent_read: bool,
+    attributes: &Option<String>,
+    keys_only: bool,
+    limit: i64,
+) {
     let ts: app::TableSchema = app::table_schema(&cx).await;
 
-    let items = scan_api(cx.clone(), index, consistent_read, attributes, keys_only, Some(limit), None).await
-                .items.expect("items should be 'Some' even if there's no item in the table.");
+    let items = scan_api(
+        cx.clone(),
+        index,
+        consistent_read,
+        attributes,
+        keys_only,
+        Some(limit),
+        None,
+    )
+    .await
+    .items
+    .expect("items should be 'Some' even if there's no item in the table.");
     match cx.output.as_deref() {
         None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
-        Some("json") => println!("{}", serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()),
-        Some("raw") =>  println!("{}", serde_json::to_string_pretty(&strip_items(&items)).unwrap()),
-        Some(o) => { println!("ERROR: unsupported output type '{}'.", o); std::process::exit(1); },
+        Some("json") => println!(
+            "{}",
+            serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()
+        ),
+        Some("raw") => println!(
+            "{}",
+            serde_json::to_string_pretty(&strip_items(&items)).unwrap()
+        ),
+        Some(o) => {
+            println!("ERROR: unsupported output type '{}'.", o);
+            std::process::exit(1);
+        }
     }
 }
 
-
-pub async fn scan_api(cx: app::Context, index: Option<String>, consistent_read: bool, attributes: &Option<String>, keys_only: bool, limit: Option<i64>, esk: Option<HashMap<String, AttributeValue>>) -> ScanOutput {
+pub async fn scan_api(
+    cx: app::Context,
+    index: Option<String>,
+    consistent_read: bool,
+    attributes: &Option<String>,
+    keys_only: bool,
+    limit: Option<i64>,
+    esk: Option<HashMap<String, AttributeValue>>,
+) -> ScanOutput {
     debug!("context: {:#?}", &cx);
     let ts: app::TableSchema = app::table_schema(&cx).await;
 
@@ -135,22 +165,36 @@ pub async fn scan_api(cx: app::Context, index: Option<String>, consistent_read: 
     })
 }
 
-
 /// This function calls Query API and return mutiple items. By default it uses 'table' output format.
 /// Partition key is required. Optionally you can pass key condition expression to search more specific set of items using sort key.
 /// References:
 /// - https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html#Query.KeyConditionExpressions
 /// - https://aws.amazon.com/blogs/database/using-sort-keys-to-organize-data-in-amazon-dynamodb/
-pub async fn query(cx: app::Context, pval: String, sort_key_expression: Option<String>, index: Option<String>, consistent_read: bool, attributes: &Option<String>, keys_only: bool) {
+pub async fn query(
+    cx: app::Context,
+    pval: String,
+    sort_key_expression: Option<String>,
+    index: Option<String>,
+    consistent_read: bool,
+    attributes: &Option<String>,
+    keys_only: bool,
+) {
     debug!("context: {:#?}", &cx);
     let ts: app::TableSchema = app::table_schema(&cx).await;
 
     debug!("For table '{}' (index '{:?}'), generating KeyConditionExpression using sort_key_expression: '{:?}'", &ts.name, &index, &sort_key_expression);
-    let query_params: GeneratedQueryParams = match generate_query_expressions(&ts, &pval, &sort_key_expression, &index) {
-        Ok(qp) => qp,
-        Err(e) => { error!("{}", e.to_string()); std::process::exit(1); }
-    };
-    debug!("Generated QueryParams for the table '{}' is: {:#?}", &ts.name, &query_params);
+    let query_params: GeneratedQueryParams =
+        match generate_query_expressions(&ts, &pval, &sort_key_expression, &index) {
+            Ok(qp) => qp,
+            Err(e) => {
+                error!("{}", e.to_string());
+                std::process::exit(1);
+            }
+        };
+    debug!(
+        "Generated QueryParams for the table '{}' is: {:#?}",
+        &ts.name, &query_params
+    );
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: QueryInput = QueryInput {
@@ -170,21 +214,28 @@ pub async fn query(cx: app::Context, pval: String, sort_key_expression: Option<S
                 None => panic!("This message should not be shown"), // as Query returns 'Some([])' if there's no item to return.
                 Some(items) => match cx.output.as_deref() {
                     None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
-                    Some("json") => println!("{}", serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()),
-                    Some("raw") => println!("{}", serde_json::to_string_pretty(&strip_items(&items)).unwrap()),
-                    Some(o) => { println!("ERROR: unsupported output type '{}'.", o); std::process::exit(1); },
+                    Some("json") => println!(
+                        "{}",
+                        serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()
+                    ),
+                    Some("raw") => println!(
+                        "{}",
+                        serde_json::to_string_pretty(&strip_items(&items)).unwrap()
+                    ),
+                    Some(o) => {
+                        println!("ERROR: unsupported output type '{}'.", o);
+                        std::process::exit(1);
+                    }
                 },
             }
-        },
+        }
         Err(e) => {
             debug!("Query API call got an error -- {:?}", e);
             error!("{}", e.to_string());
             std::process::exit(1);
-        },
+        }
     }
-
 }
-
 
 /// This function calls GetItem API - get an item with given primary key(s). By default it uses 'json' output format.
 pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, consistent_read: bool) {
@@ -193,7 +244,10 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
     let ts: app::TableSchema = app::table_schema(&cx).await;
     let primary_keys = identify_target(&ts, pval, sval);
 
-    debug!("Calling GetItem API for the table '{}' with key(s): {:?}", &ts.name, &primary_keys);
+    debug!(
+        "Calling GetItem API for the table '{}' with key(s): {:?}",
+        &ts.name, &primary_keys
+    );
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: GetItemInput = GetItemInput {
@@ -204,25 +258,34 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
     };
 
     match ddb.get_item(req).await {
-        Ok(res) => {
-            match res.item {
-                None => println!("No item found."),
-                Some(item) => match cx.output.as_deref() {
-                    None | Some("json") => println!("{}", serde_json::to_string_pretty(&convert_to_json(&item)).unwrap()),
-                    Some("yaml") => println!("{}", serde_yaml::to_string(&convert_to_json(&item)).unwrap()),
-                    Some("raw") => println!("{}", serde_json::to_string_pretty(&strip_item(&item)).unwrap()),
-                    Some(o) => { println!("ERROR: unsupported output type '{}'.", o); std::process::exit(1); },
-                },
-            }
+        Ok(res) => match res.item {
+            None => println!("No item found."),
+            Some(item) => match cx.output.as_deref() {
+                None | Some("json") => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&convert_to_json(&item)).unwrap()
+                ),
+                Some("yaml") => println!(
+                    "{}",
+                    serde_yaml::to_string(&convert_to_json(&item)).unwrap()
+                ),
+                Some("raw") => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&strip_item(&item)).unwrap()
+                ),
+                Some(o) => {
+                    println!("ERROR: unsupported output type '{}'.", o);
+                    std::process::exit(1);
+                }
+            },
         },
         Err(e) => {
             debug!("GetItem API call got an error -- {:?}", e);
             error!("{}", e.to_string());
             std::process::exit(1);
-        },
+        }
     }
 }
-
 
 // put_item function saves an item with given primary key(s). You can pass other attributes with --item/-i option in JSON format.
 // As per DynamoDB PutItem API behavior, if the item already exists it'd be replaced.
@@ -231,7 +294,10 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
     let ts: app::TableSchema = app::table_schema(&cx).await;
     let mut full_item_image = identify_target(&ts, pval, sval); // Firstly, ideitify primary key(s) to ideitnfy an item to put.
 
-    debug!("Inserting (or replacing) an item identified by the primary key(s): {:?}", &full_item_image);
+    debug!(
+        "Inserting (or replacing) an item identified by the primary key(s): {:?}",
+        &full_item_image
+    );
 
     // merge additional items passed by `--item/-i` option.
     match item {
@@ -239,15 +305,18 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
         Some(_i) => {
             match json_str_to_attributes(&_i) {
                 Ok(attrs) => {
-                    debug!("Merging two HashMaps: {:?} <-- extend -- {:?}", full_item_image, attrs);
+                    debug!(
+                        "Merging two HashMaps: {:?} <-- extend -- {:?}",
+                        full_item_image, attrs
+                    );
                     full_item_image.extend(attrs);
-                },
+                }
                 Err(e) => {
                     error!("ERROR: failed to load item. {}", e);
                     std::process::exit(1);
                 }
             };
-        },
+        }
     };
 
     debug!("Calling PutItem API to insert: {:?}", &full_item_image);
@@ -261,15 +330,16 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
     };
 
     match ddb.put_item(req).await {
-        Ok(_) => { println!("Successfully put an item to the table '{}'.", &ts.name); },
+        Ok(_) => {
+            println!("Successfully put an item to the table '{}'.", &ts.name);
+        }
         Err(e) => {
             debug!("PutItem API call got an error -- {:?}", e);
             error!("{}", e.to_string());
             std::process::exit(1);
-        },
+        }
     }
 }
-
 
 // delete_item functions calls DeleteItem API - delete an item with given primary key(s).
 pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
@@ -277,7 +347,10 @@ pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
     let ts: app::TableSchema = app::table_schema(&cx).await;
     let primary_keys = identify_target(&ts, pval, sval);
 
-    debug!("Calling DeleteItem API for the table '{}' with key(s): {:?}", &ts.name, &primary_keys);
+    debug!(
+        "Calling DeleteItem API for the table '{}' with key(s): {:?}",
+        &ts.name, &primary_keys
+    );
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: DeleteItemInput = DeleteItemInput {
@@ -288,20 +361,31 @@ pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
 
     match ddb.delete_item(req).await {
         // NOTE: DynamoDB DeleteItem API is idempotent and returns "OK" even if an item trying to delete doesn't exist.
-        Ok(_) => { println!("Successfully deleted an item from the table '{}'.", &ts.name); },
+        Ok(_) => {
+            println!(
+                "Successfully deleted an item from the table '{}'.",
+                &ts.name
+            );
+        }
         Err(e) => {
             debug!("Deletetem API call got an error -- {:?}", e);
             error!("{}", e.to_string());
             std::process::exit(1);
-        },
+        }
     }
 }
 
-
 // UpdateItem API https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
-pub async fn update_item(cx: app::Context, pval: String, sval: Option<String>, set_expression: Option<String>, remove_expression: Option<String>) {
+pub async fn update_item(
+    cx: app::Context,
+    pval: String,
+    sval: Option<String>,
+    set_expression: Option<String>,
+    remove_expression: Option<String>,
+) {
     debug!("context: {:#?}", &cx);
-    if set_expression.is_none() && remove_expression.is_none() { // setting both --set and --remove is prohibited by conflicts_with of structopt (clap)
+    if set_expression.is_none() && remove_expression.is_none() {
+        // setting both --set and --remove is prohibited by conflicts_with of structopt (clap)
         error!("One of --set or --remove option is required. Passing both options is invalid.");
         std::process::exit(1);
     };
@@ -309,7 +393,10 @@ pub async fn update_item(cx: app::Context, pval: String, sval: Option<String>, s
     let ts: app::TableSchema = app::table_schema(&cx).await;
     let primary_keys = identify_target(&ts, pval.clone(), sval.clone());
 
-    debug!("Calling UpdateItem API for the table '{}' with key(s): {:?}", &ts.name, &primary_keys);
+    debug!(
+        "Calling UpdateItem API for the table '{}' with key(s): {:?}",
+        &ts.name, &primary_keys
+    );
 
     // above logic has checked "only either one of `--set` or `--remove` exist".
     let update_params: GeneratedUpdateParams = if let Some(sx) = set_expression {
@@ -334,20 +421,28 @@ pub async fn update_item(cx: app::Context, pval: String, sval: Option<String>, s
     match ddb.update_item(req).await {
         Ok(res) => {
             println!("Successfully updated an item in the table '{}'.", &ts.name);
-            println!("Updated item: {}", serde_json::to_string(&convert_to_json(&res.attributes.unwrap())).unwrap());
-        },
+            println!(
+                "Updated item: {}",
+                serde_json::to_string(&convert_to_json(&res.attributes.unwrap())).unwrap()
+            );
+        }
         Err(e) => {
             debug!("UpdateItem API call got an error -- {:?}", e);
             error!("{}", e.to_string());
             std::process::exit(1);
-        },
+        }
     }
 }
 
-
 // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.AtomicCounters
-pub async fn atomic_counter(cx: app::Context, pval: String, sval: Option<String>,
-                      set_expression: Option<String>, remove_expression: Option<String>, target_attr: String) {
+pub async fn atomic_counter(
+    cx: app::Context,
+    pval: String,
+    sval: Option<String>,
+    set_expression: Option<String>,
+    remove_expression: Option<String>,
+    target_attr: String,
+) {
     debug!("context: {:#?}", &cx);
     if set_expression.is_some() || remove_expression.is_some() {
         error!("--atomic-counter option cannot be used with --set or --remove.");
@@ -357,10 +452,9 @@ pub async fn atomic_counter(cx: app::Context, pval: String, sval: Option<String>
     update_item(cx, pval, sval, Some(atomic_counter_expression), None).await;
 }
 
-
 /* =================================================
-   Private functions
-   ================================================= */
+Private functions
+================================================= */
 
 /*
 Basically what this function does is to replace attribute names and values into DynamoDB style placeholders, i.e. "#ATTRNAME" and ":VALUE".
@@ -393,10 +487,13 @@ Support status of various examples ([x] = not available for now, [o] = supported
 - [o] "REMOVE Brand, InStock, QuantityOnHand" => in dynein: `$ dy update <keys> --remove 'Brand, InStock, QuantityOnHand'`.
 - [x] "REMOVE RelatedItems[1], RelatedItems[2]"
 */
-fn generate_update_expressions(action_type: UpdateActionType, given_expression: &str) -> GeneratedUpdateParams {
+fn generate_update_expressions(
+    action_type: UpdateActionType,
+    given_expression: &str,
+) -> GeneratedUpdateParams {
     let mut expression: String = String::from("");
     let mut names = HashMap::<String, String>::new();
-    let mut vals  = HashMap::<String, AttributeValue>::new();
+    let mut vals = HashMap::<String, AttributeValue>::new();
 
     match action_type {
         UpdateActionType::SET => {
@@ -422,7 +519,10 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
                 debug!("parsing a statement: {}", &statement);
                 let path_and_value: Vec<&str> = statement.split('=').map(|x| x.trim()).collect();
                 if path_and_value.len() != 2 {
-                    error!("failed to parse a statement '{}' in 'path = value' style.", &statement);
+                    error!(
+                        "failed to parse a statement '{}' in 'path = value' style.",
+                        &statement
+                    );
                     std::process::exit(1);
                 };
                 let left_hand: &str = &path_and_value[0];
@@ -431,7 +531,9 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
 
                 debug!("left hand ... {:#?}", left_hand);
                 let name_placeholder = String::from("#DYNEIN_ATTRNAME") + &i.to_string();
-                if i > 0 { expression.push_str(", ") };
+                if i > 0 {
+                    expression.push_str(", ")
+                };
                 expression.push_str(&name_placeholder);
                 expression.push_str(" = ");
                 names.insert(name_placeholder.clone(), String::from(left_hand));
@@ -440,27 +542,46 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
                 let val_placeholder = String::from(":DYNEIN_ATTRVAL") + &i.to_string();
                 // TODO: currently --set 'thatdate = "2020-02-02"' doesn't work bacause of "-". Need to use more smart parser.
                 // TODO: support --set 'listAttr = [1,2]'. Currently mistakenly parse/split it by "," as ["listAttr = [1" and "2]".
-                let right_hand_operands: Vec<&str> = right_hand.split(|c| c == '+' || c == '-').map(|x| x.trim()).collect();
+                let right_hand_operands: Vec<&str> = right_hand
+                    .split(|c| c == '+' || c == '-')
+                    .map(|x| x.trim())
+                    .collect();
                 if right_hand_operands.len() == 1 {
                     // --set 'Attr = 123', where right_hand_operands = ["val"], of which length is 1.
                     expression.push_str(val_placeholder.as_str());
-                    vals.insert(val_placeholder, str_to_attrval(right_hand)
-                                                 .unwrap_or_else(|_| panic!("failed to parse right hand object '{}' into AttributeValue.", &right_hand)));
-                } else if right_hand_operands.len() == 2 &&
-                          right_hand_operands[0] == left_hand {
+                    vals.insert(
+                        val_placeholder,
+                        str_to_attrval(right_hand).unwrap_or_else(|_| {
+                            panic!(
+                                "failed to parse right hand object '{}' into AttributeValue.",
+                                &right_hand
+                            )
+                        }),
+                    );
+                } else if right_hand_operands.len() == 2 && right_hand_operands[0] == left_hand {
                     // --set 'Attr = Attr + 100', where right_hand_operands = ["val", 100], of which length is 2.
                     expression.push_str(&name_placeholder);
-                    if right_hand.contains('+') { expression.push_str(" + ") }
-                    else if right_hand.contains('-') { expression.push_str(" - ") };
+                    if right_hand.contains('+') {
+                        expression.push_str(" + ")
+                    } else if right_hand.contains('-') {
+                        expression.push_str(" - ")
+                    };
                     expression.push_str(val_placeholder.as_str());
-                    vals.insert(val_placeholder, str_to_attrval(right_hand_operands[1])
-                                                 .unwrap_or_else(|_| panic!("failed to parse right hand object '{}' into AttributeValue.", &right_hand_operands[1])));
+                    vals.insert(
+                        val_placeholder,
+                        str_to_attrval(right_hand_operands[1]).unwrap_or_else(|_| {
+                            panic!(
+                                "failed to parse right hand object '{}' into AttributeValue.",
+                                &right_hand_operands[1]
+                            )
+                        }),
+                    );
                 } else {
                     error!("failed to parse a right hand statement '{}'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'", &right_hand);
                     std::process::exit(1);
                 }
             }
-        },
+        }
         UpdateActionType::REMOVE => {
             // NOTE: REMOVE action for list elements is not supported and currently 'LisAtt[1]' is recognized as one token.
             check_update_expression_compatibility(&given_expression);
@@ -471,10 +592,10 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
                 let placeholder = String::from("#DYNEIN_ATTRNAME") + &i.to_string();
                 returning_attributes.push(placeholder.clone());
                 names.insert(placeholder, String::from(attr));
-            };
+            }
             expression.push_str("REMOVE ");
             expression.push_str(&returning_attributes.join(","));
-        },
+        }
     }; // match action_type
 
     debug!("generated UpdateExpression: {:?}", expression);
@@ -488,61 +609,79 @@ fn generate_update_expressions(action_type: UpdateActionType, given_expression: 
     }
 }
 
-
 fn check_update_expression_compatibility(e: &str) {
     if Regex::new(r"\[\d+\]").unwrap().is_match(e) {
         error!("given expression '{}' contains at least one list element (e.g. [0]), which dynein doesn't support for now.", e);
         std::process::exit(1);
-    } else if Regex::new(r"list_append|if_not_exists").unwrap().is_match(e) {
+    } else if Regex::new(r"list_append|if_not_exists")
+        .unwrap()
+        .is_match(e)
+    {
         // TODO: support list_append|if_not_exists in update SET action.
         error!("given expression '{}' contains SET functions ('list_append' or 'if_not_exists'), which dynein doesn't support for now.", e);
         std::process::exit(1);
     }
 }
 
-
 // Without `--table/-t` option, `identify_target` utilizes table info stored in config file which is saved via `dy use` command.
 // With `--table/-t` option, `identify_target` retrieves primary key(s) info by calling DescribeTable API each time which would consumre additional time.
-fn identify_target(ts: &app::TableSchema, pval: String, optional_sval: Option<String>) -> HashMap<String, AttributeValue> {
+fn identify_target(
+    ts: &app::TableSchema,
+    pval: String,
+    optional_sval: Option<String>,
+) -> HashMap<String, AttributeValue> {
     let mut target = HashMap::<String, AttributeValue>::new();
-    target.insert(ts.pk.name.to_string(), build_attrval_scalar(&ts.pk.kind.to_string(), &pval));
+    target.insert(
+        ts.pk.name.to_string(),
+        build_attrval_scalar(&ts.pk.kind.to_string(), &pval),
+    );
 
     // if sort key value is given from command line, add sort key to target HashMap to identify an item.
     if let Some(sval) = optional_sval {
         match ts.sk.as_ref() {
-            Some(sk) => target.insert(sk.name.to_string(), build_attrval_scalar(&sk.kind.to_string(), &sval)),
+            Some(sk) => target.insert(
+                sk.name.to_string(),
+                build_attrval_scalar(&sk.kind.to_string(), &sval),
+            ),
             None => {
                 error!("Partition and Sort keys are given to identify an item, but table '{t}' uses Partition key only. Check `dy desc {t}`", t = &ts.name);
                 std::process::exit(1);
-            },
+            }
         };
     }
-    debug!("Generated primary key(s) to identify an item: {:?}", &target);
+    debug!(
+        "Generated primary key(s) to identify an item: {:?}",
+        &target
+    );
     target
 }
 
-
 fn str_to_attrval(s: &str) -> Result<AttributeValue, serde_json::Error> {
-    debug!("Trying to convert given string '{}' into DynamoDB AttributeValue.", s);
+    debug!(
+        "Trying to convert given string '{}' into DynamoDB AttributeValue.",
+        s
+    );
     let json_value: JsonValue = serde_json::from_str(s)?;
     let attrval = dispatch_jsonvalue_to_attrval(&json_value);
     Ok(attrval)
 }
-
 
 /// this function converts a JSON string argument passed by `--item/-i` option into DynamoDB AttributeValue.
 /// for simplicity `--item` option does NOT force users to construct DynamoDB JSON. i.e.:
 /// - '{"field": { "S": "val"} }' ... this function doesn't support.
 /// - '{"field": "val"}' ... this is the format this function can convert.
 fn json_str_to_attributes(s: &str) -> Result<HashMap<String, AttributeValue>, serde_json::Error> {
-    debug!("Trying to convert from standard JSON received from command line into attributes: {}", s);
+    debug!(
+        "Trying to convert from standard JSON received from command line into attributes: {}",
+        s
+    );
 
     // In this line we assume that 1st element of JSON is not an array.
     // i.e. this type annotation assumes single JSON element:
     //     {"a": "val", "b": "yay"}
     // on the other hand, cannot be used for JSON begins with array like:
     //     [ {"a": "val"}, {"b": "yay"} ]
-    let hashmap: HashMap::<String, JsonValue> = serde_json::from_str(s)?; // unknown JSON structure
+    let hashmap: HashMap<String, JsonValue> = serde_json::from_str(s)?; // unknown JSON structure
     debug!("JSON -> HashMap: {:?}", hashmap);
 
     let result = convert_jsonval_to_attrvals_in_hashmap_val(hashmap);
@@ -551,9 +690,10 @@ fn json_str_to_attributes(s: &str) -> Result<HashMap<String, AttributeValue>, se
     Ok(result)
 }
 
-
 /// Keeping key String as it is, this function converts HashMap value from serde_json::Value into DynamoDB AttributeValue.
-fn convert_jsonval_to_attrvals_in_hashmap_val(hashmap: HashMap<String, JsonValue>) -> HashMap<String, AttributeValue> {
+fn convert_jsonval_to_attrvals_in_hashmap_val(
+    hashmap: HashMap<String, JsonValue>,
+) -> HashMap<String, AttributeValue> {
     let mut result = HashMap::<String, AttributeValue>::new();
     for (k, v) in hashmap {
         debug!("working on key '{}', and value '{:?}'", k, v);
@@ -562,18 +702,22 @@ fn convert_jsonval_to_attrvals_in_hashmap_val(hashmap: HashMap<String, JsonValue
     result
 }
 
-
 // top 3 scalar types that can be used for primary keys.
 //   ref: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html
 //        https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html#HowItWorks.DataTypes
 //        https://rusoto.github.io/rusoto/rusoto_dynamodb/struct.AttributeValue.html
 fn build_attrval_scalar(_ktype: &str, _kval: &str) -> AttributeValue {
-    debug!("Constructing an AttributeValue for (type: {:?}, val: {:?})", _ktype, _kval);
+    debug!(
+        "Constructing an AttributeValue for (type: {:?}, val: {:?})",
+        _ktype, _kval
+    );
 
-    let mut attrval: AttributeValue = AttributeValue { ..Default::default() };
+    let mut attrval: AttributeValue = AttributeValue {
+        ..Default::default()
+    };
     match _ktype {
-        "S" => { attrval.s = Some(String::from(_kval)) },
-        "N" => { attrval.n = Some(String::from(_kval)) }, // NOTE: pass string, not number
+        "S" => attrval.s = Some(String::from(_kval)),
+        "N" => attrval.n = Some(String::from(_kval)), // NOTE: pass string, not number
         // "B" => { attrval.b = Some(Bytes::from(_kval.clone().as_str())) },
         _ => panic!("ERROR: Unknown DynamoDB Data Type: {}", _ktype),
     }
@@ -581,17 +725,33 @@ fn build_attrval_scalar(_ktype: &str, _kval: &str) -> AttributeValue {
     attrval
 }
 
-
 // for SS and NS DynamoDB Attributes.
 // :( serde_json::value::string -- to_string() --> "\"a\""
 // :) serde_json::value::string -- as_str() --> some("a") -- unwrap() --> "a"
 fn build_attrval_set(ktype: &str, kval: &[JsonValue]) -> AttributeValue {
-    debug!("Constructing an AttributeValue for (type: {:?}, val: {:#?})", ktype, kval);
+    debug!(
+        "Constructing an AttributeValue for (type: {:?}, val: {:#?})",
+        ktype, kval
+    );
 
-    let mut attrval: AttributeValue = AttributeValue { ..Default::default() };
+    let mut attrval: AttributeValue = AttributeValue {
+        ..Default::default()
+    };
     match ktype {
-        "SS" => { attrval.ss = Some(kval.iter().map(|x| x.as_str().unwrap().to_string() ).collect()) },
-        "NS" => { attrval.ns = Some(kval.iter().map(|x| x.as_i64().unwrap().to_string() ).collect()) },
+        "SS" => {
+            attrval.ss = Some(
+                kval.iter()
+                    .map(|x| x.as_str().unwrap().to_string())
+                    .collect(),
+            )
+        }
+        "NS" => {
+            attrval.ns = Some(
+                kval.iter()
+                    .map(|x| x.as_i64().unwrap().to_string())
+                    .collect(),
+            )
+        }
         // NOTE: Currently BS is not supported.
         // "BS": Vec<bytes::Bytes> (serialize_with = "::rusoto_core::serialization::SerdeBlobList::serialize_blob_list")
         _ => panic!("ERROR: Unknown DynamoDB Data Type: {}", ktype),
@@ -600,27 +760,29 @@ fn build_attrval_set(ktype: &str, kval: &[JsonValue]) -> AttributeValue {
     attrval
 }
 
-
 /// for "L" DynamoDB Attributes
 /// used only for 'simplified JSON' format. Not compatible with DynamoDB JSON.
 fn build_attrval_list(vec: &[JsonValue]) -> AttributeValue {
-    let mut attrval: AttributeValue = AttributeValue { ..Default::default() };
+    let mut attrval: AttributeValue = AttributeValue {
+        ..Default::default()
+    };
 
     let mut inside_attrvals = Vec::<AttributeValue>::new();
     for v in vec {
         debug!("this is an element of vec: {:?}", v);
-        inside_attrvals.push( dispatch_jsonvalue_to_attrval(&v) );
+        inside_attrvals.push(dispatch_jsonvalue_to_attrval(&v));
     }
     attrval.l = Some(inside_attrvals);
 
     attrval
 }
 
-
 /// for "M" DynamoDB Attributes
 /// used only for 'simplified JSON' format. Not compatible with DynamoDB JSON.
 fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>) -> AttributeValue {
-    let mut result = AttributeValue { ..Default::default() };
+    let mut result = AttributeValue {
+        ..Default::default()
+    };
 
     let mut mapval = HashMap::<String, AttributeValue>::new();
     for (k, v) in json_map {
@@ -632,40 +794,56 @@ fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>)
     result
 }
 
-
 /// Convert from serde_json::Value (standard JSON values) into DynamoDB style AttributeValue
 pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
     match jv {
         // scalar types
-        JsonValue::String(val) => AttributeValue { s: Some(val.to_string()), ..Default::default() },
-        JsonValue::Number(val) => AttributeValue { n: Some(val.to_string()), ..Default::default() },
-        JsonValue::Bool(val)   => AttributeValue { bool: Some(*val), ..Default::default() },
-        JsonValue::Null        => AttributeValue { null: Some(true), ..Default::default() },
+        JsonValue::String(val) => AttributeValue {
+            s: Some(val.to_string()),
+            ..Default::default()
+        },
+        JsonValue::Number(val) => AttributeValue {
+            n: Some(val.to_string()),
+            ..Default::default()
+        },
+        JsonValue::Bool(val) => AttributeValue {
+            bool: Some(*val),
+            ..Default::default()
+        },
+        JsonValue::Null => AttributeValue {
+            null: Some(true),
+            ..Default::default()
+        },
 
         // document types. they can be recursive.
         JsonValue::Object(obj) => build_attrval_map(obj),
-        JsonValue::Array(vec)  => {
-            if vec.iter().all(|v| v.is_string() ) {
-                debug!("All elements in this attribute are String - treat it as 'SS': {:?}", vec);
+        JsonValue::Array(vec) => {
+            if vec.iter().all(|v| v.is_string()) {
+                debug!(
+                    "All elements in this attribute are String - treat it as 'SS': {:?}",
+                    vec
+                );
                 build_attrval_set(&String::from("SS"), vec)
-            } else if vec.iter().all(|v| v.is_number() ) {
-                debug!("All elements in this attribute are Number - treat it as 'NS': {:?}", vec);
+            } else if vec.iter().all(|v| v.is_number()) {
+                debug!(
+                    "All elements in this attribute are Number - treat it as 'NS': {:?}",
+                    vec
+                );
                 build_attrval_set(&String::from("NS"), vec)
             } else {
                 debug!("Elements are not uniform - treat it as 'L': {:?}", vec);
                 build_attrval_list(vec)
             }
-        },
+        }
     }
 }
 
-
 /// `strip_items` calls `strip_item` for each item.
-fn strip_items(items: &[HashMap<String, rusoto_dynamodb::AttributeValue>])
-                    -> Vec<HashMap<String, serde_json::Value>> {
-  items.iter().map(|item| strip_item(item)).collect()
+fn strip_items(
+    items: &[HashMap<String, rusoto_dynamodb::AttributeValue>],
+) -> Vec<HashMap<String, serde_json::Value>> {
+    items.iter().map(|item| strip_item(item)).collect()
 }
-
 
 /// `strip_item` function strips non-existing data types in AttributeValue struct:
 ///
@@ -689,38 +867,59 @@ fn strip_items(items: &[HashMap<String, rusoto_dynamodb::AttributeValue>])
 /// by utilizing Serialize derive of the struct:
 /// https://docs.rs/rusoto_dynamodb/0.42.0/src/rusoto_dynamodb/generated.rs.html#38
 /// https://docs.rs/rusoto_dynamodb/0.42.0/rusoto_dynamodb/struct.AttributeValue.html
-fn strip_item(item: &HashMap<String, rusoto_dynamodb::AttributeValue>)
-                    -> HashMap<String, serde_json::Value> {
-    item.iter().map(|attr|
+fn strip_item(
+    item: &HashMap<String, rusoto_dynamodb::AttributeValue>,
+) -> HashMap<String, serde_json::Value> {
+    item.iter()
+        .map(|attr|
         // Serialization: `serde_json::to_value(sth: rusoto_dynamodb::AttributeValue)`
-        (attr.0.to_string(), serde_json::to_value(&attr.1).unwrap())
-    ).collect()
+        (attr.0.to_string(), serde_json::to_value(&attr.1).unwrap()))
+        .collect()
 }
 
-
-fn generate_query_expressions(ts: &app::TableSchema, pval: &str, sort_key_expression: &Option<String>, index: &Option<String>)
-                              -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
+fn generate_query_expressions(
+    ts: &app::TableSchema,
+    pval: &str,
+    sort_key_expression: &Option<String>,
+    index: &Option<String>,
+) -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
     let expression: String = String::from("#DYNEIN_PKNAME = :DYNEIN_PKVAL");
     let mut names = HashMap::<String, String>::new();
-    let mut vals  = HashMap::<String, AttributeValue>::new();
+    let mut vals = HashMap::<String, AttributeValue>::new();
     let mut sort_key_of_target_table_or_index: Option<app::Key> = None;
 
     match index {
-        None => /* Query for base table */ {
+        None =>
+        /* Query for base table */
+        {
             debug!("Assigning PK name/value and sort key (if any)");
-            names.insert(String::from("#DYNEIN_PKNAME"), String::from(&ts.clone().pk.name));
-            vals.insert(String::from(":DYNEIN_PKVAL"), build_attrval_scalar(&ts.pk.kind.to_string(), pval));
+            names.insert(
+                String::from("#DYNEIN_PKNAME"),
+                String::from(&ts.clone().pk.name),
+            );
+            vals.insert(
+                String::from(":DYNEIN_PKVAL"),
+                build_attrval_scalar(&ts.pk.kind.to_string(), pval),
+            );
             sort_key_of_target_table_or_index = ts.sk.clone();
-        },
-        Some(idx) => /* Query for Secondary Index */ {
+        }
+        Some(idx) =>
+        /* Query for Secondary Index */
+        {
             debug!("Specified Query target index name: {:?}", &idx);
             if let Some(table_indexes) = &ts.indexes {
                 debug!("indexes attached to the table: {:?}", &table_indexes);
                 for existing_idx in table_indexes {
                     // index name should be unique in a table. Even LSI and GSI don't have the same name.
                     if idx == &existing_idx.name {
-                        names.insert(String::from("#DYNEIN_PKNAME"), String::from(&existing_idx.pk.name));
-                        vals.insert(String::from(":DYNEIN_PKVAL"), build_attrval_scalar(&existing_idx.pk.kind.to_string(), pval));
+                        names.insert(
+                            String::from("#DYNEIN_PKNAME"),
+                            String::from(&existing_idx.pk.name),
+                        );
+                        vals.insert(
+                            String::from(":DYNEIN_PKVAL"),
+                            build_attrval_scalar(&existing_idx.pk.kind.to_string(), pval),
+                        );
                         sort_key_of_target_table_or_index = existing_idx.sk.clone();
                         break;
                     }
@@ -731,32 +930,51 @@ fn generate_query_expressions(ts: &app::TableSchema, pval: &str, sort_key_expres
             //   (1). no index is defined for the table, or
             //   (2). there're some index(es) but couldn't find specified name index
             if names.is_empty() {
-                return Err(DyneinQueryParamsError::NoSuchIndex(idx.to_string(), ts.clone().name));
+                return Err(DyneinQueryParamsError::NoSuchIndex(
+                    idx.to_string(),
+                    ts.clone().name,
+                ));
             }
         }
     }
 
-    debug!("Before appending sort key expression ... exp='{}', names='{:?}', vals={:?}", &expression, &names, &vals);
+    debug!(
+        "Before appending sort key expression ... exp='{}', names='{:?}', vals={:?}",
+        &expression, &names, &vals
+    );
     match sort_key_expression {
-        None => /* No --sort-key option given. proceed with partition key condition only. */ {
+        None =>
+        /* No --sort-key option given. proceed with partition key condition only. */
+        {
             Ok(GeneratedQueryParams {
                 exp: Some(expression),
                 names: if names.is_empty() { None } else { Some(names) },
                 vals: Some(vals),
             })
-        },
-        Some(ske) => /* As --sort-key option is given, parse it and append the built SK related condition to required PK expression. */ {
-            append_sort_key_expression(sort_key_of_target_table_or_index, &expression, &ske, names, vals)
-        },
+        }
+        Some(ske) =>
+        /* As --sort-key option is given, parse it and append the built SK related condition to required PK expression. */
+        {
+            append_sort_key_expression(
+                sort_key_of_target_table_or_index,
+                &expression,
+                &ske,
+                names,
+                vals,
+            )
+        }
     }
 }
 
-
 /// Using existing key condition expr (e.g. "myId <= :idVal") and supplementary mappings (expression_attribute_names, expression_attribute_values),
 /// this method returns GeneratedQueryParams struct. Note that it's called only when sort key expression (ske) exists.
-fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expression: &str, sort_key_expression: &str,
-                              mut names: HashMap<String, String>, mut vals: HashMap::<String, AttributeValue> )
-                              -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
+fn append_sort_key_expression(
+    sort_key: Option<app::Key>,
+    partition_key_expression: &str,
+    sort_key_expression: &str,
+    mut names: HashMap<String, String>,
+    mut vals: HashMap<String, AttributeValue>,
+) -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
     // Check if the target table/index key schema has sort key. If there's no sort key definition, return with Err immediately.
     let (sk_name, sk_type) = match sort_key {
         Some(sk) => (sk.clone().name, sk.kind.to_string()),
@@ -766,7 +984,10 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
     // Start building KeyConditionExpression. dynein automatically set placeholders, so currently it would be:
     //   "#DYNEIN_PKNAME = :DYNEIN_PKVAL AND "
     let mut built = format!("{} AND ", partition_key_expression);
-    debug!("Start building KeyConditionExpression. Currently built: '{}'", &built);
+    debug!(
+        "Start building KeyConditionExpression. Currently built: '{}'",
+        &built
+    );
 
     // iterate over splitted tokens and build expression and mappings.
     let mut iter = sort_key_expression.trim().split_whitespace();
@@ -775,52 +996,88 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
         // sortKeyName = :sortkeyval - true if the sort key value is equal to :sortkeyval.
         Some("=") | Some("==") => {
             let target_val = iter.next().unwrap();
-            debug!("Equal sign is detected in sort key expression for the value: '{}'", &target_val);
+            debug!(
+                "Equal sign is detected in sort key expression for the value: '{}'",
+                &target_val
+            );
             built.push_str("#DYNEIN_SKNAME = :DYNEIN_SKVAL");
             names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(String::from(":DYNEIN_SKVAL"), build_attrval_scalar(&sk_type, &String::from(target_val)));
-        },
+            vals.insert(
+                String::from(":DYNEIN_SKVAL"),
+                build_attrval_scalar(&sk_type, &String::from(target_val)),
+            );
+        }
         // sortKeyName <= :sortkeyval - true if the sort key value is less than or equal to :sortkeyval.
         Some("<=") => {
             let target_val = iter.next().unwrap();
-            debug!("Less than equal sign is detected in sort key expression for the value: '{}'", &target_val);
+            debug!(
+                "Less than equal sign is detected in sort key expression for the value: '{}'",
+                &target_val
+            );
             built.push_str("#DYNEIN_SKNAME <= :DYNEIN_SKVAL");
             names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(String::from(":DYNEIN_SKVAL"), build_attrval_scalar(&sk_type, &String::from(target_val)));
-        },
+            vals.insert(
+                String::from(":DYNEIN_SKVAL"),
+                build_attrval_scalar(&sk_type, &String::from(target_val)),
+            );
+        }
         // sortKeyName < :sortkeyval - true if the sort key value is less than :sortkeyval.
         Some("<") => {
             let target_val = iter.next().unwrap();
-            debug!("Less than sign is detected in sort key expression for the value: '{}'", &target_val);
+            debug!(
+                "Less than sign is detected in sort key expression for the value: '{}'",
+                &target_val
+            );
             built.push_str("#DYNEIN_SKNAME < :DYNEIN_SKVAL");
             names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(String::from(":DYNEIN_SKVAL"), build_attrval_scalar(&sk_type, &String::from(target_val)));
-        },
+            vals.insert(
+                String::from(":DYNEIN_SKVAL"),
+                build_attrval_scalar(&sk_type, &String::from(target_val)),
+            );
+        }
         // sortKeyName >= :sortkeyval - true if the sort key value is greater than or equal to :sortkeyval.
         Some(">=") => {
             let target_val = iter.next().unwrap();
-            debug!("Greater than equal sign is detected in sort key expression for the value: '{}'", &target_val);
+            debug!(
+                "Greater than equal sign is detected in sort key expression for the value: '{}'",
+                &target_val
+            );
             built.push_str("#DYNEIN_SKNAME >= :DYNEIN_SKVAL");
             names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(String::from(":DYNEIN_SKVAL"), build_attrval_scalar(&sk_type, &String::from(target_val)));
-        },
+            vals.insert(
+                String::from(":DYNEIN_SKVAL"),
+                build_attrval_scalar(&sk_type, &String::from(target_val)),
+            );
+        }
         // sortKeyName > :sortkeyval - true if the sort key value is greater than :sortkeyval.
         Some(">") => {
             let target_val = iter.next().unwrap();
-            debug!("Greater than sign is detected in sort key expression for the value: '{}'", &target_val);
+            debug!(
+                "Greater than sign is detected in sort key expression for the value: '{}'",
+                &target_val
+            );
             built.push_str("#DYNEIN_SKNAME > :DYNEIN_SKVAL");
             names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(String::from(":DYNEIN_SKVAL"), build_attrval_scalar(&sk_type, &String::from(target_val)));
-        },
+            vals.insert(
+                String::from(":DYNEIN_SKVAL"),
+                build_attrval_scalar(&sk_type, &String::from(target_val)),
+            );
+        }
         // begins_with ( sortKeyName, :sortkeyval ) - true if the sort key value begins with a particular operand.
         // You cannot use this function with a sort key that is of type Number.
         Some("begins_with") | Some("BEGINS_WITH") => {
             let target_val = iter.next().unwrap();
-            debug!("`begins_with` is detected in sort key expression for the value: '{}'", &target_val);
+            debug!(
+                "`begins_with` is detected in sort key expression for the value: '{}'",
+                &target_val
+            );
             built.push_str("begins_with(#DYNEIN_SKNAME, :DYNEIN_SKVAL)"); // the function name `begins_with` is case-sensitive.
             names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(String::from(":DYNEIN_SKVAL"), build_attrval_scalar(&sk_type, &String::from(target_val)));
-        },
+            vals.insert(
+                String::from(":DYNEIN_SKVAL"),
+                build_attrval_scalar(&sk_type, &String::from(target_val)),
+            );
+        }
         // sortKeyName BETWEEN :sortkeyval1 AND :sortkeyval2 - true if the sort key value is greater than or equal to :sortkeyval1, and less than or equal to :sortkeyval2.
         Some("between") | Some("BETWEEN") => {
             debug!("`between` is detected in sort key expression.");
@@ -830,19 +1087,28 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
                 _ => {
                     println!("ERROR: between syntax error. e.g. 'BETWEEN 10 AND 99'.");
                     std::process::exit(1)
-                },
+                }
             }
             let to = iter.next().unwrap();
             debug!("Parsed from/to values: between '{}' and '{}'.", &from, &to);
 
             built.push_str("#DYNEIN_SKNAME BETWEEN :DYNEIN_SKVAL_FROM AND :DYNEIN_SKVAL_TO");
             names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(String::from(":DYNEIN_SKVAL_FROM"), build_attrval_scalar(&sk_type, &String::from(from)));
-            vals.insert(String::from(":DYNEIN_SKVAL_TO"), build_attrval_scalar(&sk_type, &String::from(to)));
-        },
+            vals.insert(
+                String::from(":DYNEIN_SKVAL_FROM"),
+                build_attrval_scalar(&sk_type, &String::from(from)),
+            );
+            vals.insert(
+                String::from(":DYNEIN_SKVAL_TO"),
+                build_attrval_scalar(&sk_type, &String::from(to)),
+            );
+        }
         _ => return Err(DyneinQueryParamsError::InvalidSortKeyOption),
     };
-    debug!("Finished to build KeyConditionExpression. Currently built: '{}'", &built);
+    debug!(
+        "Finished to build KeyConditionExpression. Currently built: '{}'",
+        &built
+    );
 
     Ok(GeneratedQueryParams {
         exp: Some(built),
@@ -851,15 +1117,18 @@ fn append_sort_key_expression(sort_key: Option<app::Key>, partition_key_expressi
     })
 }
 
-
 /// Display items as a readable table format:
 ///   $ dy scan --output table
 ///   userName    registeredAt
 ///   thash       1582050565
 ///   tayoyo      1582000111
 ///   osaka       1583020931
-fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::TableSchema,
-                       selected_attributes: &Option<String>, keys_only: bool) {
+fn display_items_table(
+    items: Vec<HashMap<String, AttributeValue>>,
+    ts: &app::TableSchema,
+    selected_attributes: &Option<String>,
+    keys_only: bool,
+) {
     // Print no item message and return if items length is 0.
     if items.is_empty() {
         println!("No item to show in the table '{}'", ts.name.to_string());
@@ -869,12 +1138,17 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
     // build header - first, primary key(s). Even index, key(s) are always projected.
     // ref: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections
     let mut header: Vec<&str> = vec![ts.pk.name.as_str()];
-    if let Some(sk) = &ts.sk { header.push(sk.name.as_str()) };
+    if let Some(sk) = &ts.sk {
+        header.push(sk.name.as_str())
+    };
 
     // build header - next, attribute names or aggregated "attributes" header, unless --keys-only flag is set.
     if !keys_only {
-        if let Some(attrs) = selected_attributes { header.extend(attrs.split(',').collect::<Vec<&str>>()); }
-        else { header.push("attributes") };
+        if let Some(attrs) = selected_attributes {
+            header.extend(attrs.split(',').collect::<Vec<&str>>());
+        } else {
+            header.push("attributes")
+        };
     };
     debug!("built header elements: {:?}", header);
 
@@ -909,7 +1183,8 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
                 // print rest aggreated "attributes" column in JSON format.
                 let full = serde_json::to_string(&convert_to_json(&item)).unwrap();
                 let threshold: usize = 50;
-                if full.chars().count() > threshold { // NOTE: counting bytes slice doesn't work for multi-bytes strings
+                if full.chars().count() > threshold {
+                    // NOTE: counting bytes slice doesn't work for multi-bytes strings
                     let st: &String = &full.chars().take(threshold).collect();
                     item_attributes.push(String::from(st) + "...");
                 } else {
@@ -924,74 +1199,111 @@ fn display_items_table(items: Vec<HashMap<String, AttributeValue>>, ts: &app::Ta
     tw.flush().unwrap();
 }
 
-
 /// This function takes Option<AttributeValue> and return string,
 /// so that it can be shown in a "cell" of table format, which has only single-line, small area.
 fn attrval_to_cell_print(optional_attrval: Option<AttributeValue>) -> String {
     match optional_attrval {
         None => String::from(""),
         Some(attrval) => {
-                 if let Some(v) = &attrval.s { String::from(v) }
-            else if let Some(v) = &attrval.n { String::from(v) }
-            else if let Some(v) = &attrval.bool { v.to_string() }
-            else if let Some(vs) = &attrval.ss { serde_json::to_string(&vs).unwrap() }
-            else if let Some(vs) = &attrval.ns {
-                serde_json::to_string(&vs.iter().map(|v| str_to_json_num(v) ).collect::<Vec<JsonValue>>()).unwrap()
-            }
-            else if attrval.null.is_some() { String::from("null") }
-            else { String::from("(snip)") } // B, BS, L, and M are not shown.
-        },
+            if let Some(v) = &attrval.s {
+                String::from(v)
+            } else if let Some(v) = &attrval.n {
+                String::from(v)
+            } else if let Some(v) = &attrval.bool {
+                v.to_string()
+            } else if let Some(vs) = &attrval.ss {
+                serde_json::to_string(&vs).unwrap()
+            } else if let Some(vs) = &attrval.ns {
+                serde_json::to_string(
+                    &vs.iter()
+                        .map(|v| str_to_json_num(v))
+                        .collect::<Vec<JsonValue>>(),
+                )
+                .unwrap()
+            } else if attrval.null.is_some() {
+                String::from("null")
+            } else {
+                String::from("(snip)")
+            } // B, BS, L, and M are not shown.
+        }
     }
 }
-
 
 /// https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html
 pub fn attrval_to_type(attrval: &AttributeValue) -> Option<String> {
     // following list of if-else statements would be return value of this function.
-         if attrval.s.is_some()    { Some(String::from("String")) }
-    else if attrval.n.is_some()    { Some(String::from("Number")) }
-    else if attrval.b.is_some()    { Some(String::from("Binary")) }
-    else if attrval.bool.is_some() { Some(String::from("Boolian")) }
-    else if attrval.null.is_some() { Some(String::from("Null")) }
-    else if attrval.ss.is_some()   { Some(String::from("Set (String)")) }
-    else if attrval.ns.is_some()   { Some(String::from("Set (Number)")) }
-    else if attrval.bs.is_some()   { Some(String::from("Set (Binary)")) }
-    else if attrval.m.is_some()    { Some(String::from("Map")) }
-    else if attrval.l.is_some()    { Some(String::from("List")) }
-    else { None }
+    if attrval.s.is_some() {
+        Some(String::from("String"))
+    } else if attrval.n.is_some() {
+        Some(String::from("Number"))
+    } else if attrval.b.is_some() {
+        Some(String::from("Binary"))
+    } else if attrval.bool.is_some() {
+        Some(String::from("Boolian"))
+    } else if attrval.null.is_some() {
+        Some(String::from("Null"))
+    } else if attrval.ss.is_some() {
+        Some(String::from("Set (String)"))
+    } else if attrval.ns.is_some() {
+        Some(String::from("Set (Number)"))
+    } else if attrval.bs.is_some() {
+        Some(String::from("Set (Binary)"))
+    } else if attrval.m.is_some() {
+        Some(String::from("Map"))
+    } else if attrval.l.is_some() {
+        Some(String::from("List"))
+    } else {
+        None
+    }
 }
-
 
 /// This function takes items and returns values in multiple lines - one line for one item.
-pub fn convert_items_to_csv_lines(items: &[HashMap<String, AttributeValue>],
-                                  ts: &app::TableSchema, attributes_to_append: &Option<Vec<String>>, keys_only: bool) -> String {
-    items.iter().map(|item|
-        convert_item_to_csv_line(item, ts, attributes_to_append, keys_only)
-    ).collect::<Vec<String>>().join("\n")
+pub fn convert_items_to_csv_lines(
+    items: &[HashMap<String, AttributeValue>],
+    ts: &app::TableSchema,
+    attributes_to_append: &Option<Vec<String>>,
+    keys_only: bool,
+) -> String {
+    items
+        .iter()
+        .map(|item| convert_item_to_csv_line(item, ts, attributes_to_append, keys_only))
+        .collect::<Vec<String>>()
+        .join("\n")
 }
-
 
 /// This function convert from a DynamoDB item: { "abc": "val", "def": 123 }
 /// into comma separated line: "val",123
-fn convert_item_to_csv_line(item: &HashMap<String, AttributeValue>,
-                            ts: &app::TableSchema, attributes_to_append: &Option<Vec<String>>, keys_only: bool) -> String {
+fn convert_item_to_csv_line(
+    item: &HashMap<String, AttributeValue>,
+    ts: &app::TableSchema,
+    attributes_to_append: &Option<Vec<String>>,
+    keys_only: bool,
+) -> String {
     let mut line = String::new();
 
     // push pk value to the line
-    let pk_attrval: &AttributeValue = item.iter().find(|x| x.0 == &ts.pk.name).expect("pk should exist").1;
+    let pk_attrval: &AttributeValue = item
+        .iter()
+        .find(|x| x.0 == &ts.pk.name)
+        .expect("pk should exist")
+        .1;
     // NOTE: Another possible implementation to generate string from attrval would be: `&attrval_to_cell_print(Some(pk_attrval.to_owned())))`.
     //       However, `attrval_to_cell_print` doesn't surround String value with double-quotes (""), so I prefer using attrval_to_jsonval here.
     line.push_str(&attrval_to_jsonval(pk_attrval).to_string());
 
     // push sk value to the line, if needed.
     if let Some(sk) = &ts.sk {
-        let sk_attrval: &AttributeValue = item.iter().find(|x| x.0 == &sk.name).expect("sk should exist in an item").1;
+        let sk_attrval: &AttributeValue = item
+            .iter()
+            .find(|x| x.0 == &sk.name)
+            .expect("sk should exist in an item")
+            .1;
         line.push(',');
         line.push_str(&attrval_to_jsonval(sk_attrval).to_string());
     }
 
-    if keys_only {}
-    else if let Some(attrs) = attributes_to_append {
+    if keys_only {
+    } else if let Some(attrs) = attributes_to_append {
         for attr /* String */ in attrs {
             let attrval: &AttributeValue = item.iter().find(|x| x.0 == attr).expect("Specified attribute not found in the item.").1;
             line.push(',');
@@ -1003,51 +1315,65 @@ fn convert_item_to_csv_line(item: &HashMap<String, AttributeValue>,
     line
 }
 
-
-pub fn convert_to_json_vec(items: &[HashMap<String, AttributeValue>])
-                -> Vec<HashMap<String, serde_json::Value>> {
-    items.iter().map(|item|
-        convert_to_json(&item)
-    ).collect()
+pub fn convert_to_json_vec(
+    items: &[HashMap<String, AttributeValue>],
+) -> Vec<HashMap<String, serde_json::Value>> {
+    items.iter().map(|item| convert_to_json(&item)).collect()
 }
 
-
-pub fn convert_to_json(item: &HashMap<String, AttributeValue>)
-                 -> HashMap<String, serde_json::Value> {
-    item.iter().map(|attr|
-        (attr.0.to_string(), attrval_to_jsonval(&attr.1))
-    ).collect()
+pub fn convert_to_json(
+    item: &HashMap<String, AttributeValue>,
+) -> HashMap<String, serde_json::Value> {
+    item.iter()
+        .map(|attr| (attr.0.to_string(), attrval_to_jsonval(&attr.1)))
+        .collect()
 }
-
 
 fn str_to_json_num(s: &str) -> JsonValue {
     match s.parse::<u64>() {
         Ok(i) => serde_json::to_value(i).unwrap(),
         Err(_) => match s.parse::<f64>() {
             Ok(f) => serde_json::to_value(f).unwrap(),
-            Err(e) => panic!("Failed to parse DynamoDB 'N' typed value: {:#?}\n{:#?}", s, e),
+            Err(e) => panic!(
+                "Failed to parse DynamoDB 'N' typed value: {:#?}\n{:#?}",
+                s, e
+            ),
         },
     }
 }
 
-
 fn attrval_to_jsonval(attrval: &AttributeValue) -> JsonValue {
     let unsupported: &str = "<<<JSON output doesn't support this type attributes>>>";
     //  following list of if-else statements would be return value of this function.
-         if let Some(v) = &attrval.s { serde_json::to_value(v).unwrap() }
-    else if let Some(v) = &attrval.n { str_to_json_num(v) }
-    else if let Some(v) = &attrval.bool { serde_json::to_value(v).unwrap() }
-    else if let Some(vs) = &attrval.ss { serde_json::to_value(vs).unwrap() }
-    else if let Some(vs) = &attrval.ns { vs.iter().map(|v| str_to_json_num(v) ).collect() }
+    if let Some(v) = &attrval.s {
+        serde_json::to_value(v).unwrap()
+    } else if let Some(v) = &attrval.n {
+        str_to_json_num(v)
+    } else if let Some(v) = &attrval.bool {
+        serde_json::to_value(v).unwrap()
+    } else if let Some(vs) = &attrval.ss {
+        serde_json::to_value(vs).unwrap()
+    } else if let Some(vs) = &attrval.ns {
+        vs.iter().map(|v| str_to_json_num(v)).collect()
+    }
     // In List (L) type, each element is a DynamoDB AttributeValue (e.g. {"S": "xxxx"}). recursively apply this method to elements.
-    else if let Some(vlst) = &attrval.l { vlst.iter().map(|v| attrval_to_jsonval(v) ).collect() }
-    else if let Some(vmap) = &attrval.m { attrval_to_json_map(vmap) }
-    else if attrval.null.is_some() { serde_json::to_value(()).unwrap() }
+    else if let Some(vlst) = &attrval.l {
+        vlst.iter().map(|v| attrval_to_jsonval(v)).collect()
+    } else if let Some(vmap) = &attrval.m {
+        attrval_to_json_map(vmap)
+    } else if attrval.null.is_some() {
+        serde_json::to_value(()).unwrap()
+    }
     // Binary (B) and BinarySet (BS) attributes are not supported to display in JSON output format.
-    else if attrval.b.is_some() || attrval.bs.is_some() { serde_json::to_value(unsupported).unwrap() }
-    else { panic!("DynamoDB AttributeValue is not in valid status: {:#?}", &attrval); }
+    else if attrval.b.is_some() || attrval.bs.is_some() {
+        serde_json::to_value(unsupported).unwrap()
+    } else {
+        panic!(
+            "DynamoDB AttributeValue is not in valid status: {:#?}",
+            &attrval
+        );
+    }
 }
-
 
 /// inverse of `build_attrval_map`
 fn attrval_to_json_map(attrval_map: &HashMap<String, AttributeValue>) -> JsonValue {
@@ -1059,14 +1385,22 @@ fn attrval_to_json_map(attrval_map: &HashMap<String, AttributeValue>) -> JsonVal
     serde_json::to_value(result).unwrap()
 }
 
-
 /// Generate `ProjectionExpression` expression string and supplementary ExpressionAttributeNames.
 /// If attributes = None and keys_only is false, returns GeneratedScanParams with Nones and Scan behaves as default.
 /// If you set keys_only to true, the expression contains only primary key(s).
 /// If you specify attributes to show, they'd be added to primary key(s). dynein's scan assumes always shows primary key(s).
-fn generate_scan_expressions(ts: &app::TableSchema, attributes: &Option<String>, keys_only: bool) -> GeneratedScanParams {
+fn generate_scan_expressions(
+    ts: &app::TableSchema,
+    attributes: &Option<String>,
+    keys_only: bool,
+) -> GeneratedScanParams {
     // Early return for the default condition. no --keys-only, no --attributes.
-    if !keys_only && attributes.is_none() { return GeneratedScanParams { exp: None, names: None }; }
+    if !keys_only && attributes.is_none() {
+        return GeneratedScanParams {
+            exp: None,
+            names: None,
+        };
+    }
 
     // dynein always shows primary key(s) i.e. pk and sk (if any).
     let mut names = HashMap::<String, String>::new();
@@ -1078,13 +1412,15 @@ fn generate_scan_expressions(ts: &app::TableSchema, attributes: &Option<String>,
     };
 
     // if keys_only flag is true, no more attribute would be added.
-    if keys_only {}
-    else if let Some(_attributes) = attributes {
+    if keys_only {
+    } else if let Some(_attributes) = attributes {
         let mut i: usize = 0;
         let attrs: Vec<&str> = _attributes.split(',').map(|x| x.trim()).collect();
         for attr in attrs {
             // skip if attributes contain primary key(s) as they're already included in the expression.
-            if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.clone().sk.unwrap().name) { continue; }
+            if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.clone().sk.unwrap().name) {
+                continue;
+            }
 
             let placeholder = String::from("#DYNEIN_ATTRNAME") + &i.to_string();
             returning_attributes.push(placeholder.clone());

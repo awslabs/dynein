@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-use ::serde::{Serialize, Deserialize};
+use ::serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
-
 /* =================================================
-   struct / enum / const
-   ================================================= */
+struct / enum / const
+================================================= */
 
 const ABOUT_DYNEIN: &str = "\
 dynein is a command line tool to interact with DynamoDB tables/data using concise interface.\n\
@@ -44,17 +43,17 @@ pub struct Dynein {
 }
 
 // NOTE: need to be placed in the same module as Dynein struct
-pub fn initialize_from_args() -> Dynein { Dynein::from_args() }
+pub fn initialize_from_args() -> Dynein {
+    Dynein::from_args()
+}
 
 // structopt derive supports enum(subcommands), or struct (single commands).
 // structopt support clap methods e.g. required_if/conflicts_with https://docs.rs/clap/2.32.0/clap/struct.Arg.html
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum Sub {
-
     /* =================================================
-       Control Plane commands
-       ================================================= */
-
+    Control Plane commands
+    ================================================= */
     /// <sub> Admin operations such as creating/updating table or GSI
     #[structopt()]
     Admin {
@@ -88,9 +87,8 @@ pub enum Sub {
     },
 
     /* =================================================
-       Data Plane commands
-       ================================================= */
-
+    Data Plane commands
+    ================================================= */
     /// Retrieve items in a table without any condition. [API: Scan]
     #[structopt(aliases = &["s"])]
     Scan {
@@ -212,7 +210,6 @@ pub enum Sub {
 
         // #[structopt(short = "e", long = "expression")] // or, it should be positional option as required?
         // update_expression: String,
-
         /// SET action to modify or add attribute(s) of an item. --set cannot be used with --remove.
         /// e.g. --set 'name = Alice', --set 'Price = Price + 100', or --set 'Replies = 2, Closed = true, LastUpdated = "2020-02-22T18:10:57Z"'
         #[structopt(long, conflicts_with("remove"))]
@@ -224,7 +221,6 @@ pub enum Sub {
         remove: Option<String>,
 
         // TODO: ConditionExpression support --condition/-c
-
         /// Increment a Number attribute by 1. e.g. `dy update <keys> --atomic-counter sitePv`.
         #[structopt(long)]
         atomic_counter: Option<String>,
@@ -241,11 +237,9 @@ pub enum Sub {
         input: String,
     },
 
-
     /* =================================================
-       Dynein utility commands
-       ================================================= */
-
+    Dynein utility commands
+    ================================================= */
     /// Switch target table context. After you use the command you don't need to specify table every time, but you may overwrite the target table with --table (-t) option.
     ///
     /// When you execute `use`, dynein retrieves table schema info via DescribeTable API
@@ -253,7 +247,7 @@ pub enum Sub {
     #[structopt()]
     Use {
         /// Target table name to use. Optionally you may specify the target table by --table (-t) option.
-        target_table_to_use: Option<String>
+        target_table_to_use: Option<String>,
     },
 
     /// <sub> Manage configuration files (config.yml and cache.yml) from command line
@@ -350,10 +344,8 @@ pub enum Sub {
     },
 }
 
-
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum AdminSub {
-
     /// List tables in the region. [API: ListTables]
     #[structopt(aliases = &["ls"])]
     List {
@@ -397,7 +389,6 @@ pub enum AdminSub {
         #[structopt(subcommand)]
         target_type: DeleteSub,
     },
-
     /*
     /// Compare the desired and current state of a DynamoDB table.
     #[structopt()]
@@ -424,10 +415,8 @@ pub enum AdminSub {
     */
 }
 
-
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum CreateSub {
-
     /// Create new DynamoDB table with given primary key(s). [API: CreateTable]
     #[structopt()]
     Table {
@@ -450,13 +439,11 @@ pub enum CreateSub {
         /// e.g. for Partition key only table: `--keys myPk,S`, and for Partition and Sort key table `--keys myPk,S mySk,N`
         #[structopt(short, long, required = true)]
         keys: Vec<String>,
-    }
+    },
 }
-
 
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum UpdateSub {
-
     /// Update a DynamoDB table.
     #[structopt()]
     Table {
@@ -475,7 +462,6 @@ pub enum UpdateSub {
         /// RCU (read capacity units) for the table. Acceptable only on Provisioned mode.
         #[structopt(long)]
         rcu: Option<i64>,
-
         // TODO: support following parameters
         // - sse_enabled: bool, (default false) ... UpdateTable API
         // - stream_enabled: bool, (default false) ... UpdateTable API
@@ -484,10 +470,8 @@ pub enum UpdateSub {
     },
 }
 
-
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum DeleteSub {
-
     /// Delete a DynamoDB table.
     #[structopt()]
     Table {
@@ -498,17 +482,16 @@ pub enum DeleteSub {
         #[structopt(long)]
         yes: bool,
     },
-
     // #[structopt()]
     // Index {
     // }
 }
 
-
 #[derive(StructOpt, Debug, Serialize, Deserialize)]
 pub enum ConfigSub {
     /// Show all configuration in config (config.yml) and cache (cache.yml) files.
-    #[structopt(aliases = &["show", "current-context"])] // for now, as config content is not so large, showing current context == dump all config.
+    #[structopt(aliases = &["show", "current-context"])]
+    // for now, as config content is not so large, showing current context == dump all config.
     Dump,
 
     /// Reset all dynein configuration in the `~/.dynein/` directory. This command initializes dynein related files only and won't remove your data stored in DynamoDB tables.
