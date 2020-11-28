@@ -64,7 +64,9 @@ fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Er
 fn cleanup(tables: Vec<&str>) -> Result<(), Box<dyn std::error::Error>> {
     for table in tables {
         let mut dynein_cmd = setup()?;
-        let cmd = dynein_cmd.args(&["--region", "local", "table", "delete", "--yes", table]);
+        let cmd = dynein_cmd.args(&[
+            "--region", "local", "admin", "delete", "table", "--yes", table,
+        ]);
         cmd.assert().success();
     }
     Ok(())
@@ -100,7 +102,7 @@ fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
 
     // $ dy admin desc <table_name>
     let mut c = setup()?;
-    let desc_cmd = c.args(&["--region", "local", "table", "desc", table_name]);
+    let desc_cmd = c.args(&["--region", "local", "desc", table_name]);
     desc_cmd
         .assert()
         .success()
@@ -134,7 +136,7 @@ fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut c = setup()?;
     c.args(&[
-        "--region", "local", "table", "create", table_name, "--keys", "pk",
+        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ])
     .output()?;
     let mut c = setup()?;
@@ -142,7 +144,7 @@ fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
     scan_cmd
         .assert()
         .success()
-        .stdout(predicate::str::contains("No items found."));
+        .stdout(predicate::str::contains("No item to show"));
 
     Ok(cleanup(vec![table_name])?)
 }
@@ -153,7 +155,7 @@ fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut c = setup()?;
     c.args(&[
-        "--region", "local", "table", "create", table_name, "--keys", "pk",
+        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ])
     .output()?;
     let mut c = setup()?;
@@ -176,7 +178,7 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut c = setup()?;
     c.args(&[
-        "--region", "local", "table", "create", table_name, "--keys", "pk",
+        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ])
     .output()?;
 
