@@ -60,8 +60,6 @@ impl<'a> ShellReader<'a> {
         self.line.clear();
         match self.input.read_line(&mut self.line) {
             Ok(0) => {
-                // // append newline after '> '
-                // println!("");
                 return Ok(ShellInput::Eof);
             }
             Ok(_) => (),
