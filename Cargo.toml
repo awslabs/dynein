@@ -30,6 +30,7 @@ name = "dy"
 path = "src/main.rs"
 
 [dependencies]
+atty            = "0.2"
 chrono          = "0.4"
 dialoguer       = "0.7.1"
 dirs            = "3.0.1"

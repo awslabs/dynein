@@ -432,6 +432,7 @@ name = "dynein"
 version = "0.1.2"
 dependencies = [
  "assert_cmd",
+ "atty",
  "chrono",
  "dialoguer",
  "dirs 3.0.1",

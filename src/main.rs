@@ -32,32 +32,11 @@ mod bootstrap;
 mod cmd;
 mod control;
 mod data;
+mod shell;
 mod transfer;
 
-/* =================================================
-   main() function
-   =================================================
-*/
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
-
-    let c = cmd::initialize_from_args();
-    debug!("Command details: {:?}", c);
-
-    // when --region <region-name e.g. ap-northeast-1>, use the region. when --region local, use DynamoDB local.
-    // --region/--table option can be passed as a top-level or subcommand-level (i.e. global).
-    let mut context = app::Context {
-        region: None,
-        config: Some(app::load_or_touch_config_file(true)?),
-        cache: Some(app::load_or_touch_cache_file(true)?),
-        overwritten_region: app::region_from_str(c.region),
-        overwritten_table_name: c.table,
-        output: None,
-    };
-    debug!("Initial command context: {:?}", &context);
-
-    match c.child {
+async fn dispatch(mut context: app::Context, subcommand: cmd::Sub) -> Result<(), Box<dyn Error>> {
+    match subcommand {
         cmd::Sub::Admin { grandchild } => match grandchild {
             cmd::AdminSub::List { all_regions } => {
                 if all_regions {
@@ -236,6 +215,62 @@ async fn main() -> Result<(), Box<dyn Error>> {
             backup_name,
             restore_name,
         } => control::restore(context, backup_name, restore_name).await,
+    }
+    Ok(())
+}
+
+/* =================================================
+   main() function
+   =================================================
+*/
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
+
+    let c = cmd::initialize_from_args();
+    debug!("Command details: {:?}", c);
+
+    // when --region <region-name e.g. ap-northeast-1>, use the region. when --region local, use DynamoDB local.
+    // --region/--table option can be passed as a top-level or subcommand-level (i.e. global).
+    let context = app::Context {
+        region: None,
+        config: Some(app::load_or_touch_config_file(true)?),
+        cache: Some(app::load_or_touch_cache_file(true)?),
+        overwritten_region: app::region_from_str(c.region),
+        overwritten_table_name: c.table,
+        output: None,
+    };
+    debug!("Initial command context: {:?}", &context);
+
+    if let Some(child) = c.child {
+        dispatch(context, child).await?
+    } else if c.shell {
+        use shell::BuiltinCommands;
+        use shell::ShellInput::*;
+        use std::io::stdin;
+
+        let input = stdin();
+        let mut reader = shell::ShellReader::new(&input);
+        loop {
+            let child = reader.read_line()?;
+            match child {
+                Builtin(BuiltinCommands::Exit) => break,
+                Eof => break,
+                Command(child) => {
+                    if let Err(e) = dispatch(context.clone(), child).await {
+                        eprintln!("{}", e)
+                    }
+                }
+                ParseError(e) => {
+                    eprintln!("Invalid argument: {}", e);
+                }
+            }
+        }
+    } else {
+        use structopt::StructOpt;
+        eprintln!("Invalid argument: please specify a subcommand or '--shell'");
+        cmd::Dynein::clap().print_help()?;
+        std::process::exit(1);
     }
 
     Ok(())
