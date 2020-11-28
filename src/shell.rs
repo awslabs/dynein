@@ -33,7 +33,7 @@ impl<'a> ShellReader<'a> {
             print!("> ");
             stdout().flush().expect("failed to flush output");
         }
-
+        self.line.clear();
         match self.input.read_line(&mut self.line) {
             Ok(0) => {
                 // // append newline after '> '
