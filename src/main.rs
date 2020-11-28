@@ -35,6 +35,10 @@ mod data;
 mod shell;
 mod transfer;
 
+/* =================================================
+   helper functions
+   =================================================
+*/
 async fn dispatch(mut context: app::Context, subcommand: cmd::Sub) -> Result<(), Box<dyn Error>> {
     match subcommand {
         cmd::Sub::Admin { grandchild } => match grandchild {
@@ -243,8 +247,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     debug!("Initial command context: {:?}", &context);
 
     if let Some(child) = c.child {
+        // subcommand
         dispatch(context, child).await?
     } else if c.shell {
+        // shell mode
         use shell::BuiltinCommands;
         use shell::ShellInput::*;
         use std::io::stdin;
@@ -267,6 +273,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     } else {
+        // Neiter subcommand nor --shell specified
         use structopt::StructOpt;
         eprintln!("Invalid argument: please specify a subcommand or '--shell'");
         cmd::Dynein::clap().print_help()?;
