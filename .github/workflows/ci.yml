@@ -11,7 +11,7 @@ jobs:
     services:
       dynamodb-local:
         image: amazon/dynamodb-local
-        ports: 8000:8000
+        ports: "8000:8000"
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
