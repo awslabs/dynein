@@ -304,7 +304,8 @@ fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
     let shell_session = c.args(&["--region", "local", "--shell"]);
     let mut tmpfile = Builder::new().tempfile()?.into_file();
     writeln!(tmpfile, "admin create table {} --keys pk", table_name)?;
-    writeln!(tmpfile, "desc {}", table_name)?;
+    writeln!(tmpfile, "use {}", table_name)?;
+    writeln!(tmpfile, "desc")?;
     tmpfile.seek(SeekFrom::Start(0))?;
     shell_session
         .stdin(tmpfile)
