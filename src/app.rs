@@ -399,21 +399,21 @@ pub fn load_or_touch_cache_file(first_try: bool) -> Result<Cache, DyneinConfigEr
 ///   or
 ///   $ dy use mytable
 pub async fn use_table(
-    cx: &Context,
+    cx: &mut Context,
     positional_arg_table_name: Option<String>,
 ) -> Result<(), DyneinConfigError> {
     // When context has "overwritten_table_name". i.e. you passed --table (-t) option.
     // When you didn't pass --table option, check if you specified target table name directly, instead of --table option.
-    let target_table: Option<String> = cx
-        .clone()
+    let target_table: Option<&String> = cx
         .overwritten_table_name
-        .or(positional_arg_table_name);
+        .as_ref()
+        .or(positional_arg_table_name.as_ref());
     match target_table {
         Some(tbl) => {
-            debug!("describing the table: {}", &tbl);
+            debug!("describing the table: {}", tbl);
             let region = cx.effective_region();
+            let tbl = tbl.clone();
             let desc: TableDescription = describe_table_api(&region, tbl.clone()).await;
-
             save_using_target(cx, desc)?;
             println!("Now you're using the table '{}' ({}).", tbl, &region.name());
         },
@@ -662,20 +662,21 @@ fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
 
 /// This function updates `using_region` and `using_table` in config.yml,
 /// and at the same time inserts TableDescription of the target table into cache.yml.
-fn save_using_target(cx: &Context, desc: TableDescription) -> Result<(), DyneinConfigError> {
+fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), DyneinConfigError> {
     let table_name: String = desc
         .table_name
         .clone()
         .expect("desc should have table name");
 
     // retrieve current config from Context and update "using target".
-    let mut config = cx.clone().config.expect("cx should have config");
-    config.using_region = Some(String::from(cx.effective_region().name()));
+    let region = Some(String::from(cx.effective_region().name()));
+    let mut config = cx.config.as_mut().expect("cx should have config");
+    config.using_region = region;
     config.using_table = Some(table_name);
-    debug!("config file will be updated with: {:?}", &config);
+    debug!("config file will be updated with: {:?}", config);
 
     // write to config file
-    let config_yaml_string = serde_yaml::to_string(&config)?;
+    let config_yaml_string = serde_yaml::to_string(config)?;
     fs::write(
         retrieve_dynein_file_path(DyneinFileType::ConfigFile)?,
         config_yaml_string,
