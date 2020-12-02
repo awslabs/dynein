@@ -17,8 +17,8 @@
 use crate::cmd;
 use atty;
 use log::debug;
-use std::error::Error;
 use std::io::{stdout, BufRead, Stdin, StdinLock, Write};
+use std::{error::Error, io};
 
 /* =================================================
 struct / enum / const
@@ -76,7 +76,13 @@ impl<'a> ShellReader<'a> {
             // dy commands
             line => {
                 // TODO: better handling of whitespaces
-                let args = line.split(' ');
+                let args = match parse(line) {
+                    Ok(args) => args,
+                    Err(e) => {
+                        eprintln!("Error while parsing input: {}", e);
+                        return Ok(ShellInput::ParseError(e));
+                    }
+                };
                 debug!("Args: {:?}", args);
                 let child = match cmd::parse_args(args) {
                     Ok(child) => child,
@@ -88,5 +94,77 @@ impl<'a> ShellReader<'a> {
                 Ok(ShellInput::Command(child))
             }
         }
+    }
+}
+
+fn parse(line: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut ret = vec![];
+    let mut input = line.trim_start();
+    while 0 < input.len() {
+        if input.starts_with("'") {
+            let mut tok = String::new();
+            let mut iter = input.chars();
+            // discard first "'"
+            iter.next();
+            loop {
+                match iter.next() {
+                    Some('\'') => break,
+                    Some('\\') => match iter.next() {
+                        Some(c) => tok.push(c),
+                        None => {
+                            return Err(Box::new(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "escape('\\') is incomplete",
+                            )));
+                        }
+                    },
+                    Some(c) => tok.push(c),
+                    None => {
+                        return Err(Box::new(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "quote isn't closed",
+                        )));
+                    }
+                }
+            }
+            input = iter.as_str().trim_start();
+            ret.push(tok);
+        } else {
+            let pos = input.find(' ').unwrap_or_else(|| input.len());
+            let (tok, rest) = input.split_at(pos);
+            ret.push(tok.into());
+            input = rest.trim_start();
+        }
+    }
+    Ok(ret)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_ok() {
+        let input = r#"query --sort-key '= 12' 'pk\\is\'escaped'"#;
+        let result = parse(input);
+        assert_eq!(
+            result.unwrap(),
+            vec!["query", "--sort-key", "= 12", r#"pk\is'escaped"#]
+        )
+    }
+
+    #[test]
+    fn test_parse_ng() {
+        let input = r#"quote is 'broken"#;
+        let result = parse(input);
+        assert!(result.is_err());
+
+        let input = r#"escape is 'broken\"#;
+        let result = parse(input);
+        assert!(result.is_err());
+
+        let input = r#"quote is 'broken by escape\'"#;
+        let result = parse(input);
+        assert!(result.is_err());
     }
 }

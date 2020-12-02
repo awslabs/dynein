@@ -273,8 +273,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         eprintln!("{}", e)
                     }
                 }
-                ParseError(e) => {
-                    eprintln!("Invalid argument: {}", e);
+                ParseError(_) => {
+                    // do nothing because read_line already handles the error
                 }
             }
         }
