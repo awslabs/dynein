@@ -292,3 +292,29 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(cleanup(vec![table_name])?)
 }
+
+#[test]
+fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{Seek, SeekFrom};
+
+    let table_name = "table--test_shell_mode";
+
+    // $ dy admin create table <table_name> --keys pk
+    let mut c = setup()?;
+    let shell_session = c.args(&["--region", "local", "--shell"]);
+    let mut tmpfile = Builder::new().tempfile()?.into_file();
+    writeln!(tmpfile, "admin create table {} --keys pk", table_name)?;
+    writeln!(tmpfile, "use {}", table_name)?;
+    writeln!(tmpfile, "desc")?;
+    tmpfile.seek(SeekFrom::Start(0))?;
+    shell_session
+        .stdin(tmpfile)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "name: {}\nregion: local",
+            &table_name
+        )));
+
+    Ok(cleanup(vec![table_name])?)
+}

@@ -15,6 +15,9 @@
  */
 
 use ::serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::ffi::OsString;
+use structopt::clap::AppSettings;
 use structopt::StructOpt;
 
 /* =================================================
@@ -29,7 +32,7 @@ dynein looks for config files under $HOME/.dynein/ directory.";
 #[structopt(name = "dynein", about = ABOUT_DYNEIN)]
 pub struct Dynein {
     #[structopt(subcommand)]
-    pub child: Sub,
+    pub child: Option<Sub>,
 
     /// The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
     /// You can use --region option in both top-level and subcommand-level.
@@ -40,11 +43,29 @@ pub struct Dynein {
     /// You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
     #[structopt(short, long, global = true)]
     pub table: Option<String>,
+
+    #[structopt(long, required_if("child", "None"), conflicts_with("child"))]
+    pub shell: bool,
 }
 
 // NOTE: need to be placed in the same module as Dynein struct
 pub fn initialize_from_args() -> Dynein {
     Dynein::from_args()
+}
+
+pub fn parse_args<I, S>(input: I) -> Result<Sub, Box<dyn Error>>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<OsString> + Clone,
+{
+    Sub::clap()
+        .global_settings(&[
+            AppSettings::NoBinaryName,
+            AppSettings::VersionlessSubcommands,
+        ])
+        .get_matches_from_safe(input)
+        .map(|arg| Sub::from_clap(&arg))
+        .map_err(|e| Box::new(e) as Box<dyn Error>)
 }
 
 // structopt derive supports enum(subcommands), or struct (single commands).
