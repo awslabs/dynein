@@ -15,7 +15,6 @@
  */
 
 use crate::cmd;
-use atty;
 use log::debug;
 use std::io::{stdout, BufRead, Stdin, StdinLock, Write};
 use std::{error::Error, io};
