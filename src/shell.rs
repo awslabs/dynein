@@ -99,7 +99,7 @@ impl<'a> ShellReader<'a> {
 fn parse(line: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let mut ret = vec![];
     let mut input = line.trim_start();
-    while 0 < input.len() {
+    while !input.is_empty() {
         if input.starts_with("'") {
             let mut tok = String::new();
             let mut iter = input.chars();
