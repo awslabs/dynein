@@ -407,7 +407,7 @@ pub async fn use_table(
     let target_table: Option<&String> = cx
         .overwritten_table_name
         .as_ref()
-        .or(positional_arg_table_name.as_ref());
+        .or_else(|| positional_arg_table_name.as_ref());
     match target_table {
         Some(tbl) => {
             debug!("describing the table: {}", tbl);

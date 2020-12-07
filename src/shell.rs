@@ -15,7 +15,6 @@
  */
 
 use crate::cmd;
-use atty;
 use log::debug;
 use std::io::{stdout, BufRead, Stdin, StdinLock, Write};
 use std::{error::Error, io};
@@ -100,8 +99,8 @@ impl<'a> ShellReader<'a> {
 fn parse(line: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let mut ret = vec![];
     let mut input = line.trim_start();
-    while 0 < input.len() {
-        if input.starts_with("'") {
+    while !input.is_empty() {
+        if input.starts_with('\'') {
             let mut tok = String::new();
             let mut iter = input.chars();
             // discard first "'"
