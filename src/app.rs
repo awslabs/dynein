@@ -171,6 +171,7 @@ To find all tables in all regions, try:
 pub struct Config {
     pub using_region: Option<String>,
     pub using_table: Option<String>,
+    pub using_port: Option<u32>,
     // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
 }
 
@@ -244,6 +245,12 @@ impl Context {
     pub fn effective_port(&self) -> u32 {
         if let Some(ow_port) = &self.overwritten_port {
             return ow_port.to_owned();
+        };
+
+        if let Some(using_port_in_config) =
+            &self.config.to_owned().and_then(|x| x.using_port)
+        {
+            return using_port_in_config.to_owned();
         };
 
         return 8000;
@@ -681,11 +688,14 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
         .clone()
         .expect("desc should have table name");
 
+    let port: u32 = cx.effective_port();
+
     // retrieve current config from Context and update "using target".
     let region = Some(String::from(cx.effective_region().name()));
     let mut config = cx.config.as_mut().expect("cx should have config");
     config.using_region = region;
     config.using_table = Some(table_name);
+    config.using_port = Some(port);
     debug!("config file will be updated with: {:?}", config);
 
     // write to config file
@@ -730,6 +740,7 @@ mod tests {
             config: Some(Config {
                 using_region: Some(String::from("ap-northeast-1")),
                 using_table: Some(String::from("cfgtbl")),
+                using_port: Some(8000),
             }),
             cache: None,
             overwritten_region: None,

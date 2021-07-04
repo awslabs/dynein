@@ -248,7 +248,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         cache: Some(app::load_or_touch_cache_file(true)?),
         overwritten_region: app::region_from_str(c.region, c.port),
         overwritten_table_name: c.table,
-        overwritten_port: None,
+        overwritten_port: c.port,
         output: None,
     };
     debug!("Initial command context: {:?}", &context);
