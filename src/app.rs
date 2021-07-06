@@ -171,6 +171,7 @@ To find all tables in all regions, try:
 pub struct Config {
     pub using_region: Option<String>,
     pub using_table: Option<String>,
+    pub using_port: Option<u32>,
     // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
 }
 
@@ -194,6 +195,7 @@ pub struct Context {
     pub cache: Option<Cache>,
     pub overwritten_region: Option<Region>, // --region option
     pub overwritten_table_name: Option<String>, // --table option
+    pub overwritten_port: Option<u32>, // --port option
     pub output: Option<String>,
 }
 
@@ -213,7 +215,7 @@ impl Context {
         if let Some(using_region_name_in_config) =
             &self.config.to_owned().and_then(|x| x.using_region)
         {
-            return region_from_str(Some(using_region_name_in_config.to_owned())) // Option<Region>
+            return region_from_str(Some(using_region_name_in_config.to_owned()), Some(self.effective_port())) // Option<Region>
                 .expect("Region name in the config file is invalid.");
         };
 
@@ -238,6 +240,20 @@ impl Context {
                 error!("{}", Messages::NoEffectiveTable);
                 std::process::exit(1)
             })
+    }
+
+    pub fn effective_port(&self) -> u32 {
+        if let Some(ow_port) = &self.overwritten_port {
+            return ow_port.to_owned();
+        };
+
+        if let Some(using_port_in_config) =
+            &self.config.to_owned().and_then(|x| x.using_port)
+        {
+            return using_port_in_config.to_owned();
+        };
+
+        return 8000;
     }
 
     pub fn effective_cache_key(&self) -> String {
@@ -320,9 +336,13 @@ Public functions
 ================================================= */
 
 // Receives given --region option string, including "local", return Region struct.
-pub fn region_from_str(s: Option<String>) -> Option<Region> {
+pub fn region_from_str(s: Option<String>, p: Option<u32>) -> Option<Region> {
+    let port = match p {
+        Some(v) => v,
+        None => 8000,
+    };
     match s.as_deref() {
-        Some("local") => Some(region_dynamodb_local(8000)),
+        Some("local") => Some(region_dynamodb_local(port)),
         Some(x) => Region::from_str(&x).ok(), // convert Result<T, E> into Option<T>
         None => None,
     }
@@ -668,11 +688,14 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
         .clone()
         .expect("desc should have table name");
 
+    let port: u32 = cx.effective_port();
+
     // retrieve current config from Context and update "using target".
     let region = Some(String::from(cx.effective_region().name()));
     let mut config = cx.config.as_mut().expect("cx should have config");
     config.using_region = region;
     config.using_table = Some(table_name);
+    config.using_port = Some(port);
     debug!("config file will be updated with: {:?}", config);
 
     // write to config file
@@ -706,6 +729,7 @@ mod tests {
             cache: None,
             overwritten_region: None,
             overwritten_table_name: None,
+            overwritten_port: None,
             output: None,
         };
         assert_eq!(cx1.effective_region(), Region::default());
@@ -716,10 +740,12 @@ mod tests {
             config: Some(Config {
                 using_region: Some(String::from("ap-northeast-1")),
                 using_table: Some(String::from("cfgtbl")),
+                using_port: Some(8000),
             }),
             cache: None,
             overwritten_region: None,
             overwritten_table_name: None,
+            overwritten_port: None,
             output: None,
         };
         assert_eq!(cx2.effective_region(), Region::from_str("ap-northeast-1")?);
