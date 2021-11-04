@@ -96,7 +96,7 @@ dynein is written in Rust, so you can build and install dynein with Cargo. To bu
 ```
 $ git clone [[this_git_repository_url]]
 $ cd dynein
-$ cargo install --path .
+$ cargo install --locked --path .
 $ ./target/release/dy help
 ```
 
