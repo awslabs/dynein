@@ -131,7 +131,7 @@ fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_create_table_with_region_local_and_port_number_options() -> Result<(), Box<dyn std::error::Error>> {
     let port = 8001;
-    let table_name = "table--test_create_table";
+    let table_name = "table--test_create_table_with_region_local_and_port_number_options";
 
     // $ dy admin create table <table_name> --keys pk
     let mut c = setup_with_port(port)?;
@@ -147,7 +147,7 @@ fn test_create_table_with_region_local_and_port_number_options() -> Result<(), B
         )));
 
     // $ dy admin desc <table_name>
-    let mut c = setup()?;
+    let mut c = setup_with_port(port)?;
     let desc_cmd = c.args(&["--region", "local", "--port", &format!("{}", port), "desc", table_name]);
     desc_cmd
         .assert()
