@@ -53,7 +53,7 @@ fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
     // possible workwround would be checking if a process is running and skip `docker run` if needed.
     // To avoid this issue, I'd sleep for a while in buildspec.yml (CodeBuild configuration).
     let docker_run = docker.args(&["run",
-                                   "-p", &format!("{}:{}", port, port),
+                                   "-p", &format!("{}:8000", port),
                                    "-d", "amazon/dynamodb-local" /*, "-jar", "DynamoDBLocal.jar", "-inMemory", "-port", &format!("{}", port) */]);
     let output = docker_run
         .output()
