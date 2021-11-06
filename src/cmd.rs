@@ -39,8 +39,7 @@ pub struct Dynein {
     #[structopt(short, long, global = true)]
     pub region: Option<String>,
 
-    /// Specifies the port number when with using `--region local`.
-    /// This option has an effect only when `--region local` is used.
+    /// Specify the port number. This option has an effect only when `--region local` is used.
     #[structopt(short, long, global = true)]
     pub port: Option<u32>,
 
