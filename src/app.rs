@@ -253,7 +253,7 @@ impl Context {
             return using_port_in_config.to_owned();
         };
 
-        return 8000;
+        8000
     }
 
     pub fn effective_cache_key(&self) -> String {
