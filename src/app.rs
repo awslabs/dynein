@@ -195,7 +195,7 @@ pub struct Context {
     pub cache: Option<Cache>,
     pub overwritten_region: Option<Region>, // --region option
     pub overwritten_table_name: Option<String>, // --table option
-    pub overwritten_port: Option<u32>, // --port option
+    pub overwritten_port: Option<u32>,      // --port option
     pub output: Option<String>,
 }
 
@@ -215,8 +215,11 @@ impl Context {
         if let Some(using_region_name_in_config) =
             &self.config.to_owned().and_then(|x| x.using_region)
         {
-            return region_from_str(Some(using_region_name_in_config.to_owned()), Some(self.effective_port())) // Option<Region>
-                .expect("Region name in the config file is invalid.");
+            return region_from_str(
+                Some(using_region_name_in_config.to_owned()),
+                Some(self.effective_port()),
+            ) // Option<Region>
+            .expect("Region name in the config file is invalid.");
         };
 
         // otherwise, come down to "default region" of your environment.
@@ -247,9 +250,7 @@ impl Context {
             return ow_port.to_owned();
         };
 
-        if let Some(using_port_in_config) =
-            &self.config.to_owned().and_then(|x| x.using_port)
-        {
+        if let Some(using_port_in_config) = &self.config.to_owned().and_then(|x| x.using_port) {
             return using_port_in_config.to_owned();
         };
 

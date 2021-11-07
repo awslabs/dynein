@@ -79,7 +79,15 @@ fn cleanup_with_port(tables: Vec<&str>, port: i32) -> Result<(), Box<dyn std::er
     for table in tables {
         let mut dynein_cmd = setup()?;
         let cmd = dynein_cmd.args(&[
-            "--region", "local", "--port", &format!("{}", port), "admin", "delete", "table", "--yes", table,
+            "--region",
+            "local",
+            "--port",
+            &format!("{}", port),
+            "admin",
+            "delete",
+            "table",
+            "--yes",
+            table,
         ]);
         cmd.assert().success();
     }
@@ -129,14 +137,24 @@ fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_create_table_with_region_local_and_port_number_options() -> Result<(), Box<dyn std::error::Error>> {
+fn test_create_table_with_region_local_and_port_number_options(
+) -> Result<(), Box<dyn std::error::Error>> {
     let port = 8001;
     let table_name = "table--test_create_table_with_region_local_and_port_number_options";
 
     // $ dy admin create table <table_name> --keys pk
     let mut c = setup_with_port(port)?;
     let create_cmd = c.args(&[
-        "--region", "local", "--port", &format!("{}", port), "admin", "create", "table", table_name, "--keys", "pk",
+        "--region",
+        "local",
+        "--port",
+        &format!("{}", port),
+        "admin",
+        "create",
+        "table",
+        table_name,
+        "--keys",
+        "pk",
     ]);
     create_cmd
         .assert()
@@ -148,7 +166,14 @@ fn test_create_table_with_region_local_and_port_number_options() -> Result<(), B
 
     // $ dy admin desc <table_name>
     let mut c = setup_with_port(port)?;
-    let desc_cmd = c.args(&["--region", "local", "--port", &format!("{}", port), "desc", table_name]);
+    let desc_cmd = c.args(&[
+        "--region",
+        "local",
+        "--port",
+        &format!("{}", port),
+        "desc",
+        table_name,
+    ]);
     desc_cmd
         .assert()
         .success()
