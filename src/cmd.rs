@@ -39,6 +39,10 @@ pub struct Dynein {
     #[structopt(short, long, global = true)]
     pub region: Option<String>,
 
+    /// Specify the port number. This option has an effect only when `--region local` is used.
+    #[structopt(short, long, global = true)]
+    pub port: Option<u32>,
+
     /// Target table of the operation. You can use --table option in both top-level and subcommand-level.
     /// You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
     #[structopt(short, long, global = true)]

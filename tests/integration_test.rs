@@ -28,8 +28,11 @@ use tempfile::Builder;
 /// FYI: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html
 ///      https://hub.docker.com/r/amazon/dynamodb-local
 fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Error>> {
+    setup_with_port(8000)
+}
+
+fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
     // NOTE: setup() spins up DynamoDB Local in 8000 port as "local" region assumes it. Better to make it configurable.
-    let port = 8000;
     let mut docker = Command::new("docker");
 
     let check_cmd = docker.args(&[
@@ -50,7 +53,7 @@ fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Er
     // possible workwround would be checking if a process is running and skip `docker run` if needed.
     // To avoid this issue, I'd sleep for a while in buildspec.yml (CodeBuild configuration).
     let docker_run = docker.args(&["run",
-                                   "-p", &format!("{}:{}", port, port),
+                                   "-p", &format!("{}:8000", port),
                                    "-d", "amazon/dynamodb-local" /*, "-jar", "DynamoDBLocal.jar", "-inMemory", "-port", &format!("{}", port) */]);
     let output = docker_run
         .output()
@@ -66,6 +69,17 @@ fn cleanup(tables: Vec<&str>) -> Result<(), Box<dyn std::error::Error>> {
         let mut dynein_cmd = setup()?;
         let cmd = dynein_cmd.args(&[
             "--region", "local", "admin", "delete", "table", "--yes", table,
+        ]);
+        cmd.assert().success();
+    }
+    Ok(())
+}
+
+fn cleanup_with_port(tables: Vec<&str>, port: i32) -> Result<(), Box<dyn std::error::Error>> {
+    for table in tables {
+        let mut dynein_cmd = setup()?;
+        let cmd = dynein_cmd.args(&[
+            "--region", "local", "--port", &format!("{}", port), "admin", "delete", "table", "--yes", table,
         ]);
         cmd.assert().success();
     }
@@ -112,6 +126,38 @@ fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
         )));
 
     Ok(cleanup(vec![table_name])?)
+}
+
+#[test]
+fn test_create_table_with_region_local_and_port_number_options() -> Result<(), Box<dyn std::error::Error>> {
+    let port = 8001;
+    let table_name = "table--test_create_table_with_region_local_and_port_number_options";
+
+    // $ dy admin create table <table_name> --keys pk
+    let mut c = setup_with_port(port)?;
+    let create_cmd = c.args(&[
+        "--region", "local", "--port", &format!("{}", port), "admin", "create", "table", table_name, "--keys", "pk",
+    ]);
+    create_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "name: {}\nregion: local",
+            &table_name
+        )));
+
+    // $ dy admin desc <table_name>
+    let mut c = setup_with_port(port)?;
+    let desc_cmd = c.args(&["--region", "local", "--port", &format!("{}", port), "desc", table_name]);
+    desc_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "name: {}\nregion: local",
+            &table_name
+        )));
+
+    Ok(cleanup_with_port(vec![table_name], port)?)
 }
 
 #[test]
