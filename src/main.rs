@@ -14,17 +14,8 @@
  * limitations under the License.
  */
 
-use std::error::Error;
-
-extern crate chrono;
-extern crate env_logger;
-extern crate log;
-extern crate rusoto_core;
-extern crate rusoto_dynamodb;
-extern crate serde_json;
-extern crate serde_yaml;
-
 use log::debug;
+use std::error::Error;
 
 mod app;
 mod batch;

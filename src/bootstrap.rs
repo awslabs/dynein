@@ -31,9 +31,6 @@ use tempfile::Builder;
 
 use serde_json::Value as JsonValue;
 
-extern crate reqwest;
-extern crate tempfile;
-
 use super::app;
 use super::batch;
 use super::control;

@@ -27,7 +27,6 @@ use std::{
     time,
 };
 
-extern crate dialoguer;
 use dialoguer::{theme::ColorfulTheme, Confirm, Select};
 use tabwriter::TabWriter;
 
