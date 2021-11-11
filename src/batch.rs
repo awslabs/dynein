@@ -272,7 +272,7 @@ pub async fn convert_jsonvals_to_request_items(
         {
             item.insert(
                 attr_name.to_string(),
-                data::dispatch_jsonvalue_to_attrval(&body),
+                data::dispatch_jsonvalue_to_attrval(body),
             );
         }
 

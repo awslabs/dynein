@@ -57,8 +57,8 @@ struct GeneratedUpdateParams {
 }
 
 enum UpdateActionType {
-    SET,
-    REMOVE,
+    Set,
+    Remove,
 }
 
 #[derive(Debug)]
@@ -71,16 +71,16 @@ pub enum DyneinQueryParamsError {
 impl fmt::Display for DyneinQueryParamsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-        DyneinQueryParamsError::NoSuchIndex(idx, t) => {
-            write!(f, "No index named '{}' found on the target table '{}'. Please execute 'dy desc' command to see indexes the table has.", idx, t)
-        },
-        DyneinQueryParamsError::NoSortKeyDefined => {
-            write!(f, "You've passed --sort-key (-s) option, however the target table (or index) doesn't have sort key. Please execute 'dy desc' command to see key schema.")
-        },
-        DyneinQueryParamsError::InvalidSortKeyOption => {
-            write!(f, "--sort-key syntax is invalid. This option accepts one of the following styles: '= 123', '> 123', '>= 123', '< 123', '<= 123', 'between 10 and 99', or 'begins_with myValue'.")
-        },
-    }
+            DyneinQueryParamsError::NoSuchIndex(idx, t) => {
+                write!(f, "No index named '{}' found on the target table '{}'. Please execute 'dy desc' command to see indexes the table has.", idx, t)
+            }
+            DyneinQueryParamsError::NoSortKeyDefined => {
+                write!(f, "You've passed --sort-key (-s) option, however the target table (or index) doesn't have sort key. Please execute 'dy desc' command to see key schema.")
+            }
+            DyneinQueryParamsError::InvalidSortKeyOption => {
+                write!(f, "--sort-key syntax is invalid. This option accepts one of the following styles: '= 123', '> 123', '>= 123', '< 123', '<= 123', 'between 10 and 99', or 'begins_with myValue'.")
+            }
+        }
     }
 }
 impl Error for DyneinQueryParamsError {}
@@ -398,9 +398,9 @@ pub async fn update_item(
 
     // above logic has checked "only either one of `--set` or `--remove` exist".
     let update_params: GeneratedUpdateParams = if let Some(sx) = set_expression {
-        generate_update_expressions(UpdateActionType::SET, &sx)
+        generate_update_expressions(UpdateActionType::Set, &sx)
     } else if let Some(rx) = remove_expression {
-        generate_update_expressions(UpdateActionType::REMOVE, &rx)
+        generate_update_expressions(UpdateActionType::Remove, &rx)
     } else {
         panic!("Neither --set nor --remove is not specified, but this should not be catched here.");
     };
@@ -494,7 +494,7 @@ fn generate_update_expressions(
     let mut vals = HashMap::<String, AttributeValue>::new();
 
     match action_type {
-        UpdateActionType::SET => {
+        UpdateActionType::Set => {
             /*
             BNF style syntax of UpdateExpression SET action is below, where "function" is one of "list_append" or "if_not_exists".
                 set-action ::=
@@ -506,7 +506,7 @@ fn generate_update_expressions(
                 operand ::=
                     path | function
             */
-            check_update_expression_compatibility(&given_expression);
+            check_update_expression_compatibility(given_expression);
 
             let statements: Vec<&str> = given_expression.split(',').map(|x| x.trim()).collect();
             debug!("given_expression splitted by ',': {:?}", statements);
@@ -523,8 +523,8 @@ fn generate_update_expressions(
                     );
                     std::process::exit(1);
                 };
-                let left_hand: &str = &path_and_value[0];
-                let right_hand: &str = &path_and_value[1];
+                let left_hand: &str = path_and_value[0];
+                let right_hand: &str = path_and_value[1];
                 debug!("path: {}, value: {}", &left_hand, &right_hand);
 
                 debug!("left hand ... {:#?}", left_hand);
@@ -580,9 +580,9 @@ fn generate_update_expressions(
                 }
             }
         }
-        UpdateActionType::REMOVE => {
+        UpdateActionType::Remove => {
             // NOTE: REMOVE action for list elements is not supported and currently 'LisAtt[1]' is recognized as one token.
-            check_update_expression_compatibility(&given_expression);
+            check_update_expression_compatibility(given_expression);
             let mut returning_attributes: Vec<String> = vec![];
             let attributes: Vec<&str> = given_expression.split(',').map(|x| x.trim()).collect();
             debug!("given_expression splitted by ',': {:?}", attributes);
@@ -768,7 +768,7 @@ fn build_attrval_list(vec: &[JsonValue]) -> AttributeValue {
     let mut inside_attrvals = Vec::<AttributeValue>::new();
     for v in vec {
         debug!("this is an element of vec: {:?}", v);
-        inside_attrvals.push(dispatch_jsonvalue_to_attrval(&v));
+        inside_attrvals.push(dispatch_jsonvalue_to_attrval(v));
     }
     attrval.l = Some(inside_attrvals);
 
@@ -785,7 +785,7 @@ fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>)
     let mut mapval = HashMap::<String, AttributeValue>::new();
     for (k, v) in json_map {
         debug!("working on key '{}', and value '{:?}'", k, v);
-        mapval.insert(k.to_string(), dispatch_jsonvalue_to_attrval(&v));
+        mapval.insert(k.to_string(), dispatch_jsonvalue_to_attrval(v));
     }
     result.m = Some(mapval);
 
@@ -956,7 +956,7 @@ fn generate_query_expressions(
             append_sort_key_expression(
                 sort_key_of_target_table_or_index,
                 &expression,
-                &ske,
+                ske,
                 names,
                 vals,
             )
@@ -1158,19 +1158,15 @@ fn display_items_table(
     for mut item in items {
         let mut item_attributes = vec![];
         // First, take primary key(s) of each item.
+        let x: Option<AttributeValue> = item.remove(&ts.pk.name);
         if let Some(sk) = &ts.sk {
-            let x: Option<AttributeValue> = item.remove(&ts.pk.name);
             let y: Option<AttributeValue> = item.remove(&sk.name);
             item_attributes.extend(vec![attrval_to_cell_print(x), attrval_to_cell_print(y)]);
         } else {
-            let x: Option<AttributeValue> = item.remove(&ts.pk.name); // .expect("there should be partition key.");
             item_attributes.extend(vec![attrval_to_cell_print(x)]);
         };
 
-        if item.is_empty() {
-            // If no more attribute, i.e. this item contains primary key(s) only, join attributes and push into outer `cells` vec.
-            cells.push(item_attributes.join("\t"));
-        } else {
+        if !item.is_empty() {
             if let Some(_attributes) = selected_attributes {
                 let attrs: Vec<&str> = _attributes.split(',').map(|x| x.trim()).collect();
                 for attr in attrs {
@@ -1189,8 +1185,8 @@ fn display_items_table(
                     item_attributes.push(full);
                 }
             }
-            cells.push(item_attributes.join("\t"));
         }
+        cells.push(item_attributes.join("\t"));
     }
 
     tw.write_all((cells.join("\n") + "\n").as_bytes()).unwrap();
@@ -1316,14 +1312,14 @@ fn convert_item_to_csv_line(
 pub fn convert_to_json_vec(
     items: &[HashMap<String, AttributeValue>],
 ) -> Vec<HashMap<String, serde_json::Value>> {
-    items.iter().map(|item| convert_to_json(&item)).collect()
+    items.iter().map(|item| convert_to_json(item)).collect()
 }
 
 pub fn convert_to_json(
     item: &HashMap<String, AttributeValue>,
 ) -> HashMap<String, serde_json::Value> {
     item.iter()
-        .map(|attr| (attr.0.to_string(), attrval_to_jsonval(&attr.1)))
+        .map(|attr| (attr.0.to_string(), attrval_to_jsonval(attr.1)))
         .collect()
 }
 

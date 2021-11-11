@@ -136,7 +136,7 @@ pub async fn export(
             Some("jsonl") => {
                 let mut s: String = String::new();
                 for item in &items {
-                    s.push_str(&serde_json::to_string(&data::convert_to_json(&item))?);
+                    s.push_str(&serde_json::to_string(&data::convert_to_json(item))?);
                     s.push('\n');
                 }
                 tmp_output_file.write_all(s.as_bytes())?;
@@ -170,12 +170,12 @@ pub async fn export(
     }
 
     match format_str {
-        None | Some("json") => json_finish(f, &tmp_output_filename)?.write_all(b"\n]")?,
-        Some("json-compact") => json_finish(f, &tmp_output_filename)?.write_all(b"]")?,
+        None | Some("json") => json_finish(f, tmp_output_filename)?.write_all(b"\n]")?,
+        Some("json-compact") => json_finish(f, tmp_output_filename)?.write_all(b"]")?,
         Some("jsonl") => jsonl_finish(f, tmp_output_filename)?,
         Some("csv") => csv_finish(
             f,
-            &tmp_output_filename,
+            tmp_output_filename,
             &ts,
             attrs_to_append(&ts, &attributes),
             keys_only,
@@ -266,7 +266,7 @@ async fn overwrite_attributes_or_exit(
     ts: &app::TableSchema,
 ) -> Result<Option<String>, IOError> {
     println!("As neither --keys-only nor --attributes options are given, fetching an item to understand attributes to export...");
-    let suggested_attributes: Vec<SuggestedAttribute> = suggest_attributes(&cx, &ts).await;
+    let suggested_attributes: Vec<SuggestedAttribute> = suggest_attributes(cx, ts).await;
 
     // if at least one attribute found
     println!("Found following attributes in the first item in the table:");
@@ -343,7 +343,7 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
 fn attrs_to_append(ts: &app::TableSchema, attributes: &Option<String>) -> Option<Vec<String>> {
     attributes
         .clone()
-        .map(|ats| filter_attributes_to_append(&ts, ats))
+        .map(|ats| filter_attributes_to_append(ts, ats))
 }
 
 /// This function takes list of attributes separated by comma (e.g. "name,age,address")
@@ -404,7 +404,7 @@ fn csv_finish(
     attributes_to_append: Option<Vec<String>>,
     keys_only: bool,
 ) -> Result<fs::File, IOError> {
-    f.write_all(build_csv_header(&ts, attributes_to_append, keys_only).as_bytes())?;
+    f.write_all(build_csv_header(ts, attributes_to_append, keys_only).as_bytes())?;
     let contents = fs::read_to_string(tmp_output_filename)?;
     f.write_all(contents.as_bytes())?;
     Ok(f)
@@ -458,7 +458,7 @@ async fn write_csv_matrix(
     headers: &[&str],
 ) -> Result<(), batch::DyneinBatchError> {
     let request_items: HashMap<String, Vec<WriteRequest>> =
-        batch::csv_matrix_to_request_items(&cx, &matrix, &headers).await?;
+        batch::csv_matrix_to_request_items(cx, &matrix, headers).await?;
     batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     Ok(())
 }

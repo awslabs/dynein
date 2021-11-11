@@ -830,10 +830,10 @@ fn extract_secondary_indexes<T: IndexDesc>(
             let idx = PrintSecondaryIndex {
                 name: String::from(idx.retrieve_index_name().as_ref().unwrap()),
                 schema: PrintPrimaryKeys {
-                    pk: app::typed_key_for_schema("HASH", &ks, &attr_defs)
+                    pk: app::typed_key_for_schema("HASH", ks, attr_defs)
                         .expect("pk should exist")
                         .display(),
-                    sk: app::typed_key_for_schema("RANGE", &ks, &attr_defs).map(|k| k.display()),
+                    sk: app::typed_key_for_schema("RANGE", ks, attr_defs).map(|k| k.display()),
                 },
                 capacity: idx.extract_index_capacity(mode),
             };
