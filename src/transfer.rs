@@ -220,7 +220,7 @@ pub async fn import(
         }
         Some("jsonl") => {
             // JSON Lines can be deserialized with into_iter() as below.
-            let array_of_json_obj: StreamDeserializer<'_, StrRead, JsonValue> =
+            let array_of_json_obj: StreamDeserializer<'_, StrRead<'_>, JsonValue> =
                 Deserializer::from_str(&input_string).into_iter::<JsonValue>();
             // list_of_jsons contains deserialize results. Filter them and get only valid items.
             let array_of_valid_json_obj: Vec<JsonValue> =
