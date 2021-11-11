@@ -34,7 +34,7 @@ pub enum DyneinBatchError {
     BatchWriteError(RusotoError<BatchWriteItemError>),
 }
 impl fmt::Display for DyneinBatchError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DyneinBatchError::LoadData(ref e) => e.fmt(f),
             DyneinBatchError::PraseJSON(ref e) => e.fmt(f),

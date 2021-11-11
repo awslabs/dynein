@@ -90,7 +90,7 @@ pub enum KeyType {
 
 /// implement Display for KeyType to simply print a single letter "S", "N", or "B".
 impl Display for KeyType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
@@ -115,7 +115,7 @@ impl std::error::Error for ParseKeyTypeError {
 }
 
 impl Display for ParseKeyTypeError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
         write!(f, "{}", self.message)
     }
 }
@@ -298,7 +298,7 @@ pub enum DyneinConfigError {
 }
 
 impl fmt::Display for DyneinConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DyneinConfigError::IO(ref e) => e.fmt(f),
             DyneinConfigError::YAML(ref e) => e.fmt(f),

@@ -31,9 +31,6 @@ use tempfile::Builder;
 
 use serde_json::Value as JsonValue;
 
-extern crate reqwest;
-extern crate tempfile;
-
 use super::app;
 use super::batch;
 use super::control;
@@ -52,7 +49,7 @@ pub enum DyneinBootstrapError {
     BatchError(RusotoError<BatchWriteItemError>),
 }
 impl fmt::Display for DyneinBootstrapError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DyneinBootstrapError::LoadData(ref e) => e.fmt(f),
             DyneinBootstrapError::PraseJSON(ref e) => e.fmt(f),
@@ -374,7 +371,7 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
     debug!("Opened the zip archive File just written: {:?}", zarchive);
 
     for i in 0..zarchive.len() {
-        let mut f: zip::read::ZipFile = zarchive.by_index(i)?;
+        let mut f: zip::read::ZipFile<'_> = zarchive.by_index(i)?;
         debug!("target ZipFile name: {}", f.name());
         let unzipped_fpath = tmpdir.path().join(f.name());
         debug!(

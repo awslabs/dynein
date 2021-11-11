@@ -23,8 +23,6 @@ use std::{
     vec::Vec,
 };
 
-extern crate regex;
-
 use log::{debug, error};
 use regex::Regex;
 use rusoto_dynamodb::*;
