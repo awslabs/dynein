@@ -71,16 +71,16 @@ pub enum DyneinQueryParamsError {
 impl fmt::Display for DyneinQueryParamsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-        DyneinQueryParamsError::NoSuchIndex(idx, t) => {
-            write!(f, "No index named '{}' found on the target table '{}'. Please execute 'dy desc' command to see indexes the table has.", idx, t)
-        },
-        DyneinQueryParamsError::NoSortKeyDefined => {
-            write!(f, "You've passed --sort-key (-s) option, however the target table (or index) doesn't have sort key. Please execute 'dy desc' command to see key schema.")
-        },
-        DyneinQueryParamsError::InvalidSortKeyOption => {
-            write!(f, "--sort-key syntax is invalid. This option accepts one of the following styles: '= 123', '> 123', '>= 123', '< 123', '<= 123', 'between 10 and 99', or 'begins_with myValue'.")
-        },
-    }
+            DyneinQueryParamsError::NoSuchIndex(idx, t) => {
+                write!(f, "No index named '{}' found on the target table '{}'. Please execute 'dy desc' command to see indexes the table has.", idx, t)
+            }
+            DyneinQueryParamsError::NoSortKeyDefined => {
+                write!(f, "You've passed --sort-key (-s) option, however the target table (or index) doesn't have sort key. Please execute 'dy desc' command to see key schema.")
+            }
+            DyneinQueryParamsError::InvalidSortKeyOption => {
+                write!(f, "--sort-key syntax is invalid. This option accepts one of the following styles: '= 123', '> 123', '>= 123', '< 123', '<= 123', 'between 10 and 99', or 'begins_with myValue'.")
+            }
+        }
     }
 }
 impl Error for DyneinQueryParamsError {}
