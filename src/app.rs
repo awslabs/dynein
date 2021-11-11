@@ -144,8 +144,8 @@ impl FromStr for KeyType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum IndexType {
-    GSI,
-    LSI,
+    Gsi,
+    Lsi,
 }
 
 pub enum Messages {
@@ -293,7 +293,7 @@ impl Context {
 #[derive(Debug)]
 pub enum DyneinConfigError {
     IO(IOError),
-    YAML(SerdeYAMLError),
+    Yaml(SerdeYAMLError),
     HomeDir,
 }
 
@@ -301,7 +301,7 @@ impl fmt::Display for DyneinConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DyneinConfigError::IO(ref e) => e.fmt(f),
-            DyneinConfigError::YAML(ref e) => e.fmt(f),
+            DyneinConfigError::Yaml(ref e) => e.fmt(f),
             DyneinConfigError::HomeDir => write!(f, "failed to find Home directory"),
         }
     }
@@ -313,7 +313,7 @@ impl error::Error for DyneinConfigError {
             // The cause is the underlying implementation error type. Is implicitly cast to the trait object `&error::Error`.
             // This works because the underlying type already implements the `Error` trait.
             DyneinConfigError::IO(ref e) => Some(e),
-            DyneinConfigError::YAML(ref e) => Some(e),
+            DyneinConfigError::Yaml(ref e) => Some(e),
             DyneinConfigError::HomeDir => None,
         }
     }
@@ -328,7 +328,7 @@ impl From<IOError> for DyneinConfigError {
 }
 impl From<SerdeYAMLError> for DyneinConfigError {
     fn from(e: SerdeYAMLError) -> DyneinConfigError {
-        DyneinConfigError::YAML(e)
+        DyneinConfigError::Yaml(e)
     }
 }
 
@@ -338,13 +338,10 @@ Public functions
 
 // Receives given --region option string, including "local", return Region struct.
 pub fn region_from_str(s: Option<String>, p: Option<u32>) -> Option<Region> {
-    let port = match p {
-        Some(v) => v,
-        None => 8000,
-    };
+    let port = p.unwrap_or(8000);
     match s.as_deref() {
         Some("local") => Some(region_dynamodb_local(port)),
-        Some(x) => Region::from_str(&x).ok(), // convert Result<T, E> into Option<T>
+        Some(x) => Region::from_str(x).ok(), // convert Result<T, E> into Option<T>
         None => None,
     }
 }
@@ -590,7 +587,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
         for gsi in gsis {
             indexes.push(IndexSchema {
                 name: gsi.index_name.unwrap(),
-                kind: IndexType::GSI,
+                kind: IndexType::Gsi,
                 pk: typed_key_for_schema("HASH", &gsi.key_schema.clone().unwrap(), attr_defs)
                     .expect("pk should exist"),
                 sk: typed_key_for_schema("RANGE", &gsi.key_schema.unwrap(), attr_defs),
@@ -602,7 +599,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
         for lsi in lsis {
             indexes.push(IndexSchema {
                 name: lsi.index_name.unwrap(),
-                kind: IndexType::LSI,
+                kind: IndexType::Lsi,
                 pk: typed_key_for_schema("HASH", &lsi.key_schema.clone().unwrap(), attr_defs)
                     .expect("pk should exist"),
                 sk: typed_key_for_schema("RANGE", &lsi.key_schema.unwrap(), attr_defs),
@@ -707,7 +704,7 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
     )?;
 
     // save target table info into cache.
-    insert_to_table_cache(&cx, desc)?;
+    insert_to_table_cache(cx, desc)?;
 
     Ok(())
 }

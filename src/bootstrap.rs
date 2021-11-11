@@ -137,7 +137,6 @@ Private functions
 async fn launch_movie_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
-
 Bootstrapping - dynein will creates 'Movie' table used in public tutorials:
 e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.NodeJs.02.html
      https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Ruby.02.html
@@ -228,7 +227,6 @@ e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingSta
 async fn launch_default_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
-
 Bootstrapping - dynein will creates 4 sample tables defined here:
 https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleTables.html
 
