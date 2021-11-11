@@ -163,32 +163,38 @@ pub async fn scan_api(
     })
 }
 
+pub struct QueryParams {
+    pub pval: String,
+    pub sort_key_expression: Option<String>,
+    pub index: Option<String>,
+    pub consistent_read: bool,
+    pub descending: bool,
+    pub attributes: Option<String>,
+    pub keys_only: bool,
+}
+
 /// This function calls Query API and return mutiple items. By default it uses 'table' output format.
 /// Partition key is required. Optionally you can pass key condition expression to search more specific set of items using sort key.
 /// References:
 /// - https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html#Query.KeyConditionExpressions
 /// - https://aws.amazon.com/blogs/database/using-sort-keys-to-organize-data-in-amazon-dynamodb/
-pub async fn query(
-    cx: app::Context,
-    pval: String,
-    sort_key_expression: Option<String>,
-    index: Option<String>,
-    consistent_read: bool,
-    attributes: &Option<String>,
-    keys_only: bool,
-) {
+pub async fn query(cx: app::Context, params: QueryParams) {
     debug!("context: {:#?}", &cx);
     let ts: app::TableSchema = app::table_schema(&cx).await;
 
-    debug!("For table '{}' (index '{:?}'), generating KeyConditionExpression using sort_key_expression: '{:?}'", &ts.name, &index, &sort_key_expression);
-    let query_params: GeneratedQueryParams =
-        match generate_query_expressions(&ts, &pval, &sort_key_expression, &index) {
-            Ok(qp) => qp,
-            Err(e) => {
-                error!("{}", e.to_string());
-                std::process::exit(1);
-            }
-        };
+    debug!("For table '{}' (index '{:?}'), generating KeyConditionExpression using sort_key_expression: '{:?}'", &ts.name, &params.index, &params.sort_key_expression);
+    let query_params: GeneratedQueryParams = match generate_query_expressions(
+        &ts,
+        &params.pval,
+        &params.sort_key_expression,
+        &params.index,
+    ) {
+        Ok(qp) => qp,
+        Err(e) => {
+            error!("{}", e.to_string());
+            std::process::exit(1);
+        }
+    };
     debug!(
         "Generated QueryParams for the table '{}' is: {:#?}",
         &ts.name, &query_params
@@ -197,11 +203,12 @@ pub async fn query(
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: QueryInput = QueryInput {
         table_name: ts.name.to_string(),
-        index_name: index,
+        index_name: params.index,
         key_condition_expression: query_params.exp,
         expression_attribute_names: query_params.names,
         expression_attribute_values: query_params.vals,
-        consistent_read: Some(consistent_read),
+        consistent_read: Some(params.consistent_read),
+        scan_index_forward: params.descending.then(|| false),
         ..Default::default()
     };
     debug!("Request: {:#?}", req);
@@ -211,7 +218,9 @@ pub async fn query(
             match res.items {
                 None => panic!("This message should not be shown"), // as Query returns 'Some([])' if there's no item to return.
                 Some(items) => match cx.output.as_deref() {
-                    None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
+                    None | Some("table") => {
+                        display_items_table(items, &ts, &params.attributes, params.keys_only)
+                    }
                     Some("json") => println!(
                         "{}",
                         serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()

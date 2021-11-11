@@ -243,6 +243,61 @@ fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
     Ok(cleanup(vec![table_name])?)
 }
 
+fn prepare_pk_sk_table(table_name: &&str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut c = setup()?;
+    c.args(&[
+        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk,S", "sk,N",
+    ])
+    .output()?;
+    let mut c = setup()?;
+    c.args(&[
+        "--region", "local", "--table", table_name, "put", "abc", "1",
+    ])
+    .output()?;
+    let mut c = setup()?;
+    c.args(&[
+        "--region", "local", "--table", table_name, "put", "abc", "2",
+    ])
+    .output()?;
+    Ok(())
+}
+
+#[test]
+fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
+    let table_name = "table--test_simple_query";
+
+    prepare_pk_sk_table(&table_name)?;
+    let mut c = setup()?;
+    let query_cmd = c.args(&["--region", "local", "--table", table_name, "query", "abc"]);
+    query_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "pk   sk  attributes\nabc  1\nabc  2",
+        ));
+
+    Ok(cleanup(vec![table_name])?)
+}
+
+#[test]
+fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
+    let table_name = "table--test_desc_simple_query";
+
+    prepare_pk_sk_table(&table_name)?;
+    let mut c = setup()?;
+    let query_cmd = c.args(&[
+        "--region", "local", "--table", table_name, "query", "abc", "-d",
+    ]);
+    query_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "pk   sk  attributes\nabc  2\nabc  1",
+        ));
+
+    Ok(cleanup(vec![table_name])?)
+}
+
 #[test]
 fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_batch_write";
