@@ -65,29 +65,32 @@ dynein - DynamoDB CLI
 
 ## Method 1. Download binaries
 
-macOS
+You can download binaries of a specific version from [the releases page](https://github.com/awslabs/dynein/releases). For example, below instructions are example comamnds to download the latest version in each platform.
+
+### macOS
 
 ```
-$ curl -O -L https://github.com/awslabs/dynein/releases/latest/download/dynein-darwin.tar.gz
-$ tar xzvf dynein-darwin.tar.gz
+$ curl -O -L https://github.com/awslabs/dynein/releases/latest/download/dynein-macos.tar.gz
+$ tar xzvf dynein-macos.tar.gz
 $ mv dy /usr/local/bin/
-$ chmod +x /usr/local/bin/dy
 $ dy --help
 ```
 
-Linux x86 (64-bit)
+Currently, the above binary is automatically built on intel mac as [the GitHub Action doesn't support Apple M1 (ARM) environment yet](https://github.com/actions/virtual-environments/issues/2187).
+
+### Linux (x86-64)
 
 ```
 $ curl -O -L https://github.com/awslabs/dynein/releases/latest/download/dynein-linux.tar.gz
 $ tar xzvf dynein-linux.tar.gz
 $ sudo mv dy /usr/local/bin/
-$ chmod +x /usr/local/bin/dy
 $ dy --help
 ```
 
-## Method 2. Homebrew (MacOS)
 
-(currently not available)
+## Method 2. Homebrew (macOS)
+
+Currently not available. Please use the Method 1 above.
 
 ## Method 3. Building from source
 
@@ -97,7 +100,7 @@ dynein is written in Rust, so you can build and install dynein with Cargo. To bu
 $ git clone [[this_git_repository_url]]
 $ cd dynein
 $ cargo install --locked --path .
-$ ./target/release/dy help
+$ ./target/release/dy --help
 ```
 
 You can move the binary file named "dy" to anywhere under your `$PATH`.
