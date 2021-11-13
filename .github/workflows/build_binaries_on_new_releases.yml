@@ -1,0 +1,76 @@
+name: Build binaries on new releases
+on:
+  # the workflow starts on new release publised https://docs.github.com/en/actions/learn-github-actions/events-that-trigger-workflows#release
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build_dynein_binary:
+    runs-on: ${{ matrix.os }}
+    env:
+      RUST_BACKTRACE: 1 # Dump backtrace on panic
+    strategy:
+      fail-fast: false
+      matrix:
+        # NOTE: Apple M1 (ARM) environment in GitHub action is not yet supported: https://github.com/actions/virtual-environments/issues/2187
+        name: [linux, linux-arm, macos, windows]
+        include:
+        - name: linux
+          os: ubuntu-latest
+          target: x86_64-unknown-linux-musl
+        - name: linux-arm
+          os: ubuntu-latest
+          target: arm-unknown-linux-gnueabihf
+        - name: macos
+          os: macos-latest
+          target: x86_64-apple-darwin
+        - name: windows
+          os: windows-2019
+          target: x86_64-pc-windows-msvc
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        default: true
+        override: true # override toolchain from "rust-toolchain" file
+        target: ${{ matrix.target }}
+
+    # cargo build on each OS generates a binary named "dy" under ./target/release/ directory.
+    - run: cargo build --verbose --release
+
+    - name: Strip the binary to reduce its size (linux and macos)
+      if: matrix.name == 'linux' || matrix.name == 'macos'
+      run: strip ./target/release/dy
+    - name: Archive the binary for publishing on release assets
+      shell: bash
+      run: |
+        if [ "${{ matrix.os }}" = "windows-2019" ]; then
+          7z a -tzip dynein-${{ matrix.name }}.zip ./target/release/dy.exe
+        else
+          tar -C ./target/release/ -cvf dynein-${{ matrix.name }}.tar.gz dy
+        fi
+    - name: Generate SHA256 checksum
+      if: matrix.name != 'windows'
+      run: |
+        if [ "${{ matrix.os }}" = "macos-latest" ]; then
+          shasum -a 256 dynein-${{ matrix.name }}.tar.gz > dynein-${{ matrix.name }}.tar.gz.sha256
+        elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+          sha256sum dynein-${{ matrix.name }}.tar.gz > dynein-${{ matrix.name }}.tar.gz.sha256
+        else
+          echo "matrix.os: ${{ matrix.os }} is not handled."
+        fi
+
+    - name: Display current files (linux, linux-arn, and macos)
+      if: matrix.name == 'linux' || matrix.name == 'linux-arn' || matrix.name == 'macos'
+      run: ls -lrt && ls -lrt ./target/ && ls -lrt ./target/release/
+
+    - name: Create a release with the binary file
+      uses: softprops/action-gh-release@v1
+      # this uploading step to the release asseets works only when the target ref has tagged starts with "v" https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+      if: startsWith( github.ref, 'refs/tags/v' )
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: dynein-*
