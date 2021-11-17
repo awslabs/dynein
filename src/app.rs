@@ -266,6 +266,14 @@ impl Context {
     }
 
     pub fn cached_using_table_schema(&self) -> Option<TableSchema> {
+        // return None if table name is not specified in both config and option.
+        if self.overwritten_table_name == None {
+            match self.config.to_owned() {
+                Some(c) => c.using_table?,
+                None => return None,
+            };
+        }
+
         let cached_tables: HashMap<String, TableSchema> =
             match self.cache.to_owned().and_then(|c| c.tables) {
                 Some(cts) => cts,
