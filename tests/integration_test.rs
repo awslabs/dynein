@@ -19,54 +19,106 @@ use predicates::prelude::*; // Used for writing assertions
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
+use once_cell::sync::Lazy;
+use regex::bytes::Regex;
+use rusoto_core::Region;
+use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::fs::File;
 use std::io::{self, Write}; // Used when check results by printing to stdout
+use std::sync::Mutex;
+use std::time::Duration;
+use tokio::time::delay_for;
 
 use tempfile::Builder;
 
 /// Integration tests would go with DynamoDB Local, so before running them setup() starts up DynamoDB Local with Docker.
 /// FYI: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html
 ///      https://hub.docker.com/r/amazon/dynamodb-local
-fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Error>> {
-    setup_with_port(8000)
+async fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Error>> {
+    setup_with_port(8000).await
 }
 
-fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
-    // NOTE: setup() spins up DynamoDB Local in 8000 port as "local" region assumes it. Better to make it configurable.
-    let mut docker = Command::new("docker");
+// We use std::sync::Mutex instead of tokio::sync::Mutex, because mutex must be poisoned after setup failure.
+static SETUP_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
-    let check_cmd = docker.args(&[
+/// Check existence of docker process for dynamodb-local
+async fn check_dynamodb_local_running(port: u16) -> bool {
+    let mut docker_for_check = Command::new("docker");
+
+    let check_cmd = docker_for_check.args(&[
         "ps",
-        "-q",
-        "--filter",
-        &format!("expose={}", port),
+        "--format",
+        "{{.Ports}}",
         "--filter",
         "ancestor=amazon/dynamodb-local",
     ]);
-    let check_out = check_cmd.output().expect("failed to execut check cmd");
-    if check_out.stdout.len() != 0 {
-        println!("DynamoDB Local is already running.");
+    let check_out = check_cmd.output().expect("failed to execute check cmd");
+    let reg_str = format!(r"(?m):{}->\d+/tcp$", port);
+    let port_re = Regex::new(&reg_str).unwrap();
+    if !check_out.status.success() {
+        panic!("failed to execute docker ps command")
+    }
+    if port_re.is_match(&check_out.stdout) {
+        true
+    } else {
+        false
+    }
+}
+
+async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
+    // Check the current process at first to allow multiple threads to run tests concurrently
+    if check_dynamodb_local_running(port as u16).await {
         return Ok(Command::cargo_bin("dy")?);
     };
 
-    // As docker run wouldn't wait for DynamoDB Local process to launch & accept API, first test would fail.
-    // possible workwround would be checking if a process is running and skip `docker run` if needed.
-    // To avoid this issue, I'd sleep for a while in buildspec.yml (CodeBuild configuration).
-    let docker_run = docker.args(&["run",
-                                   "-p", &format!("{}:8000", port),
-                                   "-d", "amazon/dynamodb-local" /*, "-jar", "DynamoDBLocal.jar", "-inMemory", "-port", &format!("{}", port) */]);
+    // To avoid unnecessary docker container creation, setup docker sequentially
+    let _lock = SETUP_MUTEX.lock();
+
+    // Recheck whether another thread already started the dynamodb-local
+    if check_dynamodb_local_running(port as u16).await {
+        return Ok(Command::cargo_bin("dy")?);
+    }
+
+    let mut docker_for_run = Command::new("docker");
+    let docker_run = docker_for_run.args(&[
+        "run",
+        "-p",
+        &format!("{}:8000", port),
+        "-d",
+        "amazon/dynamodb-local",
+    ]);
     let output = docker_run
         .output()
         .expect("failed to running Docker image amazon/dynamodb-local in setup().");
+    if !output.status.success() {
+        panic!("failed to execute docker run command")
+    }
     print!("DynamoDB Local is up as a container: ");
     io::stdout().write_all(&output.stdout).unwrap();
+    io::stderr().write_all(&output.stderr).unwrap();
+
+    // Wait dynamodb-local
+    let health_check_url = format!("http://localhost:{}", port);
+    let ddb = DynamoDbClient::new(Region::Custom {
+        name: "local".to_owned(),
+        endpoint: health_check_url,
+    });
+    loop {
+        if let Ok(_result) = ddb.list_tables(Default::default()).await {
+            println!("ListTables API succeeded.");
+            break;
+        } else {
+            println!("Couldn't connect. Retry after 3 seconds.");
+            delay_for(Duration::from_secs(3)).await;
+        }
+    }
 
     Ok(Command::cargo_bin("dy")?)
 }
 
-fn cleanup(tables: Vec<&str>) -> Result<(), Box<dyn std::error::Error>> {
+async fn cleanup(tables: Vec<&str>) -> Result<(), Box<dyn std::error::Error>> {
     for table in tables {
-        let mut dynein_cmd = setup()?;
+        let mut dynein_cmd = setup().await?;
         let cmd = dynein_cmd.args(&[
             "--region", "local", "admin", "delete", "table", "--yes", table,
         ]);
@@ -75,9 +127,9 @@ fn cleanup(tables: Vec<&str>) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn cleanup_with_port(tables: Vec<&str>, port: i32) -> Result<(), Box<dyn std::error::Error>> {
+async fn cleanup_with_port(tables: Vec<&str>, port: i32) -> Result<(), Box<dyn std::error::Error>> {
     for table in tables {
-        let mut dynein_cmd = setup()?;
+        let mut dynein_cmd = setup().await?;
         let cmd = dynein_cmd.args(&[
             "--region",
             "local",
@@ -94,9 +146,9 @@ fn cleanup_with_port(tables: Vec<&str>, port: i32) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-#[test]
-fn test_help() -> Result<(), Box<dyn std::error::Error>> {
-    setup()?;
+#[tokio::test]
+async fn test_help() -> Result<(), Box<dyn std::error::Error>> {
+    setup().await?;
     let mut dynein_cmd = Command::cargo_bin("dy")?;
     let cmd = dynein_cmd.arg("--help");
     cmd.assert()
@@ -105,12 +157,12 @@ fn test_help() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[test]
-fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_create_table";
 
     // $ dy admin create table <table_name> --keys pk
-    let mut c = setup()?;
+    let mut c = setup().await?;
     let create_cmd = c.args(&[
         "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ]);
@@ -123,7 +175,7 @@ fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
         )));
 
     // $ dy admin desc <table_name>
-    let mut c = setup()?;
+    let mut c = setup().await?;
     let desc_cmd = c.args(&["--region", "local", "desc", table_name]);
     desc_cmd
         .assert()
@@ -133,17 +185,17 @@ fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
             &table_name
         )));
 
-    Ok(cleanup(vec![table_name])?)
+    Ok(cleanup(vec![table_name]).await?)
 }
 
-#[test]
-fn test_create_table_with_region_local_and_port_number_options(
+#[tokio::test]
+async fn test_create_table_with_region_local_and_port_number_options(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let port = 8001;
     let table_name = "table--test_create_table_with_region_local_and_port_number_options";
 
     // $ dy admin create table <table_name> --keys pk
-    let mut c = setup_with_port(port)?;
+    let mut c = setup_with_port(port).await?;
     let create_cmd = c.args(&[
         "--region",
         "local",
@@ -165,7 +217,7 @@ fn test_create_table_with_region_local_and_port_number_options(
         )));
 
     // $ dy admin desc <table_name>
-    let mut c = setup_with_port(port)?;
+    let mut c = setup_with_port(port).await?;
     let desc_cmd = c.args(&[
         "--region",
         "local",
@@ -182,12 +234,12 @@ fn test_create_table_with_region_local_and_port_number_options(
             &table_name
         )));
 
-    Ok(cleanup_with_port(vec![table_name], port)?)
+    Ok(cleanup_with_port(vec![table_name], port).await?)
 }
 
-#[test]
-fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = setup()?;
+#[tokio::test]
+async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
+    let mut c = setup().await?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -201,60 +253,60 @@ fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[test]
-fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_scan_blank_table";
 
-    let mut c = setup()?;
+    let mut c = setup().await?;
     c.args(&[
         "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ])
     .output()?;
-    let mut c = setup()?;
+    let mut c = setup().await?;
     let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("No item to show"));
 
-    Ok(cleanup(vec![table_name])?)
+    Ok(cleanup(vec![table_name]).await?)
 }
 
-#[test]
-fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_simple_scan";
 
-    let mut c = setup()?;
+    let mut c = setup().await?;
     c.args(&[
         "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ])
     .output()?;
-    let mut c = setup()?;
+    let mut c = setup().await?;
     c.args(&["--region", "local", "--table", table_name, "put", "abc"])
         .output()?;
 
-    let mut c = setup()?;
+    let mut c = setup().await?;
     let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("pk  attributes\nabc"));
 
-    Ok(cleanup(vec![table_name])?)
+    Ok(cleanup(vec![table_name]).await?)
 }
 
-fn prepare_pk_sk_table(table_name: &&str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = setup()?;
+async fn prepare_pk_sk_table(table_name: &&str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut c = setup().await?;
     c.args(&[
         "--region", "local", "admin", "create", "table", table_name, "--keys", "pk,S", "sk,N",
     ])
     .output()?;
-    let mut c = setup()?;
+    let mut c = setup().await?;
     c.args(&[
         "--region", "local", "--table", table_name, "put", "abc", "1",
     ])
     .output()?;
-    let mut c = setup()?;
+    let mut c = setup().await?;
     c.args(&[
         "--region", "local", "--table", table_name, "put", "abc", "2",
     ])
@@ -262,12 +314,12 @@ fn prepare_pk_sk_table(table_name: &&str) -> Result<(), Box<dyn std::error::Erro
     Ok(())
 }
 
-#[test]
-fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_simple_query";
 
-    prepare_pk_sk_table(&table_name)?;
-    let mut c = setup()?;
+    prepare_pk_sk_table(&table_name).await?;
+    let mut c = setup().await?;
     let query_cmd = c.args(&["--region", "local", "--table", table_name, "query", "abc"]);
     query_cmd
         .assert()
@@ -276,15 +328,15 @@ fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
             "pk   sk  attributes\nabc  1\nabc  2",
         ));
 
-    Ok(cleanup(vec![table_name])?)
+    Ok(cleanup(vec![table_name]).await?)
 }
 
-#[test]
-fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_desc_simple_query";
 
-    prepare_pk_sk_table(&table_name)?;
-    let mut c = setup()?;
+    prepare_pk_sk_table(&table_name).await?;
+    let mut c = setup().await?;
     let query_cmd = c.args(&[
         "--region", "local", "--table", table_name, "query", "abc", "-d",
     ]);
@@ -295,14 +347,14 @@ fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
             "pk   sk  attributes\nabc  2\nabc  1",
         ));
 
-    Ok(cleanup(vec![table_name])?)
+    Ok(cleanup(vec![table_name]).await?)
 }
 
-#[test]
-fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_batch_write";
 
-    let mut c = setup()?;
+    let mut c = setup().await?;
     c.args(&[
         "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ])
@@ -349,7 +401,7 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         ]
     }
     ")?;
-    let mut c = setup()?;
+    let mut c = setup().await?;
     c.args(&[
         "--region",
         "local",
@@ -361,7 +413,7 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     ])
     .output()?;
 
-    let mut c = setup()?;
+    let mut c = setup().await?;
     let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
     scan_cmd
         .assert()
@@ -406,7 +458,7 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
           "ISBN": "111-1111111111"
         }
     */
-    let mut c = setup()?;
+    let mut c = setup().await?;
     let get_cmd = c.args(&["--region", "local", "--table", table_name, "get", "ichi"]);
     let output = get_cmd.output()?.stdout;
 
@@ -416,17 +468,17 @@ fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         predicate::str::is_match("\"Dimensions\":")?.eval(String::from_utf8(output)?.as_str())
     );
 
-    Ok(cleanup(vec![table_name])?)
+    Ok(cleanup(vec![table_name]).await?)
 }
 
-#[test]
-fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
     use std::io::{Seek, SeekFrom};
 
     let table_name = "table--test_shell_mode";
 
     // $ dy admin create table <table_name> --keys pk
-    let mut c = setup()?;
+    let mut c = setup().await?;
     let shell_session = c.args(&["--region", "local", "--shell"]);
     let mut tmpfile = Builder::new().tempfile()?.into_file();
     writeln!(tmpfile, "admin create table {} --keys pk", table_name)?;
@@ -442,5 +494,5 @@ fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
             &table_name
         )));
 
-    Ok(cleanup(vec![table_name])?)
+    Ok(cleanup(vec![table_name]).await?)
 }
