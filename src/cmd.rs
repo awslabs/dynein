@@ -191,6 +191,11 @@ pub enum Sub {
         #[structopt(long)]
         keys_only: bool,
 
+        /// Results of query are always sorted by the sort key value. By default, the sort order is ascending.
+        /// Specify --descending to traverse descending order.
+        #[structopt(short, long)]
+        descending: bool,
+
         /// Switch output format.
         #[structopt(short, long, possible_values = &["table", "json", "raw"])]
         output: Option<String>,

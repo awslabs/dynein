@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+use crate::data::QueryParams;
 use log::debug;
 use std::error::Error;
 
@@ -106,17 +107,21 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             attributes,
             consistent_read,
             keys_only,
+            descending,
             output,
         } => {
             context.output = output;
             data::query(
                 context.clone(),
-                pval,
-                sort_key_expression,
-                index,
-                consistent_read,
-                &attributes,
-                keys_only,
+                QueryParams {
+                    pval,
+                    sort_key_expression,
+                    index,
+                    consistent_read,
+                    descending,
+                    attributes,
+                    keys_only,
+                },
             )
             .await
         }
