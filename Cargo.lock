@@ -363,6 +363,7 @@ dependencies = [
  "futures",
  "glob",
  "log",
+ "once_cell",
  "predicates 1.0.8",
  "regex",
  "reqwest",
