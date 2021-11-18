@@ -42,7 +42,7 @@ async fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::err
 static SETUP_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
 
 /// Check existence of docker process for dynamodb-local
-async fn check_dynamodb_local_running(port: u16) -> bool {
+fn check_dynamodb_local_running(port: u16) -> bool {
     let mut docker_for_check = Command::new("docker");
 
     let check_cmd = docker_for_check.args(&[
@@ -67,7 +67,7 @@ async fn check_dynamodb_local_running(port: u16) -> bool {
 
 async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
     // Check the current process at first to allow multiple threads to run tests concurrently
-    if check_dynamodb_local_running(port as u16).await {
+    if check_dynamodb_local_running(port as u16) {
         return Ok(Command::cargo_bin("dy")?);
     };
 
@@ -75,7 +75,7 @@ async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error
     let _lock = SETUP_MUTEX.lock();
 
     // Recheck whether another thread already started the dynamodb-local
-    if check_dynamodb_local_running(port as u16).await {
+    if check_dynamodb_local_running(port as u16) {
         return Ok(Command::cargo_bin("dy")?);
     }
 
