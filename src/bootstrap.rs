@@ -134,7 +134,7 @@ pub async fn launch_sample(
 Private functions
 ================================================= */
 
-async fn launch_movie_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
+async fn launch_movie_sample(mut cx: app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
 Bootstrapping - dynein will creates 'Movie' table used in public tutorials:
@@ -148,7 +148,7 @@ e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingSta
     );
 
     // Step 1. Create tables
-    prepare_table(&cx, "Movie", vec!["year,N", "title,S"].as_ref()).await;
+    prepare_table(&mut cx, "Movie", vec!["year,N", "title,S"].as_ref()).await;
 
     // Step 2. Download & unzip data. The sampledata.zip contains 4 files.
     let url =
@@ -219,12 +219,12 @@ e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingSta
         batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     } // 'whole loop
     request_items.insert("Movie".to_string(), write_requests);
-    batch::batch_write_untill_processed(cx.clone(), request_items).await?;
+    batch::batch_write_untill_processed(cx, request_items).await?;
 
     Ok(())
 }
 
-async fn launch_default_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
+async fn launch_default_sample(mut cx: app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
 Bootstrapping - dynein will creates 4 sample tables defined here:
@@ -255,7 +255,7 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
 
     // Step 1. Create tables
     for (table_name, keys) in &tables {
-        prepare_table(&cx, table_name, keys).await
+        prepare_table(&mut cx, table_name, keys).await
     }
 
     /* Step 2. Download & unzip data. The sampledata.zip contains 4 files.
@@ -320,9 +320,9 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
     Ok(())
 }
 
-async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
+async fn prepare_table(cx: &mut app::Context, table_name: &str, keys: &[&str]) {
     match control::create_table_api(
-        cx.clone(),
+        cx,
         table_name.to_string(),
         keys.iter().map(|k| (*k).to_string()).collect(),
     )
