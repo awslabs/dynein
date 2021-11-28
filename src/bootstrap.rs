@@ -95,7 +95,7 @@ pub fn list_samples() {
 }
 
 pub async fn launch_sample(
-    cx: app::Context,
+    cx: &app::Context,
     sample: Option<String>,
 ) -> Result<(), DyneinBootstrapError> {
     match sample {
@@ -118,7 +118,7 @@ pub async fn launch_sample(
 Private functions
 ================================================= */
 
-async fn launch_movie_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
+async fn launch_movie_sample(cx: &app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
 Bootstrapping - dynein will create 'Movie' table with official 'Movie' sample data:
@@ -132,10 +132,10 @@ see https://github.com/awslabs/dynein#working-with-dynamodb-items for detail
     );
 
     // Step 1. create tables
-    prepare_table(&cx, "Movie", vec!["year,N", "title,S"].as_ref()).await;
+    prepare_table(cx, "Movie", vec!["year,N", "title,S"].as_ref()).await;
 
     // Step 2. wait tables to be created and in ACTIVE status
-    wait_table_creation(&cx, vec!["Movie"]).await;
+    wait_table_creation(cx, vec!["Movie"]).await;
 
     // Step 3. decompress data
     let compressed_data = include_bytes!("./resources/bootstrap/moviedata.json.br");
@@ -199,15 +199,15 @@ see https://github.com/awslabs/dynein#working-with-dynamodb-items for detail
             }
         } // 'batch loop
         request_items.insert("Movie".to_string(), write_requests);
-        batch::batch_write_untill_processed(cx.clone(), request_items).await?;
+        batch::batch_write_until_processed(cx, request_items).await?;
     } // 'whole loop
     request_items.insert("Movie".to_string(), write_requests);
-    batch::batch_write_untill_processed(cx.clone(), request_items).await?;
+    batch::batch_write_until_processed(cx, request_items).await?;
 
     Ok(())
 }
 
-async fn launch_default_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
+async fn launch_default_sample(cx: &app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
 Bootstrapping - dynein will create 4 sample tables defined here:
@@ -238,12 +238,12 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
 
     // Step 1. Create tables
     for (table_name, keys) in &tables {
-        prepare_table(&cx, table_name, keys).await
+        prepare_table(cx, table_name, keys).await
     }
 
     // Step 2. wait tables to be created and in ACTIVE status
-    let creating_table_names: Vec<&str> = tables.clone().iter().map(|pair| pair.0).collect();
-    wait_table_creation(&cx, creating_table_names).await;
+    let creating_table_names: Vec<&str> = tables.iter().map(|pair| pair.0).collect();
+    wait_table_creation(cx, creating_table_names).await;
 
     println!("Tables are ready and retrieved sample data locally. Now start writing data into samle tables...");
     for (table_name, _) in &tables {
@@ -261,7 +261,7 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
         decompressor.read_to_string(&mut content)?;
         // Step 4. load data into tables
         let request_items = batch::build_batch_request_items_from_json(content.to_string())?;
-        batch::batch_write_untill_processed(cx.clone(), request_items).await?;
+        batch::batch_write_until_processed(cx, request_items).await?;
     }
 
     let region = cx.effective_region().await.to_string();
@@ -289,7 +289,7 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
 
 async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
     match control::create_table_api(
-        cx.clone(),
+        cx,
         table_name.to_string(),
         keys.iter().map(|k| (*k).to_string()).collect(),
     )

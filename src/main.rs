@@ -46,9 +46,9 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
         cmd::Sub::Admin { grandchild } => match grandchild {
             cmd::AdminSub::List { all_regions } => {
                 if all_regions {
-                    control::list_tables_all_regions(context.clone()).await
+                    control::list_tables_all_regions(context).await
                 } else {
-                    control::list_tables(context.clone()).await
+                    control::list_tables(context, None).await
                 }
             }
             cmd::AdminSub::Desc {
@@ -58,18 +58,18 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             } => {
                 context.output = output;
                 if all_tables {
-                    control::describe_all_tables(context.clone()).await
+                    control::describe_all_tables(context).await
                 } else {
-                    control::describe_table(context.clone(), target_table_to_desc).await
+                    control::describe_table(context, target_table_to_desc).await
                 }
             }
             cmd::AdminSub::Create { target_type } => match target_type {
                 cmd::CreateSub::Table {
                     new_table_name,
                     keys,
-                } => control::create_table(context.clone(), new_table_name, keys).await,
+                } => control::create_table(context, new_table_name, keys).await,
                 cmd::CreateSub::Index { index_name, keys } => {
-                    control::create_index(context.clone(), index_name, keys).await
+                    control::create_index(context, index_name, keys).await
                 }
             },
             cmd::AdminSub::Update { target_type } => match target_type {
@@ -78,16 +78,13 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
                     mode,
                     wcu,
                     rcu,
-                } => {
-                    control::update_table(context.clone(), table_name_to_update, mode, wcu, rcu)
-                        .await
-                }
+                } => control::update_table(context, table_name_to_update, mode, wcu, rcu).await,
             },
             cmd::AdminSub::Delete { target_type } => match target_type {
                 cmd::DeleteSub::Table {
                     table_name_to_delete,
                     yes,
-                } => control::delete_table(context.clone(), table_name_to_delete, yes).await,
+                } => control::delete_table(context, table_name_to_delete, yes).await,
             },
             cmd::AdminSub::Apply { dev } => {
                 if dev {
@@ -108,7 +105,7 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
         } => {
             context.output = output;
             data::scan(
-                context.clone(),
+                context,
                 index,
                 consistent_read,
                 &attributes,
@@ -135,7 +132,7 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
                 context.should_strict_for_query = Some(strict || !non_strict)
             }
             data::query(
-                context.clone(),
+                context,
                 QueryParams {
                     pval,
                     sort_key_expression,
@@ -156,12 +153,10 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             output,
         } => {
             context.output = output;
-            data::get_item(context.clone(), pval, sval, consistent_read).await
+            data::get_item(context, pval, sval, consistent_read).await
         }
-        cmd::Sub::Put { pval, sval, item } => {
-            data::put_item(context.clone(), pval, sval, item).await
-        }
-        cmd::Sub::Del { pval, sval } => data::delete_item(context.clone(), pval, sval).await,
+        cmd::Sub::Put { pval, sval, item } => data::put_item(context, pval, sval, item).await,
+        cmd::Sub::Del { pval, sval } => data::delete_item(context, pval, sval).await,
         cmd::Sub::Upd {
             pval,
             sval,
@@ -170,20 +165,19 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             atomic_counter,
         } => {
             if let Some(target) = atomic_counter {
-                data::atomic_counter(context.clone(), pval, sval, set, remove, target).await;
+                data::atomic_counter(context, pval, sval, set, remove, target).await;
             } else {
-                data::update_item(context.clone(), pval, sval, set, remove).await;
+                data::update_item(context, pval, sval, set, remove).await;
             }
         }
         cmd::Sub::Bwrite { puts, dels, input } => {
-            batch::batch_write_item(context.clone(), puts, dels, input).await?
+            batch::batch_write_item(context, puts, dels, input).await?
         }
-
         cmd::Sub::List { all_regions } => {
             if all_regions {
-                control::list_tables_all_regions(context.clone()).await
+                control::list_tables_all_regions(context).await
             } else {
-                control::list_tables(context.clone()).await
+                control::list_tables(context, None).await
             }
         }
         cmd::Sub::Desc {
@@ -193,9 +187,9 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
         } => {
             context.output = output;
             if all_tables {
-                control::describe_all_tables(context.clone()).await
+                control::describe_all_tables(context).await
             } else {
-                control::describe_table(context.clone(), target_table_to_desc).await
+                control::describe_table(context, target_table_to_desc).await
             }
         }
         cmd::Sub::Use {
@@ -219,7 +213,7 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             if list {
                 bootstrap::list_samples()
             } else {
-                bootstrap::launch_sample(context.clone(), sample).await?
+                bootstrap::launch_sample(context, sample).await?
             } // sample can be None
         }
 
@@ -228,19 +222,18 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             keys_only,
             output_file,
             format,
-        } => transfer::export(context.clone(), attributes, keys_only, output_file, format).await?,
+        } => transfer::export(context, attributes, keys_only, output_file, format).await?,
         cmd::Sub::Import {
             input_file,
             format,
             enable_set_inference,
-        } => transfer::import(context.clone(), input_file, format, enable_set_inference).await?,
+        } => transfer::import(context, input_file, format, enable_set_inference).await?,
         cmd::Sub::Backup { list, all_tables } => {
             if list {
-                control::list_backups(context.clone(), all_tables).await?
+                control::list_backups(context, all_tables).await?
             } else {
                 control::backup(
-                    context.clone(),
-                    all_tables, /* all_tables is simply ignored for "backup" */
+                    context, all_tables, /* all_tables is simply ignored for "backup" */
                 )
                 .await
             }
@@ -248,7 +241,7 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
         cmd::Sub::Restore {
             backup_name,
             restore_name,
-        } => control::restore(context.clone(), backup_name, restore_name).await,
+        } => control::restore(context, backup_name, restore_name).await,
     }
     Ok(())
 }
@@ -286,9 +279,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Builtin(BuiltinCommands::Exit) => break,
                 Eof => break,
                 Command(child) => {
+                    debug!("context before execution of shell command: {:#?}", context);
                     if let Err(e) = dispatch(&mut context, child).await {
                         eprintln!("{}", e)
                     }
+                    debug!("context after execution of shell command: {:#?}", context)
                 }
                 ParseError(_) => {
                     // do nothing because read_line already handles the error
