@@ -182,6 +182,10 @@ pub enum Sub {
         #[structopt(short, long)]
         index: Option<String>,
 
+        /// Limit the number of items to return. By default, the number of items is determined by DynamoDB.
+        #[structopt(short, long)]
+        limit: Option<i64>,
+
         /// Attributes to show, separated by commas, which is mapped to ProjectionExpression (e.g. --attributes name,address,age).
         /// Note that primary key(s) are always included in results regardless of what you've passed to --attributes.
         #[structopt(short, long)]
