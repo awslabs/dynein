@@ -27,7 +27,7 @@ use std::fs::File;
 use std::io::{self, Write}; // Used when check results by printing to stdout
 use std::sync::Mutex;
 use std::time::Duration;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 use tempfile::Builder;
 
@@ -111,7 +111,7 @@ async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error
             break;
         } else {
             println!("Couldn't connect. Retry after 3 seconds.");
-            delay_for(Duration::from_secs(3)).await;
+            sleep(Duration::from_secs(3)).await;
         }
     }
 
