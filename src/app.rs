@@ -190,7 +190,6 @@ pub struct Cache {
 
 #[derive(Debug, Clone)]
 pub struct Context {
-    pub region: Option<Region>,
     pub config: Option<Config>,
     pub cache: Option<Cache>,
     pub overwritten_region: Option<Region>, // --region option
@@ -730,7 +729,6 @@ mod tests {
     #[test]
     fn test_context_functions() -> Result<(), Box<dyn Error>> {
         let cx1 = Context {
-            region: None,
             config: None,
             cache: None,
             overwritten_region: None,
@@ -742,7 +740,6 @@ mod tests {
         // cx1.effective_table_name(); ... exit(1)
 
         let cx2 = Context {
-            region: None,
             config: Some(Config {
                 using_region: Some(String::from("ap-northeast-1")),
                 using_table: Some(String::from("cfgtbl")),
