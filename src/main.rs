@@ -239,7 +239,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // when --region <region-name e.g. ap-northeast-1>, use the region. when --region local, use DynamoDB local.
     // --region/--table option can be passed as a top-level or subcommand-level (i.e. global).
     let mut context = app::Context {
-        region: None,
         config: Some(app::load_or_touch_config_file(true)?),
         cache: Some(app::load_or_touch_cache_file(true)?),
         overwritten_region: app::region_from_str(c.region, c.port),
