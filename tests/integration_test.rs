@@ -16,6 +16,7 @@
 
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
+use std::env;
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
@@ -62,6 +63,20 @@ fn check_dynamodb_local_running(port: u16) -> bool {
 }
 
 async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
+    // Stop docker setup if DYNEIN_TEST_NO_DOCKER_SETUP=true.
+    // This configuration is useful for skipping the docker setup in the GitHub CI environment.
+    // Also, it reduces test time because of skipping of docker checks.
+    // If you use this, you must ensure that docker containers are running for tests.
+    // See https://github.com/awslabs/dynein/pull/59 for detail.
+    let stop_setup: bool = env::var("DYNEIN_TEST_NO_DOCKER_SETUP")
+        .unwrap_or("false".to_string())
+        .to_lowercase()
+        .parse()
+        .expect("DYNEIN_TEST_NO_DOCKER_SETUP expects true or false");
+    if stop_setup {
+        return Ok(Command::cargo_bin("dy")?);
+    }
+
     // Check the current process at first to allow multiple threads to run tests concurrently.
     // This is for performance optimization on Windows and Mac OS.
     // See https://github.com/awslabs/dynein/pull/28#issuecomment-972880324 for detail.
