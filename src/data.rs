@@ -92,17 +92,17 @@ Public functions
 /// This function calls Scan API and return mutiple items. By default it uses 'table' output format.
 /// Scan API retrieves all items in a given table, something like `SELECT * FROM mytable` in SQL world.
 pub async fn scan(
-    cx: app::Context,
+    cx: &mut app::Context,
     index: Option<String>,
     consistent_read: bool,
     attributes: &Option<String>,
     keys_only: bool,
     limit: i64,
 ) {
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
 
     let items = scan_api(
-        cx.clone(),
+        cx,
         index,
         consistent_read,
         attributes,
@@ -131,7 +131,7 @@ pub async fn scan(
 }
 
 pub async fn scan_api(
-    cx: app::Context,
+    cx: &mut app::Context,
     index: Option<String>,
     consistent_read: bool,
     attributes: &Option<String>,
@@ -140,7 +140,7 @@ pub async fn scan_api(
     esk: Option<HashMap<String, AttributeValue>>,
 ) -> ScanOutput {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
 
     let scan_params: GeneratedScanParams = generate_scan_expressions(&ts, attributes, keys_only);
 
@@ -178,9 +178,9 @@ pub struct QueryParams {
 /// References:
 /// - https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html#Query.KeyConditionExpressions
 /// - https://aws.amazon.com/blogs/database/using-sort-keys-to-organize-data-in-amazon-dynamodb/
-pub async fn query(cx: app::Context, params: QueryParams) {
+pub async fn query(cx: &mut app::Context, params: QueryParams) {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
 
     debug!("For table '{}' (index '{:?}'), generating KeyConditionExpression using sort_key_expression: '{:?}'", &ts.name, &params.index, &params.sort_key_expression);
     let query_params: GeneratedQueryParams = match generate_query_expressions(
@@ -245,10 +245,15 @@ pub async fn query(cx: app::Context, params: QueryParams) {
 }
 
 /// This function calls GetItem API - get an item with given primary key(s). By default it uses 'json' output format.
-pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, consistent_read: bool) {
+pub async fn get_item(
+    cx: &mut app::Context,
+    pval: String,
+    sval: Option<String>,
+    consistent_read: bool,
+) {
     debug!("context: {:#?}", &cx);
     // Use table if explicitly specified by `--table/-t` option. Otherwise, load table name from config file.
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
     let primary_keys = identify_target(&ts, pval, sval);
 
     debug!(
@@ -296,9 +301,14 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
 
 // put_item function saves an item with given primary key(s). You can pass other attributes with --item/-i option in JSON format.
 // As per DynamoDB PutItem API behavior, if the item already exists it'd be replaced.
-pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item: Option<String>) {
+pub async fn put_item(
+    cx: &mut app::Context,
+    pval: String,
+    sval: Option<String>,
+    item: Option<String>,
+) {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
     let mut full_item_image = identify_target(&ts, pval, sval); // Firstly, ideitify primary key(s) to ideitnfy an item to put.
 
     debug!(
@@ -349,9 +359,9 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
 }
 
 // delete_item functions calls DeleteItem API - delete an item with given primary key(s).
-pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
+pub async fn delete_item(cx: &mut app::Context, pval: String, sval: Option<String>) {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
     let primary_keys = identify_target(&ts, pval, sval);
 
     debug!(
@@ -384,7 +394,7 @@ pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
 
 // UpdateItem API https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
 pub async fn update_item(
-    cx: app::Context,
+    cx: &mut app::Context,
     pval: String,
     sval: Option<String>,
     set_expression: Option<String>,
@@ -397,7 +407,7 @@ pub async fn update_item(
         std::process::exit(1);
     };
 
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
     let primary_keys = identify_target(&ts, pval.clone(), sval.clone());
 
     debug!(
@@ -443,7 +453,7 @@ pub async fn update_item(
 
 // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.AtomicCounters
 pub async fn atomic_counter(
-    cx: app::Context,
+    cx: &mut app::Context,
     pval: String,
     sval: Option<String>,
     set_expression: Option<String>,

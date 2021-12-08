@@ -23,6 +23,7 @@ use rusoto_core::Region;
 use rusoto_dynamodb::*;
 use rusoto_ec2::{DescribeRegionsRequest, Ec2, Ec2Client};
 use std::{
+    borrow::Cow::{self, Owned},
     io::{self, Error as IOError, Write},
     time,
 };
@@ -90,7 +91,7 @@ struct PrintSecondaryIndex {
 Public functions
 ================================================= */
 
-pub async fn list_tables_all_regions(cx: app::Context) {
+pub async fn list_tables_all_regions(cx: &mut app::Context) {
     let ec2 = Ec2Client::new(cx.effective_region());
     let input: DescribeRegionsRequest = DescribeRegionsRequest {
         ..Default::default()
@@ -105,15 +106,16 @@ pub async fn list_tables_all_regions(cx: app::Context) {
                 res.regions
                     .expect("regions should exist") // Vec<Region>
                     .iter()
-                    .map(|r| list_tables(cx.clone().with_region(r))),
+                    .map(|r| list_tables(Owned(cx.clone().with_region(r)))),
             )
             .await;
         }
     };
 }
 
-pub async fn list_tables(cx: app::Context) {
-    let table_names = list_tables_api(cx.clone()).await;
+pub async fn list_tables(cx: Cow<'_, app::Context>) {
+    let mut cx = cx.into_owned();
+    let table_names = list_tables_api(&mut cx).await;
 
     println!(
         "DynamoDB tables in region: {}",
@@ -144,25 +146,25 @@ pub async fn list_tables(cx: app::Context) {
 
 /// Executed when you call `$ dy desc --all-tables`.
 /// Note that `describe_table` function calls are executed in parallel (async + join_all).
-pub async fn describe_all_tables(cx: app::Context) {
-    let table_names = list_tables_api(cx.clone()).await;
+pub async fn describe_all_tables(cx: &mut app::Context) {
+    let table_names = list_tables_api(cx).await;
     join_all(
         table_names
             .into_iter()
-            .map(|t| describe_table(cx.clone(), Some(t))),
+            .map(|t| describe_table(Owned(cx.clone()), Some(t))),
     )
     .await;
 }
 
 /// Executed when you call `$ dy desc (table)`. Retrieve TableDescription via describe_table_api function,
 /// then print them in convenient way using print_table_description function (default/yaml).
-pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<String>) {
+pub async fn describe_table(cx: Cow<'_, app::Context>, target_table_to_desc: Option<String>) {
     debug!("context: {:#?}", &cx);
     debug!("positional arg table name: {:?}", &target_table_to_desc);
     let new_context = if let Some(t) = target_table_to_desc {
-        cx.with_table(t.as_str())
+        cx.as_ref().clone().with_table(&t)
     } else {
-        cx
+        cx.into_owned()
     };
 
     let desc: TableDescription = app::describe_table_api(
@@ -229,13 +231,13 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
 
 /// This function is designed to be called from dynein command, mapped in main.rs.
 /// Note that it simply ignores --table option if specified. Newly created table name should be given by the 1st argument "name".
-pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String>) {
+pub async fn create_table(cx: &mut app::Context, name: String, given_keys: Vec<String>) {
     if given_keys.is_empty() || given_keys.len() >= 3 {
         error!("You should pass one or two key definitions with --keys option");
         std::process::exit(1);
     };
 
-    match create_table_api(cx.clone(), name, given_keys).await {
+    match create_table_api(cx, name, given_keys).await {
         Ok(desc) => print_table_description(cx.effective_region(), desc),
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
@@ -246,7 +248,7 @@ pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String
 }
 
 pub async fn create_table_api(
-    cx: app::Context,
+    cx: &mut app::Context,
     name: String,
     given_keys: Vec<String>,
 ) -> Result<TableDescription, rusoto_core::RusotoError<rusoto_dynamodb::CreateTableError>> {
@@ -272,7 +274,7 @@ pub async fn create_table_api(
     })
 }
 
-pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<String>) {
+pub async fn create_index(cx: &mut app::Context, index_name: String, given_keys: Vec<String>) {
     if given_keys.is_empty() || given_keys.len() >= 3 {
         error!("You should pass one or two key definitions with --keys option");
         std::process::exit(1);
@@ -322,7 +324,7 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
 }
 
 pub async fn update_table(
-    cx: app::Context,
+    cx: &mut app::Context,
     table_name_to_update: String,
     mode_string: Option<String>,
     wcu: Option<i64>,
@@ -449,7 +451,7 @@ async fn update_table_api(
     })
 }
 
-pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: bool) {
+pub async fn delete_table(cx: &mut app::Context, name: String, skip_confirmation: bool) {
     debug!("Trying to delete a table '{}'", &name);
 
     let msg = format!("You're trying to delete a table '{}'. Are you OK?", &name);
@@ -484,7 +486,7 @@ pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: boo
 ///
 /// OnDemand backup is a type of backups that can be manually created. Another type is called PITR (Point-In-Time-Restore) but dynein doesn't support it for now.
 /// For more information about DynamoDB on-demand backup: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BackupRestore.html
-pub async fn backup(cx: app::Context, all_tables: bool) {
+pub async fn backup(cx: &mut app::Context, all_tables: bool) {
     // this "backup" function is called only when --list is NOT given. So, --all-tables would be ignored.
     if all_tables {
         println!("NOTE: --all-tables option is ignored without --list option. Just trying to create a backup for the target table...")
@@ -532,8 +534,8 @@ pub async fn backup(cx: app::Context, all_tables: bool) {
 }
 
 /// List backups for a specified table. With --all-tables option all backups for all tables in the region are shown.
-pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOError> {
-    let backups = list_backups_api(&cx, all_tables).await;
+pub async fn list_backups(cx: &mut app::Context, all_tables: bool) -> Result<(), IOError> {
+    let backups = list_backups_api(cx, all_tables).await;
     let mut tw = TabWriter::new(io::stdout());
     // First defining header
     tw.write_all(
@@ -564,9 +566,13 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
 /// This function restores DynamoDB table from specified backup data.
 /// If you don't specify backup data (name) explicitly, dynein will list backups and you can select out of them.
 /// Currently overwriting properties during rstore is not supported.
-pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name: Option<String>) {
+pub async fn restore(
+    cx: &mut app::Context,
+    backup_name: Option<String>,
+    restore_name: Option<String>,
+) {
     // let backups = list_backups_api(&cx, false).await;
-    let available_backups: Vec<BackupSummary> = list_backups_api(&cx, false)
+    let available_backups: Vec<BackupSummary> = list_backups_api(cx, false)
         .await
         .into_iter()
         .filter(|b: &BackupSummary| b.to_owned().backup_status.unwrap() == "AVAILABLE")
@@ -703,7 +709,7 @@ fn generate_essential_key_definitions(
 
 /// Basically called by list_tables function, which is called from `$ dy list`.
 /// To make ListTables API result reusable, separated API logic into this standalone function.
-async fn list_tables_api(cx: app::Context) -> Vec<String> {
+async fn list_tables_api(cx: &mut app::Context) -> Vec<String> {
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: ListTablesInput = Default::default();
     match ddb.list_tables(req).await {

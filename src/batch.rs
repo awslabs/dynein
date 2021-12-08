@@ -185,8 +185,8 @@ pub fn build_batch_request_items(
 /// > the failed operations are returned in the UnprocessedItems response parameter.
 /// > You can investigate and optionally resend the requests. Typically, you would call BatchWriteItem in a loop. Each iteration would
 /// > check for unprocessed items and submit a new BatchWriteItem request with those unprocessed items until all items have been processed.
-async fn batch_write_item_api(
-    cx: app::Context,
+async fn batch_write_item_api<'a>(
+    cx: &mut app::Context,
     request_items: HashMap<String, Vec<WriteRequest>>,
 ) -> Result<Option<HashMap<String, Vec<WriteRequest>>>, RusotoError<BatchWriteItemError>> {
     debug!(
@@ -209,11 +209,11 @@ async fn batch_write_item_api(
 // Basically this function is intended to be defined as `pub async fn`.
 // However, to recursively use async function, you have to return a future wrapped by pinned box. For more details: `rustc --explain E0733`.
 pub fn batch_write_untill_processed(
-    cx: app::Context,
+    mut cx: app::Context,
     request_items: HashMap<String, Vec<WriteRequest>>,
 ) -> Pin<Box<dyn Future<Output = Result<(), RusotoError<BatchWriteItemError>>>>> {
     Box::pin(async move {
-        match batch_write_item_api(cx.clone(), request_items).await {
+        match batch_write_item_api(&mut cx, request_items).await {
             Ok(result) => {
                 let unprocessed_items: HashMap<String, Vec<WriteRequest>> =
                     result.expect("alwasy wrapped by Some");
@@ -234,7 +234,7 @@ pub fn batch_write_untill_processed(
 
 /// This function is intended to be called from main.rs, as a destination of bwrite command.
 pub async fn batch_write_item(
-    cx: app::Context,
+    cx: &mut app::Context,
     input_file: String,
 ) -> Result<(), DyneinBatchError> {
     let content = fs::read_to_string(input_file)?;
