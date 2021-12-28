@@ -91,12 +91,10 @@ Public functions
 ================================================= */
 
 pub async fn list_tables_all_regions(cx: app::Context) {
-    let region = cx.effective_region();
-    let ec2 = Ec2Client::new(match region.name() {
-        "local" => Region::UsEast1,
-        _ => region.clone(),
-    });
-    let input: DescribeRegionsRequest = Default::default();
+    let ec2 = Ec2Client::new(cx.effective_region());
+    let input: DescribeRegionsRequest = DescribeRegionsRequest {
+        ..Default::default()
+    };
     match ec2.describe_regions(input).await {
         Err(e) => {
             error!("{}", e.to_string());
@@ -108,10 +106,8 @@ pub async fn list_tables_all_regions(cx: app::Context) {
                     .expect("regions should exist") // Vec<Region>
                     .iter()
                     .map(|r| list_tables(cx.clone().with_region(r))),
-            ).await;
-            if region.name() == "local" {
-                list_tables(cx.clone()).await;
-            }
+            )
+            .await;
         }
     };
 }
