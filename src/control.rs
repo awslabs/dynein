@@ -108,7 +108,9 @@ pub async fn list_tables_all_regions(cx: app::Context) {
                     .expect("regions should exist") // Vec<Region>
                     .iter()
                     .map(|r| list_tables(cx.clone().with_region(r))),
-            ).await;
+            )
+            .await;
+
             if region.name() == "local" {
                 list_tables(cx.clone()).await;
             }
