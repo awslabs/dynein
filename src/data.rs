@@ -167,6 +167,7 @@ pub struct QueryParams {
     pub pval: String,
     pub sort_key_expression: Option<String>,
     pub index: Option<String>,
+    pub limit: Option<i64>,
     pub consistent_read: bool,
     pub descending: bool,
     pub attributes: Option<String>,
@@ -204,6 +205,7 @@ pub async fn query(cx: app::Context, params: QueryParams) {
     let req: QueryInput = QueryInput {
         table_name: ts.name.to_string(),
         index_name: params.index,
+        limit: params.limit,
         key_condition_expression: query_params.exp,
         expression_attribute_names: query_params.names,
         expression_attribute_values: query_params.vals,
