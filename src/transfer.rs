@@ -130,19 +130,19 @@ pub async fn export(
             .expect("Scan result items should be 'Some' even if no item returned.");
         match format_str {
             None | Some("json") => {
-                let s = serde_json::to_string_pretty(&data::convert_to_json_vec(&items))?;
+                let s = serde_json::to_string_pretty(&data::convert_to_sorted_json_vec(&items))?;
                 tmp_output_file.write_all(connectable_json(s, false).as_bytes())?;
             }
             Some("jsonl") => {
                 let mut s: String = String::new();
                 for item in &items {
-                    s.push_str(&serde_json::to_string(&data::convert_to_json(item))?);
+                    s.push_str(&serde_json::to_string(&data::convert_to_sorted_json(item))?);
                     s.push('\n');
                 }
                 tmp_output_file.write_all(s.as_bytes())?;
             }
             Some("json-compact") => {
-                let s = serde_json::to_string(&data::convert_to_json_vec(&items))?;
+                let s = serde_json::to_string(&data::convert_to_sorted_json_vec(&items))?;
                 tmp_output_file.write_all(connectable_json(s, true).as_bytes())?;
             }
             Some("csv") => {

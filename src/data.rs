@@ -16,7 +16,7 @@
 
 // This module interact with DynamoDB Data Plane APIs
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     error::Error,
     fmt,
     io::{self, Write},
@@ -117,7 +117,7 @@ pub async fn scan(
         None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
         Some("json") => println!(
             "{}",
-            serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()
+            serde_json::to_string_pretty(&convert_to_sorted_json_vec(&items)).unwrap()
         ),
         Some("raw") => println!(
             "{}",
@@ -225,7 +225,7 @@ pub async fn query(cx: app::Context, params: QueryParams) {
                     }
                     Some("json") => println!(
                         "{}",
-                        serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()
+                        serde_json::to_string_pretty(&convert_to_sorted_json_vec(&items)).unwrap()
                     ),
                     Some("raw") => println!(
                         "{}",
@@ -272,11 +272,11 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
             Some(item) => match cx.output.as_deref() {
                 None | Some("json") => println!(
                     "{}",
-                    serde_json::to_string_pretty(&convert_to_json(&item)).unwrap()
+                    serde_json::to_string_pretty(&convert_to_sorted_json(&item)).unwrap()
                 ),
                 Some("yaml") => println!(
                     "{}",
-                    serde_yaml::to_string(&convert_to_json(&item)).unwrap()
+                    serde_yaml::to_string(&convert_to_sorted_json(&item)).unwrap()
                 ),
                 Some("raw") => println!(
                     "{}",
@@ -432,7 +432,7 @@ pub async fn update_item(
             println!("Successfully updated an item in the table '{}'.", &ts.name);
             println!(
                 "Updated item: {}",
-                serde_json::to_string(&convert_to_json(&res.attributes.unwrap())).unwrap()
+                serde_json::to_string(&convert_to_sorted_json(&res.attributes.unwrap())).unwrap()
             );
         }
         Err(e) => {
@@ -1186,7 +1186,7 @@ fn display_items_table(
                 }
             } else if !keys_only {
                 // print rest aggreated "attributes" column in JSON format.
-                let full = serde_json::to_string(&convert_to_json(&item)).unwrap();
+                let full = serde_json::to_string(&convert_to_sorted_json(&item)).unwrap();
                 let threshold: usize = 50;
                 if full.chars().count() > threshold {
                     // NOTE: counting bytes slice doesn't work for multi-bytes strings
@@ -1320,15 +1320,15 @@ fn convert_item_to_csv_line(
     line
 }
 
-pub fn convert_to_json_vec(
+pub fn convert_to_sorted_json_vec(
     items: &[HashMap<String, AttributeValue>],
-) -> Vec<HashMap<String, serde_json::Value>> {
-    items.iter().map(convert_to_json).collect()
+) -> Vec<BTreeMap<String, serde_json::Value>> {
+    items.iter().map(convert_to_sorted_json).collect()
 }
 
-pub fn convert_to_json(
+pub fn convert_to_sorted_json(
     item: &HashMap<String, AttributeValue>,
-) -> HashMap<String, serde_json::Value> {
+) -> BTreeMap<String, serde_json::Value> {
     item.iter()
         .map(|attr| (attr.0.to_string(), attrval_to_jsonval(attr.1)))
         .collect()
