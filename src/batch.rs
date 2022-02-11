@@ -52,18 +52,18 @@ impl error::Error for DyneinBatchError {
     }
 }
 impl From<IOError> for DyneinBatchError {
-    fn from(e: IOError) -> DyneinBatchError {
-        DyneinBatchError::LoadData(e)
+    fn from(e: IOError) -> Self {
+        Self::LoadData(e)
     }
 }
 impl From<serde_json::Error> for DyneinBatchError {
-    fn from(e: serde_json::Error) -> DyneinBatchError {
-        DyneinBatchError::PraseJSON(e)
+    fn from(e: serde_json::Error) -> Self {
+        Self::PraseJSON(e)
     }
 }
 impl From<RusotoError<BatchWriteItemError>> for DyneinBatchError {
-    fn from(e: RusotoError<BatchWriteItemError>) -> DyneinBatchError {
-        DyneinBatchError::BatchWriteError(e)
+    fn from(e: RusotoError<BatchWriteItemError>) -> Self {
+        Self::BatchWriteError(e)
     }
 }
 

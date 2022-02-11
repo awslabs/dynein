@@ -123,7 +123,7 @@ impl Display for ParseKeyTypeError {
 impl ParseKeyTypeError {
     /// Parses a region given as a string literal into a type `KeyType'
     pub fn new(input: &str) -> Self {
-        ParseKeyTypeError {
+        Self {
             message: format!("Not a valid DynamoDB primary key type: {}", input),
         }
     }
@@ -132,11 +132,11 @@ impl ParseKeyTypeError {
 impl FromStr for KeyType {
     type Err = ParseKeyTypeError;
 
-    fn from_str(s: &str) -> Result<KeyType, ParseKeyTypeError> {
+    fn from_str(s: &str) -> Result<Self, ParseKeyTypeError> {
         match s {
-            "S" => Ok(KeyType::S),
-            "N" => Ok(KeyType::N),
-            "B" => Ok(KeyType::B),
+            "S" => Ok(Self::S),
+            "N" => Ok(Self::N),
+            "B" => Ok(Self::B),
             x => Err(ParseKeyTypeError::new(x)),
         }
     }
@@ -329,13 +329,13 @@ impl error::Error for DyneinConfigError {
 // Implement the conversion from existing error like `serde_yaml::Error` to `DyneinConfigError`.
 // This will be automatically called by `?` if underlying errors needs to be converted into a `DyneinConfigError`.
 impl From<IOError> for DyneinConfigError {
-    fn from(e: IOError) -> DyneinConfigError {
-        DyneinConfigError::IO(e)
+    fn from(e: IOError) -> Self {
+        Self::IO(e)
     }
 }
 impl From<SerdeYAMLError> for DyneinConfigError {
-    fn from(e: SerdeYAMLError) -> DyneinConfigError {
-        DyneinConfigError::Yaml(e)
+    fn from(e: SerdeYAMLError) -> Self {
+        Self::Yaml(e)
     }
 }
 
