@@ -121,7 +121,7 @@ pub async fn scan(
         ),
         Some("raw") => println!(
             "{}",
-            serde_json::to_string_pretty(&strip_items(&items)).unwrap()
+            serde_json::to_string_pretty(&convert_to_sorted_raw_vec(&items)).unwrap()
         ),
         Some(o) => {
             println!("ERROR: unsupported output type '{}'.", o);
@@ -229,7 +229,7 @@ pub async fn query(cx: app::Context, params: QueryParams) {
                     ),
                     Some("raw") => println!(
                         "{}",
-                        serde_json::to_string_pretty(&strip_items(&items)).unwrap()
+                        serde_json::to_string_pretty(&convert_to_sorted_raw_vec(&items)).unwrap()
                     ),
                     Some(o) => {
                         println!("ERROR: unsupported output type '{}'.", o);
@@ -280,7 +280,7 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
                 ),
                 Some("raw") => println!(
                     "{}",
-                    serde_json::to_string_pretty(&strip_item(&item)).unwrap()
+                    serde_json::to_string_pretty(&strip_and_sort_item(&item)).unwrap()
                 ),
                 Some(o) => {
                     println!("ERROR: unsupported output type '{}'.", o);
@@ -847,14 +847,13 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
     }
 }
 
-/// `strip_items` calls `strip_item` for each item.
-fn strip_items(
-    items: &[HashMap<String, rusoto_dynamodb::AttributeValue>],
-) -> Vec<HashMap<String, serde_json::Value>> {
-    items.iter().map(strip_item).collect()
+fn convert_to_sorted_raw_vec(
+    items: &[HashMap<String, AttributeValue>],
+) -> Vec<BTreeMap<String, serde_json::Value>> {
+    items.iter().map(strip_and_sort_item).collect()
 }
 
-/// `strip_item` function strips non-existing data types in AttributeValue struct:
+/// `strip_and_sort_item` function strips non-existing data types in AttributeValue struct:
 ///
 ///     { "pkA": AttributeValue {
 ///         b: None,
@@ -876,9 +875,11 @@ fn strip_items(
 /// by utilizing Serialize derive of the struct:
 /// https://docs.rs/rusoto_dynamodb/0.42.0/src/rusoto_dynamodb/generated.rs.html#38
 /// https://docs.rs/rusoto_dynamodb/0.42.0/rusoto_dynamodb/struct.AttributeValue.html
-fn strip_item(
-    item: &HashMap<String, rusoto_dynamodb::AttributeValue>,
-) -> HashMap<String, serde_json::Value> {
+///
+/// It will also sort attributes by key for stable output.
+fn strip_and_sort_item(
+    item: &HashMap<String, AttributeValue>,
+) -> BTreeMap<String, serde_json::Value> {
     item.iter()
         .map(|attr|
         // Serialization: `serde_json::to_value(sth: rusoto_dynamodb::AttributeValue)`
