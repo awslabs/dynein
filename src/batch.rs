@@ -94,7 +94,7 @@ pub fn build_batch_request_items(
     let hashmap: HashMap<String, JsonValue> = serde_json::from_str(&raw_json_content)?;
 
     // for each table name as a key, multiple operations are included.
-    for (tbl /* String */, operations /* JsonValue */) in hashmap.clone() {
+    for (tbl /* String */, operations /* JsonValue */) in hashmap {
         let mut write_requests = Vec::<WriteRequest>::new();
         let ops: &Vec<JsonValue> = operations
             .as_array()

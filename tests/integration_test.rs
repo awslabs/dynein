@@ -58,11 +58,7 @@ fn check_dynamodb_local_running(port: u16) -> bool {
     if !check_out.status.success() {
         panic!("failed to execute docker ps command")
     }
-    if port_re.is_match(&check_out.stdout) {
-        true
-    } else {
-        false
-    }
+    port_re.is_match(&check_out.stdout)
 }
 
 async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
@@ -187,7 +183,7 @@ async fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
             &table_name
         )));
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }
 
 #[tokio::test]
@@ -236,7 +232,7 @@ async fn test_create_table_with_region_local_and_port_number_options(
             &table_name
         )));
 
-    Ok(cleanup_with_port(vec![table_name], port).await?)
+    cleanup_with_port(vec![table_name], port).await
 }
 
 #[tokio::test]
@@ -271,7 +267,7 @@ async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
         .success()
         .stdout(predicate::str::contains("No item to show"));
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }
 
 #[tokio::test]
@@ -294,7 +290,7 @@ async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
         .success()
         .stdout(predicate::str::contains("pk  attributes\nabc"));
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }
 
 async fn prepare_pk_sk_table(table_name: &&str) -> Result<(), Box<dyn std::error::Error>> {
@@ -330,7 +326,7 @@ async fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
             "pk   sk  attributes\nabc  1\nabc  2",
         ));
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }
 
 #[tokio::test]
@@ -349,7 +345,7 @@ async fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
             "pk   sk  attributes\nabc  2\nabc  1",
         ));
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }
 
 #[tokio::test]
@@ -366,7 +362,7 @@ async fn test_query_limit() -> Result<(), Box<dyn std::error::Error>> {
         .success()
         .stdout(predicate::str::contains("pk   sk  attributes\nabc  1"));
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }
 
 #[tokio::test]
@@ -428,7 +424,7 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         table_name,
         "bwrite",
         "--input",
-        &batch_input_file_path.to_str().unwrap(),
+        batch_input_file_path.to_str().unwrap(),
     ])
     .output()?;
 
@@ -487,7 +483,7 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         predicate::str::is_match("\"Dimensions\":")?.eval(String::from_utf8(output)?.as_str())
     );
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }
 
 #[tokio::test]
@@ -513,5 +509,5 @@ async fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
             &table_name
         )));
 
-    Ok(cleanup(vec![table_name]).await?)
+    cleanup(vec![table_name]).await
 }

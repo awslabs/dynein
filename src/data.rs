@@ -851,7 +851,7 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
 fn strip_items(
     items: &[HashMap<String, rusoto_dynamodb::AttributeValue>],
 ) -> Vec<HashMap<String, serde_json::Value>> {
-    items.iter().map(|item| strip_item(item)).collect()
+    items.iter().map(strip_item).collect()
 }
 
 /// `strip_item` function strips non-existing data types in AttributeValue struct:
@@ -1140,7 +1140,7 @@ fn display_items_table(
 ) {
     // Print no item message and return if items length is 0.
     if items.is_empty() {
-        println!("No item to show in the table '{}'", ts.name.to_string());
+        println!("No item to show in the table '{}'", ts.name);
         return;
     };
 
@@ -1323,7 +1323,7 @@ fn convert_item_to_csv_line(
 pub fn convert_to_json_vec(
     items: &[HashMap<String, AttributeValue>],
 ) -> Vec<HashMap<String, serde_json::Value>> {
-    items.iter().map(|item| convert_to_json(item)).collect()
+    items.iter().map(convert_to_json).collect()
 }
 
 pub fn convert_to_json(
@@ -1363,7 +1363,7 @@ fn attrval_to_jsonval(attrval: &AttributeValue) -> JsonValue {
     }
     // In List (L) type, each element is a DynamoDB AttributeValue (e.g. {"S": "xxxx"}). recursively apply this method to elements.
     else if let Some(vlst) = &attrval.l {
-        vlst.iter().map(|v| attrval_to_jsonval(v)).collect()
+        vlst.iter().map(attrval_to_jsonval).collect()
     } else if let Some(vmap) = &attrval.m {
         attrval_to_json_map(vmap)
     } else if attrval.null.is_some() {

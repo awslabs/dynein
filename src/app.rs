@@ -765,7 +765,7 @@ mod tests {
         assert_eq!(cx4.effective_region(), Region::from_str("us-east-1")?);
         assert_eq!(cx4.effective_table_name(), String::from("cfgtbl"));
 
-        let mut cx5 = cx2.clone();
+        let mut cx5 = cx2;
         cx5.overwritten_table_name = Some(String::from("argtbl")); // --table argtbl
         assert_eq!(cx5.effective_region(), Region::from_str("ap-northeast-1")?);
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
