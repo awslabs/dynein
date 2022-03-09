@@ -754,19 +754,25 @@ mod tests {
         assert_eq!(cx2.effective_region(), Region::from_str("ap-northeast-1")?);
         assert_eq!(cx2.effective_table_name(), String::from("cfgtbl"));
 
-        let mut cx3 = cx2.clone();
-        cx3.overwritten_region = Some(Region::from_str("us-east-1")?); // --region us-east-1
-        cx3.overwritten_table_name = Some(String::from("argtbl")); // --table argtbl
+        let cx3 = Context {
+            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
+            overwritten_table_name: Some(String::from("argtbl")),     // --table argtbl
+            ..cx2.clone()
+        };
         assert_eq!(cx3.effective_region(), Region::from_str("us-east-1")?);
         assert_eq!(cx3.effective_table_name(), String::from("argtbl"));
 
-        let mut cx4 = cx2.clone();
-        cx4.overwritten_region = Some(Region::from_str("us-east-1")?); // --region us-east-1
+        let cx4 = Context {
+            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
+            ..cx2.clone()
+        };
         assert_eq!(cx4.effective_region(), Region::from_str("us-east-1")?);
         assert_eq!(cx4.effective_table_name(), String::from("cfgtbl"));
 
-        let mut cx5 = cx2;
-        cx5.overwritten_table_name = Some(String::from("argtbl")); // --table argtbl
+        let cx5 = Context {
+            overwritten_table_name: Some(String::from("argtbl")), // --table argtbl
+            ..cx2.clone()
+        };
         assert_eq!(cx5.effective_region(), Region::from_str("ap-northeast-1")?);
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
 
