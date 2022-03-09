@@ -353,6 +353,23 @@ async fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
+async fn test_query_limit() -> Result<(), Box<dyn std::error::Error>> {
+    let table_name = "table--test_query_limit";
+
+    prepare_pk_sk_table(&table_name).await?;
+    let mut c = setup().await?;
+    let query_cmd = c.args(&[
+        "--region", "local", "--table", table_name, "query", "abc", "-l", "1",
+    ]);
+    query_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pk   sk  attributes\nabc  1"));
+
+    Ok(cleanup(vec![table_name]).await?)
+}
+
+#[tokio::test]
 async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_batch_write";
 
