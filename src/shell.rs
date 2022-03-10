@@ -129,7 +129,7 @@ fn parse(line: &str) -> Result<Vec<String>, Box<dyn Error>> {
             input = iter.as_str().trim_start();
             ret.push(tok);
         } else {
-            let pos = input.find(' ').unwrap_or(input.len());
+            let pos = input.find(' ').unwrap_or_else(|| input.len());
             let (tok, rest) = input.split_at(pos);
             ret.push(tok.into());
             input = rest.trim_start();
