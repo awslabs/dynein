@@ -123,7 +123,7 @@ impl Display for ParseKeyTypeError {
 impl ParseKeyTypeError {
     /// Parses a region given as a string literal into a type `KeyType'
     pub fn new(input: &str) -> Self {
-        ParseKeyTypeError {
+        Self {
             message: format!("Not a valid DynamoDB primary key type: {}", input),
         }
     }
@@ -132,11 +132,11 @@ impl ParseKeyTypeError {
 impl FromStr for KeyType {
     type Err = ParseKeyTypeError;
 
-    fn from_str(s: &str) -> Result<KeyType, ParseKeyTypeError> {
+    fn from_str(s: &str) -> Result<Self, ParseKeyTypeError> {
         match s {
-            "S" => Ok(KeyType::S),
-            "N" => Ok(KeyType::N),
-            "B" => Ok(KeyType::B),
+            "S" => Ok(Self::S),
+            "N" => Ok(Self::N),
+            "B" => Ok(Self::B),
             x => Err(ParseKeyTypeError::new(x)),
         }
     }
@@ -329,13 +329,13 @@ impl error::Error for DyneinConfigError {
 // Implement the conversion from existing error like `serde_yaml::Error` to `DyneinConfigError`.
 // This will be automatically called by `?` if underlying errors needs to be converted into a `DyneinConfigError`.
 impl From<IOError> for DyneinConfigError {
-    fn from(e: IOError) -> DyneinConfigError {
-        DyneinConfigError::IO(e)
+    fn from(e: IOError) -> Self {
+        Self::IO(e)
     }
 }
 impl From<SerdeYAMLError> for DyneinConfigError {
-    fn from(e: SerdeYAMLError) -> DyneinConfigError {
-        DyneinConfigError::Yaml(e)
+    fn from(e: SerdeYAMLError) -> Self {
+        Self::Yaml(e)
     }
 }
 
@@ -754,19 +754,25 @@ mod tests {
         assert_eq!(cx2.effective_region(), Region::from_str("ap-northeast-1")?);
         assert_eq!(cx2.effective_table_name(), String::from("cfgtbl"));
 
-        let mut cx3 = cx2.clone();
-        cx3.overwritten_region = Some(Region::from_str("us-east-1")?); // --region us-east-1
-        cx3.overwritten_table_name = Some(String::from("argtbl")); // --table argtbl
+        let cx3 = Context {
+            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
+            overwritten_table_name: Some(String::from("argtbl")),     // --table argtbl
+            ..cx2.clone()
+        };
         assert_eq!(cx3.effective_region(), Region::from_str("us-east-1")?);
         assert_eq!(cx3.effective_table_name(), String::from("argtbl"));
 
-        let mut cx4 = cx2.clone();
-        cx4.overwritten_region = Some(Region::from_str("us-east-1")?); // --region us-east-1
+        let cx4 = Context {
+            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
+            ..cx2.clone()
+        };
         assert_eq!(cx4.effective_region(), Region::from_str("us-east-1")?);
         assert_eq!(cx4.effective_table_name(), String::from("cfgtbl"));
 
-        let mut cx5 = cx2.clone();
-        cx5.overwritten_table_name = Some(String::from("argtbl")); // --table argtbl
+        let cx5 = Context {
+            overwritten_table_name: Some(String::from("argtbl")), // --table argtbl
+            ..cx2.clone()
+        };
         assert_eq!(cx5.effective_region(), Region::from_str("ap-northeast-1")?);
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
 

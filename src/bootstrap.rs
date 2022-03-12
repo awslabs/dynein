@@ -71,28 +71,28 @@ impl error::Error for DyneinBootstrapError {
     }
 }
 impl From<IOError> for DyneinBootstrapError {
-    fn from(e: IOError) -> DyneinBootstrapError {
-        DyneinBootstrapError::LoadData(e)
+    fn from(e: IOError) -> Self {
+        Self::LoadData(e)
     }
 }
 impl From<serde_json::Error> for DyneinBootstrapError {
-    fn from(e: serde_json::Error) -> DyneinBootstrapError {
-        DyneinBootstrapError::PraseJSON(e)
+    fn from(e: serde_json::Error) -> Self {
+        Self::PraseJSON(e)
     }
 }
 impl From<reqwest::Error> for DyneinBootstrapError {
-    fn from(e: reqwest::Error) -> DyneinBootstrapError {
-        DyneinBootstrapError::ReqwestError(e)
+    fn from(e: reqwest::Error) -> Self {
+        Self::ReqwestError(e)
     }
 }
 impl From<zip::result::ZipError> for DyneinBootstrapError {
-    fn from(e: zip::result::ZipError) -> DyneinBootstrapError {
-        DyneinBootstrapError::ZipError(e)
+    fn from(e: zip::result::ZipError) -> Self {
+        Self::ZipError(e)
     }
 }
 impl From<RusotoError<BatchWriteItemError>> for DyneinBootstrapError {
-    fn from(e: RusotoError<BatchWriteItemError>) -> DyneinBootstrapError {
-        DyneinBootstrapError::BatchError(e)
+    fn from(e: RusotoError<BatchWriteItemError>) -> Self {
+        Self::BatchError(e)
     }
 }
 
