@@ -49,7 +49,7 @@ jobs:
         if [ "${{ matrix.os }}" = "windows-2019" ]; then
           7z a -tzip dynein-${{ matrix.name }}.zip ./target/release/dy.exe
         else
-          tar -C ./target/release/ -cvf dynein-${{ matrix.name }}.tar.gz dy
+          tar -C ./target/release/ -cvzf dynein-${{ matrix.name }}.tar.gz dy
         fi
     - name: Generate SHA256 checksum
       if: matrix.name != 'windows'
