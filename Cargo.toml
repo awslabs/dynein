@@ -39,7 +39,7 @@ futures         = "0.3.19"
 log             = "0.4.11"
 regex           = "1.4.2"
 reqwest         = "0.11.8"
-rusoto_core     = "0.47.0"
+rusoto_core     = "0.48.0"
 rusoto_dynamodb = "0.47.0"
 rusoto_ec2      = "0.47.0"
 serde = { version = "1.0", features = ["derive"] }
