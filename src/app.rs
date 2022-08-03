@@ -21,7 +21,7 @@ use rusoto_dynamodb::*;
 use serde_yaml::Error as SerdeYAMLError;
 use std::{
     collections::HashMap,
-    error,
+    env, error,
     fmt::{self, Display, Error as FmtError, Formatter},
     fs,
     io::Error as IOError,
@@ -36,6 +36,7 @@ struct / enum / const
 ================================================= */
 
 const CONFIG_DIR: &str = ".dynein";
+const CONFIG_PATH_ENV_VAR_NAME: &str = "DYNEIN_CONFIG_DIR";
 const CONFIG_FILE_NAME: &str = "config.yml";
 const CACHE_FILE_NAME: &str = "cache.yml";
 
@@ -672,17 +673,21 @@ fn retrieve_dynein_file_path(dft: DyneinFileType) -> Result<String, DyneinConfig
 }
 
 fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
-    match dirs::home_dir() {
-        None => Err(DyneinConfigError::HomeDir),
-        Some(home) => {
-            let dir = format!("{}/{}", home.to_str().unwrap(), CONFIG_DIR);
-            if !path::Path::new(&dir).exists() {
-                debug!("Creating dynein config directory: {}", dir);
-                fs::create_dir(&dir)?;
-            };
-            Ok(dir)
-        }
-    }
+    let path = env::var(CONFIG_PATH_ENV_VAR_NAME).unwrap_or(
+        dirs::home_dir()
+            .ok_or(DyneinConfigError::HomeDir)?
+            .to_str()
+            .ok_or(DyneinConfigError::HomeDir)?
+            .to_string(),
+    );
+
+    let dir = format!("{}/{}", path, CONFIG_DIR);
+    if !path::Path::new(&dir).exists() {
+        debug!("Creating dynein config directory: {}", dir);
+        fs::create_dir(&dir)?;
+    };
+
+    Ok(dir)
 }
 
 /// This function updates `using_region` and `using_table` in config.yml,
