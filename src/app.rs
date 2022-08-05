@@ -673,7 +673,7 @@ fn retrieve_dynein_file_path(dft: DyneinFileType) -> Result<String, DyneinConfig
 }
 
 fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
-    let path = env::var(CONFIG_PATH_ENV_VAR_NAME).unwrap_or(
+    let full_path = env::var(CONFIG_PATH_ENV_VAR_NAME).unwrap_or(
         dirs::home_dir()
             .ok_or(DyneinConfigError::HomeDir)?
             .to_str()
@@ -681,10 +681,15 @@ fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
             .to_string(),
     );
 
-    let dir = format!("{}/{}", path, CONFIG_DIR);
+    let dir = path::Path::new(&full_path)
+        .join(CONFIG_DIR)
+        .to_str()
+        .ok_or(DyneinConfigError::HomeDir)?
+        .to_string();
+
     if !path::Path::new(&dir).exists() {
         debug!("Creating dynein config directory: {}", dir);
-        fs::create_dir(&dir)?;
+        fs::create_dir_all(&dir)?;
     };
 
     Ok(dir)
