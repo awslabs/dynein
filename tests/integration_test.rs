@@ -155,6 +155,37 @@ async fn test_help() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+async fn cleanup_config(dummy_dir: &str) -> io::Result<()> {
+    use std::fs::remove_dir_all;
+
+    remove_dir_all(dummy_dir)
+}
+
+#[tokio::test]
+async fn test_custom_config_location() -> Result<(), Box<dyn std::error::Error>> {
+    use std::path::Path;
+
+    let dummy_dir = "./tests/dummy_dir";
+    let config_dir = dummy_dir.to_string() + "/.dynein";
+
+    // cleanup config folder in case it was already there
+    cleanup_config(dummy_dir).await.ok();
+
+    // dy config clear
+    Command::cargo_bin("dy")?
+        .args(&["config", "clear"])
+        .env("DYNEIN_CONFIG_DIR", dummy_dir)
+        .output()?;
+
+    // check config folder created at our desired location
+    assert!(Path::new(&config_dir).exists());
+
+    // cleanup config folder
+    cleanup_config(dummy_dir).await.ok();
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_create_table";
