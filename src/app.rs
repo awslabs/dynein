@@ -681,18 +681,14 @@ fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
             .to_string(),
     );
 
-    let dir = path::Path::new(&full_path)
-        .join(CONFIG_DIR)
-        .to_str()
-        .ok_or(DyneinConfigError::HomeDir)?
-        .to_string();
+    let dir = path::Path::new(&full_path).join(CONFIG_DIR);
 
-    if !path::Path::new(&dir).exists() {
-        debug!("Creating dynein config directory: {}", dir);
+    if !dir.exists() {
+        debug!("Creating dynein config directory: {}", dir.display());
         fs::create_dir_all(&dir)?;
     };
 
-    Ok(dir)
+    Ok(dir.to_str().ok_or(DyneinConfigError::HomeDir)?.to_string())
 }
 
 /// This function updates `using_region` and `using_table` in config.yml,
