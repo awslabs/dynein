@@ -88,9 +88,11 @@ $ dy --help
 ```
 
 
-## Method 2. Homebrew (macOS)
+## Method 2. Homebrew (macOS/Linux)
 
-Currently not available. Please use the Method 1 above.
+```
+$ brew install dynein
+```
 
 ## Method 3. Building from source
 
