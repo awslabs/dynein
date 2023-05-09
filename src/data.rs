@@ -210,7 +210,7 @@ pub async fn query(cx: app::Context, params: QueryParams) {
         expression_attribute_names: query_params.names,
         expression_attribute_values: query_params.vals,
         consistent_read: Some(params.consistent_read),
-        scan_index_forward: params.descending.then(|| false),
+        scan_index_forward: params.descending.then_some(false),
         ..Default::default()
     };
     debug!("Request: {:#?}", req);
@@ -882,7 +882,7 @@ fn strip_item(
     item.iter()
         .map(|attr|
         // Serialization: `serde_json::to_value(sth: rusoto_dynamodb::AttributeValue)`
-        (attr.0.to_string(), serde_json::to_value(&attr.1).unwrap()))
+        (attr.0.to_string(), serde_json::to_value(attr.1).unwrap()))
         .collect()
 }
 
@@ -999,7 +999,7 @@ fn append_sort_key_expression(
     );
 
     // iterate over splitted tokens and build expression and mappings.
-    let mut iter = sort_key_expression.trim().split_whitespace();
+    let mut iter = sort_key_expression.split_whitespace();
     // Query API https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html#DDB-Query-request-KeyConditionExpression
     match iter.next() {
         // sortKeyName = :sortkeyval - true if the sort key value is equal to :sortkeyval.
