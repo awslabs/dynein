@@ -355,7 +355,11 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
     debug!("temporary download & unzip directory: {:?}", &tmpdir);
 
     println!("Temporarily downloading sample data from {}", target);
-    let res_bytes = reqwest::get(target).await?.bytes().await?;
+    let res_bytes = reqwest::get(target)
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
     let fpath: PathBuf = tmpdir.path().join("downloaded_sampledata.zip");
     debug!("Downloading the file at: {}", &fpath.display());
     let mut zfile: File = File::create(fpath.clone())?;
