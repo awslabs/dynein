@@ -761,7 +761,7 @@ fn fetch_arn_from_backup_name(
 }
 
 fn epoch_to_rfc3339(epoch: f64) -> String {
-    let utc_datetime = NaiveDateTime::from_timestamp(epoch as i64, 0);
+    let utc_datetime = NaiveDateTime::from_timestamp_opt(epoch as i64, 0).unwrap();
     DateTime::<Utc>::from_utc(utc_datetime, Utc).to_rfc3339()
 }
 

@@ -258,16 +258,16 @@ impl Context {
     }
 
     pub fn effective_cache_key(&self) -> String {
-        return format!(
+        format!(
             "{}/{}",
             &self.effective_region().name(),
             &self.effective_table_name()
-        );
+        )
     }
 
     pub fn cached_using_table_schema(&self) -> Option<TableSchema> {
         // return None if table name is not specified in both config and option.
-        if self.overwritten_table_name == None {
+        if self.overwritten_table_name.is_none() {
             match self.config.to_owned() {
                 Some(c) => c.using_table?,
                 None => return None,
@@ -379,7 +379,7 @@ pub fn load_or_touch_config_file(first_try: bool) -> Result<Config, DyneinConfig
             })
             .unwrap();
             fs::write(
-                &retrieve_dynein_file_path(DyneinFileType::ConfigFile)?,
+                retrieve_dynein_file_path(DyneinFileType::ConfigFile)?,
                 yaml_string,
             )?;
             load_or_touch_config_file(false) // set fisrt_try flag to false in order to avoid infinite loop.
@@ -412,7 +412,7 @@ pub fn load_or_touch_cache_file(first_try: bool) -> Result<Cache, DyneinConfigEr
             })
             .unwrap();
             fs::write(
-                &retrieve_dynein_file_path(DyneinFileType::CacheFile)?,
+                retrieve_dynein_file_path(DyneinFileType::CacheFile)?,
                 yaml_string,
             )?;
             load_or_touch_cache_file(false) // set fisrt_try flag to false in order to avoid infinite loop.
@@ -433,7 +433,7 @@ pub async fn use_table(
     let target_table: Option<&String> = cx
         .overwritten_table_name
         .as_ref()
-        .or_else(|| positional_arg_table_name.as_ref());
+        .or(positional_arg_table_name.as_ref());
     match target_table {
         Some(tbl) => {
             debug!("describing the table: {}", tbl);

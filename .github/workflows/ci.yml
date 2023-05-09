@@ -1,4 +1,6 @@
-on: [push]
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 name: CI
 
@@ -10,7 +12,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.56.1
+          toolchain: 1.69.0
           components: rustfmt, clippy
       - uses: actions-rs/cargo@v1
         with:

@@ -383,13 +383,13 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
         );
 
         // create a directory if target file is a directory (ends with '/').
-        if (&*f.name()).ends_with('/') {
+        if (*f.name()).ends_with('/') {
             create_dir_all(&unzipped_fpath)?
         } else {
             // create missing parent directory before diving into actual file
             if let Some(p) = unzipped_fpath.parent() {
                 if !p.exists() {
-                    create_dir_all(&p)?;
+                    create_dir_all(p)?;
                 }
             }
 
