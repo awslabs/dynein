@@ -14,13 +14,17 @@ jobs:
         with:
           toolchain: 1.69.0
           components: rustfmt, clippy
+      # Pinned to the commit hash of v2.2.1
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
+        with:
+          shared-key: build-and-test
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
-      - uses: actions-rs/cargo@v1
+      - uses: actions-rs/clippy-check@v1
         with:
-          command: clippy
+          token: ${{ secrets.GITHUB_TOKEN }}
           args: -- -D warnings
       - uses: actions-rs/cargo@v1
         with:
