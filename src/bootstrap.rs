@@ -25,8 +25,9 @@ use std::{
 
 use futures::future::join_all;
 use log::{debug, error};
-use rusoto_core::{Region, RusotoError};
+use rusoto_core::RusotoError;
 use rusoto_dynamodb::*;
+use rusoto_signature::Region;
 use tempfile::Builder;
 
 use serde_json::Value as JsonValue;
