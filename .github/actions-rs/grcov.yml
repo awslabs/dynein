@@ -1,0 +1,6 @@
+source-dir: .
+output-types: lcov
+output-path: ./target/coverage/html/
+binary-path: ./target/debug/deps/
+branch: true
+ignore-not-existing: true
