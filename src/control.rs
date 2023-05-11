@@ -19,9 +19,9 @@ use ::serde::{Deserialize, Serialize};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::future::join_all;
 use log::{debug, error};
-use rusoto_core::Region;
 use rusoto_dynamodb::*;
 use rusoto_ec2::{DescribeRegionsRequest, Ec2, Ec2Client};
+use rusoto_signature::Region;
 use std::{
     io::{self, Error as IOError, Write},
     time,
