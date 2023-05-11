@@ -1,4 +1,4 @@
-source-dir: .
+source-dir: ./src
 output-types: lcov
 output-path: ./target/coverage/tests.lcov
 binary-path: ./target/debug/deps/

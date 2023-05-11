@@ -18,11 +18,10 @@ jobs:
           command: test
           args: --bins --no-fail-fast
         env:
-          CARGO_INCREMENTAL: '0'
           RUSTFLAGS: '-Cinstrument-coverage'
           LLVM_PROFILE_FILE: 'cargo-test-%p-%m.profraw'
       - run: ls -l
-      - uses: actions-rs/grcov@v0.1.5
+      - uses: actions-rs/grcov@v0.1
       - uses: codecov/codecov-action@v3.1.3
         with:
           verbose: true
