@@ -12,11 +12,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.69.0
+          toolchain: nightly
           components: llvm-tools-preview
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clean
       - uses: actions-rs/cargo@v1
         with:
           command: test
