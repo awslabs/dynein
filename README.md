@@ -35,6 +35,7 @@ dynein - DynamoDB CLI
         - [`dy import`](#dy-import)
     - [Using DynamoDB Local with `--region local` option](#using-dynamodb-local-with---region-local-option)
 - [Misc](#misc)
+    - [Development](#development)
     - [Asides](#asides)
     - [Troubleshooting](#troubleshooting)
     - [Ideas for future works](#ideas-for-future-works)
@@ -798,6 +799,23 @@ $ dy scan
 
 
 # Misc
+
+## Development
+For development, we use `rustfmt` and `clippy` to maintain the quality of our source code.
+Before starting, please ensure both components are installed;
+
+```shell
+rustup component add rustfmt clippy
+```
+
+Additionally, we use `pre-commit` hooks to execute automated linting and basic checks.
+Please set it up before creating a commit;
+
+```shell
+brew install pre-commit # (or appropriate for your platform: https://pre-commit.com/)
+pre-commit install
+```
+
 
 ## Asides
 
