@@ -13,7 +13,6 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           components: llvm-tools-preview
-      - run: sed -i  's/name = "dy"/name = "dy-codecov"/g' Cargo.toml
       - uses: actions-rs/cargo@v1
         with:
           command: test

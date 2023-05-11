@@ -4,3 +4,4 @@ output-path: ./target/coverage/tests.lcov
 binary-path: ./target/debug/deps/
 branch: true
 ignore-not-existing: true
+filter: covered
