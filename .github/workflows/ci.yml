@@ -11,6 +11,11 @@ jobs:
   build_and_test:
     name: Rust project
     runs-on: ubuntu-latest
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local
+        ports:
+          - 8000:8000
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -29,6 +34,10 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: -- -D warnings
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --no-fail-fast --all-features
       - uses: actions-rs/cargo@v1
         with:
           command: build
