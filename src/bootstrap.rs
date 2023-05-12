@@ -41,6 +41,8 @@ use super::data;
 struct / enum / const
 ================================================= */
 
+const USER_AGENT: &str = concat!("dynein/", env!("CARGO_PKG_VERSION"));
+
 #[derive(Debug)]
 pub enum DyneinBootstrapError {
     LoadData(IOError),
@@ -356,7 +358,13 @@ async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, Dyn
     debug!("temporary download & unzip directory: {:?}", &tmpdir);
 
     println!("Temporarily downloading sample data from {}", target);
-    let res_bytes = reqwest::get(target)
+
+    let clinet = reqwest::ClientBuilder::new()
+        .user_agent(USER_AGENT)
+        .build()?;
+    let res_bytes = clinet
+        .get(target)
+        .send()
         .await?
         .error_for_status()?
         .bytes()
