@@ -483,7 +483,7 @@ As dynein prefer simple UX over minor use-cases, currently dynein doesn't suppor
 
 Support status of various examples ([x] = not available for now, [o] = supported):
 - [o] "SET Price = :newval" => in dynein: `$ dy update <keys> --set 'Price = 123'`.
-- [o] "SET LastPostedBy = :lastpostedby" => in dynein: `$ dy update <keys> --set 'LastPostedBy = "2020-02-24T22:22:22Z"'`.
+- [x] "SET LastPostedBy = :lastpostedby" => in dynein: `$ dy update <keys> --set 'LastPostedBy = "2020-02-24T22:22:22Z"'`.
 - [o] "SET Replies = :zero, Status = :stat" => in dynein: `$ dy update <keys> --set 'Replies = 0, Status = "OPEN"'`.
 - [x] "SET Replies = :zero, LastPostedBy = :lastpostedby" => in dynein: `$ dy update <keys> --set 'Replies = 0, LastPostedBy = "2020-02-24T22:22:22Z"'`.
 - [o] "SET #cls = :val" => in dynein you can pass reserved words normally: `$ dy update <keys> --set 'class = "Math"'`.
@@ -586,8 +586,7 @@ fn generate_update_expressions(
                         }),
                     );
                 } else {
-                    error!("failed to parse a right hand statement '{}'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'", &right_hand);
-                    std::process::exit(1);
+                    panic!("failed to parse a right hand statement '{}'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'", &right_hand);
                 }
             }
         }
@@ -1441,5 +1440,192 @@ fn generate_scan_expressions(
     GeneratedScanParams {
         exp: Some(expression),
         names: Some(names),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{generate_update_expressions, AttributeValue, UpdateActionType};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_generate_update_expressions_set_int() {
+        let actual = generate_update_expressions(UpdateActionType::Set, "Price = 123");
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0 = :DYNEIN_ATTRVAL0".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "Price".to_owned(),
+            )]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    n: Some("123".to_owned()),
+                    ..Default::default()
+                },
+            )]))
+        );
+    }
+
+    #[test]
+    fn test_generate_update_expressions_set_int_str() {
+        let actual =
+            generate_update_expressions(UpdateActionType::Set, "Replies = 0, Status = \"OPEN\"");
+        assert_eq!(
+            actual.exp,
+            Some(
+                "SET #DYNEIN_ATTRNAME0 = :DYNEIN_ATTRVAL0, #DYNEIN_ATTRNAME1 = :DYNEIN_ATTRVAL1"
+                    .to_owned()
+            )
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([
+                ("#DYNEIN_ATTRNAME0".to_owned(), "Replies".to_owned()),
+                ("#DYNEIN_ATTRNAME1".to_owned(), "Status".to_owned()),
+            ])),
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([
+                (
+                    ":DYNEIN_ATTRVAL0".to_owned(),
+                    AttributeValue {
+                        n: Some("0".to_owned()),
+                        ..Default::default()
+                    },
+                ),
+                (
+                    ":DYNEIN_ATTRVAL1".to_owned(),
+                    AttributeValue {
+                        s: Some("OPEN".to_owned()),
+                        ..Default::default()
+                    },
+                ),
+            ])),
+        );
+    }
+
+    #[test]
+    fn test_generate_update_expressions_set_str() {
+        let actual = generate_update_expressions(UpdateActionType::Set, "class = \"Math\"");
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0 = :DYNEIN_ATTRVAL0".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "class".to_owned(),
+            )]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    s: Some("Math".to_owned()),
+                    ..Default::default()
+                },
+            )])),
+        );
+    }
+
+    #[test]
+    fn test_generate_update_expressions_set_plus() {
+        let actual = generate_update_expressions(UpdateActionType::Set, "Price = Price + 1");
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0 = #DYNEIN_ATTRNAME0 + :DYNEIN_ATTRVAL0".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "Price".to_owned(),
+            )])),
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    n: Some("1".to_owned()),
+                    ..Default::default()
+                },
+            )])),
+        );
+    }
+
+    #[test]
+    fn test_generate_update_expressions_set_minus() {
+        let actual = generate_update_expressions(UpdateActionType::Set, "Price = Price - 1");
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0 = #DYNEIN_ATTRNAME0 - :DYNEIN_ATTRVAL0".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "Price".to_owned(),
+            )])),
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    n: Some("1".to_owned()),
+                    ..Default::default()
+                },
+            )])),
+        );
+    }
+
+    #[should_panic(
+        expected = "failed to parse a right hand statement '\"2020-02-24T22:22:22Z\"'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'"
+    )]
+    #[test]
+    fn test_generate_update_expressions_set_hyphen() {
+        // To use hyphen is not supported yet
+        generate_update_expressions(
+            UpdateActionType::Set,
+            "LastPostedBy = \"2020-02-24T22:22:22Z\"",
+        );
+    }
+
+    #[should_panic(expected = "failed to parse right hand object ''value'' into AttributeValue.")]
+    #[test]
+    fn test_generate_update_expressions_set_single_quote() {
+        // To use single quote is not supported yet
+        generate_update_expressions(UpdateActionType::Set, "key = 'value'");
+    }
+
+    #[test]
+    fn test_generate_update_expressions_remove() {
+        let actual =
+            generate_update_expressions(UpdateActionType::Remove, "Brand, InStock, QuantityOnHand");
+        assert_eq!(
+            actual.exp,
+            Some("REMOVE #DYNEIN_ATTRNAME0,#DYNEIN_ATTRNAME1,#DYNEIN_ATTRNAME2".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([
+                ("#DYNEIN_ATTRNAME0".to_owned(), "Brand".to_owned()),
+                ("#DYNEIN_ATTRNAME1".to_owned(), "InStock".to_owned()),
+                ("#DYNEIN_ATTRNAME2".to_owned(), "QuantityOnHand".to_owned()),
+            ])),
+        );
+        assert_eq!(actual.vals, None,);
     }
 }
