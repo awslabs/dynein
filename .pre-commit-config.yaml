@@ -3,7 +3,9 @@ repos:
   rev: v3.2.0
   hooks:
   - id: trailing-whitespace
+    exclude: ^tests/cmd/.*$
   - id: end-of-file-fixer
+    exclude: ^tests/cmd/.*$
   - id: check-yaml
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
   rev: v2.8.0
