@@ -18,5 +18,5 @@ use trycmd;
 
 #[test]
 fn cli_tests() {
-    trycmd::TestCases::new();
+    trycmd::TestCases::new().case("tests/cmd/*.md");
 }
