@@ -816,6 +816,12 @@ brew install pre-commit # (or appropriate for your platform: https://pre-commit.
 pre-commit install
 ```
 
+We use [trycmd](https://crates.io/crates/trycmd) to conduct snapshot testing for CLI.
+If the snapshot is needed to be updated, run command;
+
+```shell
+TRYCMD=overwrite cargo test --test cli_tests
+```
 
 ## Asides
 

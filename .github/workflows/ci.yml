@@ -31,5 +31,9 @@ jobs:
           args: -- -D warnings
       - uses: actions-rs/cargo@v1
         with:
+          command: test
+          args: --test cli_tests
+      - uses: actions-rs/cargo@v1
+        with:
           command: build
           args: --release --all-features
