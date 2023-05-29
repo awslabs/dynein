@@ -422,7 +422,7 @@ pub async fn update_item(
 ) {
     debug!("context: {:#?}", &cx);
     if set_expression.is_none() && remove_expression.is_none() {
-        // setting both --set and --remove is prohibited by conflicts_with of structopt (clap)
+        // setting both --set and --remove is prohibited by conflicts_with of clap
         error!("One of --set or --remove option is required. Passing both options is invalid.");
         std::process::exit(1);
     };

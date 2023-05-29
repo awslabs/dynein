@@ -365,7 +365,7 @@ pub async fn update_table(
     let desc: TableDescription =
         describe_table_api(&cx.effective_region(), table_name_to_update.clone()).await;
 
-    // Map given string into "Mode" enum. Note that in cmd.rs structopt already limits acceptable values.
+    // Map given string into "Mode" enum. Note that in cmd.rs clap already limits acceptable values.
     let switching_to_mode: Option<Mode> = match mode_string {
         None => None,
         Some(ms) => match ms.as_str() {
