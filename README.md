@@ -841,6 +841,19 @@ To see verbose output for troubleshooting purpose, you can change log level by `
 $ RUST_LOG=debug RUST_BACKTRACE=1 dy scan --table your_table
 ```
 
+## Known issues
+
+- Cannot set string value that include hyphen
+
+```
+$ dy update <keys> --set 'LastPostedBy = "2020-02-24T22:22:22Z"'
+```
+
+- Cannot use single quote that surround string
+
+```
+$ dy update <keys> --set "key = 'value'"
+```
 
 ## Ideas for future works
 
