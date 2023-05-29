@@ -11,6 +11,8 @@ jobs:
   build_and_test:
     name: Rust project
     runs-on: ubuntu-latest
+    env:
+      DYNEIN_TEST_NO_DOCKER_SETUP: true
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
