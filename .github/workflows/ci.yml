@@ -13,6 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DYNEIN_TEST_NO_DOCKER_SETUP: true
+      # define AWS credentials in environment for test
+      AWS_ACCESS_KEY_ID: "test"
+      AWS_SECRET_ACCESS_KEY: "test"
+    services:
+      dynamodb:
+        # Pinned to the version not to be broken with latest
+        image: amazon/dynamodb-local:1.22.0
+        ports:
+          - 8000:8000
+          - 8001:8000
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
