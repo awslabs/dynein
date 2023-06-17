@@ -201,7 +201,6 @@ async fn test_custom_config_location() -> Result<(), Box<dyn std::error::Error>>
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_create_table";
 
@@ -233,7 +232,6 @@ async fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_create_table_with_region_local_and_port_number_options(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let port = 8001;
@@ -283,7 +281,6 @@ async fn test_create_table_with_region_local_and_port_number_options(
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
     let mut c = setup().await?;
     let cmd = c.args(&[
@@ -300,7 +297,6 @@ async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_scan_blank_table";
 
@@ -320,7 +316,6 @@ async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_simple_scan";
 
@@ -363,7 +358,6 @@ async fn prepare_pk_sk_table(table_name: &&str) -> Result<(), Box<dyn std::error
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_simple_query";
 
@@ -381,7 +375,6 @@ async fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_desc_simple_query";
 
@@ -401,7 +394,6 @@ async fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_query_limit() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_query_limit";
 
@@ -419,7 +411,6 @@ async fn test_query_limit() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_batch_write";
 
@@ -541,7 +532,6 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
     use std::io::{Seek, SeekFrom};
 
