@@ -25,7 +25,7 @@ use dialoguer::Confirm;
 use log::{debug, error};
 use serde_json::{de::StrRead, Deserializer, StreamDeserializer, Value as JsonValue};
 
-use rusoto_dynamodb::*;
+use rusoto_dynamodb::{AttributeValue, ScanOutput, WriteRequest};
 
 use super::app;
 use super::batch;

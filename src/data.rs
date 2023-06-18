@@ -25,7 +25,10 @@ use std::{
 
 use log::{debug, error};
 use regex::Regex;
-use rusoto_dynamodb::*;
+use rusoto_dynamodb::{
+    AttributeValue, DeleteItemInput, DynamoDb, DynamoDbClient, GetItemInput, PutItemInput,
+    QueryInput, ScanInput, ScanOutput, UpdateItemInput,
+};
 use serde_json::Value as JsonValue;
 use tabwriter::TabWriter;
 // use bytes::Bytes;

@@ -16,7 +16,10 @@
 
 use log::{debug, error};
 use rusoto_core::RusotoError;
-use rusoto_dynamodb::*;
+use rusoto_dynamodb::{
+    AttributeValue, BatchWriteItemError, BatchWriteItemInput, DeleteRequest, DynamoDb,
+    DynamoDbClient, PutRequest, WriteRequest,
+};
 use serde_json::Value as JsonValue;
 use std::{collections::HashMap, error, fmt, fs, future::Future, io::Error as IOError, pin::Pin};
 
