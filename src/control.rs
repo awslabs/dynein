@@ -21,11 +21,11 @@ use futures::future::join_all;
 use log::{debug, error};
 use rusoto_dynamodb::{
     AttributeDefinition, BackupSummary, BillingModeSummary, CreateBackupInput,
-    CreateGlobalSecondaryIndexAction, CreateTableInput, DeleteTableInput, DynamoDb, DynamoDbClient,
-    GlobalSecondaryIndexDescription, GlobalSecondaryIndexUpdate, KeySchemaElement,
-    ListBackupsInput, ListTablesInput, LocalSecondaryIndexDescription, Projection,
-    ProvisionedThroughput, ProvisionedThroughputDescription, RestoreTableFromBackupInput,
-    StreamSpecification, TableDescription, UpdateTableInput,
+    CreateGlobalSecondaryIndexAction, CreateTableInput, DeleteTableInput, DescribeTableInput,
+    DynamoDb, DynamoDbClient, GlobalSecondaryIndexDescription, GlobalSecondaryIndexUpdate,
+    KeySchemaElement, ListBackupsInput, ListTablesInput, LocalSecondaryIndexDescription,
+    Projection, ProvisionedThroughput, ProvisionedThroughputDescription,
+    RestoreTableFromBackupInput, StreamSpecification, TableDescription, UpdateTableInput,
 };
 use rusoto_ec2::{DescribeRegionsRequest, Ec2, Ec2Client};
 use rusoto_signature::Region;
@@ -178,7 +178,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
         cx
     };
 
-    let desc: TableDescription = app::describe_table_api(
+    let desc: TableDescription = describe_table_api(
         &new_context.effective_region(),
         new_context.effective_table_name(),
     )
@@ -205,6 +205,26 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
         Some(_) => {
             println!("ERROR: unsupported output type.");
             std::process::exit(1);
+        }
+    }
+}
+
+/// Originally intended to be called by describe_table function, which is called from `$ dy desc`,
+/// however it turned out that DescribeTable API result is useful in various logic, separated API into this standalone function.
+pub async fn describe_table_api(region: &Region, table_name: String) -> TableDescription {
+    let ddb = DynamoDbClient::new(region.clone());
+    let req: DescribeTableInput = DescribeTableInput { table_name };
+
+    match ddb.describe_table(req).await {
+        Err(e) => {
+            debug!("DescribeTable API call got an error -- {:#?}", e);
+            error!("{}", e.to_string());
+            std::process::exit(1);
+        }
+        Ok(res) => {
+            let desc: TableDescription = res.table.expect("This message should not be shown.");
+            debug!("Received DescribeTable Result: {:?}\n", desc);
+            desc
         }
     }
 }
@@ -343,7 +363,7 @@ pub async fn update_table(
 ) {
     // Retrieve TableDescription of the table to update, current (before update) status.
     let desc: TableDescription =
-        app::describe_table_api(&cx.effective_region(), table_name_to_update.clone()).await;
+        describe_table_api(&cx.effective_region(), table_name_to_update.clone()).await;
 
     // Map given string into "Mode" enum. Note that in cmd.rs structopt already limits acceptable values.
     let switching_to_mode: Option<Mode> = match mode_string {

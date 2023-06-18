@@ -421,7 +421,7 @@ async fn wait_table_creation(cx: &app::Context, mut processing_tables: Vec<&str>
         let create_table_results = join_all(
             processing_tables
                 .iter()
-                .map(|t| app::describe_table_api(r, (*t).to_string())),
+                .map(|t| control::describe_table_api(r, (*t).to_string())),
         )
         .await;
         let statuses: Vec<String> = create_table_results
