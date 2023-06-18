@@ -26,7 +26,9 @@ use std::{
 use futures::future::join_all;
 use log::{debug, error};
 use rusoto_core::RusotoError;
-use rusoto_dynamodb::*;
+use rusoto_dynamodb::{
+    AttributeValue, BatchWriteItemError, CreateTableError, PutRequest, WriteRequest,
+};
 use rusoto_signature::Region;
 use tempfile::Builder;
 

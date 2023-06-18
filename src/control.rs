@@ -19,7 +19,14 @@ use ::serde::{Deserialize, Serialize};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use futures::future::join_all;
 use log::{debug, error};
-use rusoto_dynamodb::*;
+use rusoto_dynamodb::{
+    AttributeDefinition, BackupSummary, BillingModeSummary, CreateBackupInput,
+    CreateGlobalSecondaryIndexAction, CreateTableInput, DeleteTableInput, DynamoDb, DynamoDbClient,
+    GlobalSecondaryIndexDescription, GlobalSecondaryIndexUpdate, KeySchemaElement,
+    ListBackupsInput, ListTablesInput, LocalSecondaryIndexDescription, Projection,
+    ProvisionedThroughput, ProvisionedThroughputDescription, RestoreTableFromBackupInput,
+    StreamSpecification, TableDescription, UpdateTableInput,
+};
 use rusoto_ec2::{DescribeRegionsRequest, Ec2, Ec2Client};
 use rusoto_signature::Region;
 use std::{

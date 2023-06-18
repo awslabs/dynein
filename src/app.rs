@@ -16,7 +16,10 @@
 
 use ::serde::{Deserialize, Serialize};
 use log::{debug, error, info};
-use rusoto_dynamodb::*;
+use rusoto_dynamodb::{
+    AttributeDefinition, DescribeTableInput, DynamoDb, DynamoDbClient, KeySchemaElement,
+    TableDescription,
+};
 use rusoto_signature::Region;
 use serde_yaml::Error as SerdeYAMLError;
 use std::{
