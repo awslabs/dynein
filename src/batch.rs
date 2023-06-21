@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-use log::{debug, error};
-use rusoto_core::RusotoError;
-use rusoto_dynamodb::{
-    AttributeValue, BatchWriteItemError, BatchWriteItemInput, DeleteRequest, DynamoDb,
-    DynamoDbClient, PutRequest, WriteRequest,
+use aws_sdk_dynamodb::{
+    operation::batch_write_item::BatchWriteItemError,
+    types::{AttributeValue, DeleteRequest, PutRequest, WriteRequest},
+    Client as DynamoDbSdkClient,
 };
+use log::{debug, error};
 use serde_json::Value as JsonValue;
 use std::{collections::HashMap, error, fmt, fs, future::Future, io::Error as IOError, pin::Pin};
 
@@ -34,7 +34,7 @@ struct / enum / const
 pub enum DyneinBatchError {
     LoadData(IOError),
     PraseJSON(serde_json::Error),
-    BatchWriteError(RusotoError<BatchWriteItemError>),
+    BatchWriteError(aws_smithy_http::result::SdkError<BatchWriteItemError>),
 }
 impl fmt::Display for DyneinBatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -64,8 +64,8 @@ impl From<serde_json::Error> for DyneinBatchError {
         Self::PraseJSON(e)
     }
 }
-impl From<RusotoError<BatchWriteItemError>> for DyneinBatchError {
-    fn from(e: RusotoError<BatchWriteItemError>) -> Self {
+impl From<aws_smithy_http::result::SdkError<BatchWriteItemError>> for DyneinBatchError {
+    fn from(e: aws_smithy_http::result::SdkError<BatchWriteItemError>) -> Self {
         Self::BatchWriteError(e)
     }
 }
@@ -131,10 +131,12 @@ pub fn build_batch_request_items(
                     */
                     let item: HashMap<String, AttributeValue> =
                         ddbjson_attributes_to_attrvals(raw_item);
-                    write_requests.push(WriteRequest {
-                        put_request: Some(PutRequest { item }),
-                        delete_request: None,
-                    });
+
+                    write_requests.push(
+                        WriteRequest::builder()
+                            .put_request(PutRequest::builder().set_item(Some(item)).build())
+                            .build(),
+                    );
                 } else {
                     error!("[skip] no field named 'Item' under PutRequest");
                 }
@@ -163,10 +165,11 @@ pub fn build_batch_request_items(
                     */
                     let key: HashMap<String, AttributeValue> =
                         ddbjson_attributes_to_attrvals(raw_key);
-                    write_requests.push(WriteRequest {
-                        put_request: None,
-                        delete_request: Some(DeleteRequest { key }),
-                    });
+                    write_requests.push(
+                        WriteRequest::builder()
+                            .delete_request(DeleteRequest::builder().set_key(Some(key)).build())
+                            .build(),
+                    );
                 } else {
                     error!("[skip] no field named 'Key' under DeleteRequest");
                 }
@@ -191,19 +194,24 @@ pub fn build_batch_request_items(
 async fn batch_write_item_api(
     cx: app::Context,
     request_items: HashMap<String, Vec<WriteRequest>>,
-) -> Result<Option<HashMap<String, Vec<WriteRequest>>>, RusotoError<BatchWriteItemError>> {
+) -> Result<
+    Option<HashMap<String, Vec<WriteRequest>>>,
+    aws_smithy_http::result::SdkError<BatchWriteItemError>,
+> {
     debug!(
         "Calling BatchWriteItem API with request_items: {:?}",
         &request_items
     );
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: BatchWriteItemInput = BatchWriteItemInput {
-        request_items,
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.batch_write_item(req).await {
+    match ddb
+        .batch_write_item()
+        .set_request_items(Some(request_items))
+        .send()
+        .await
+    {
         Ok(res) => Ok(res.unprocessed_items),
         Err(e) => Err(e),
     }
@@ -214,7 +222,8 @@ async fn batch_write_item_api(
 pub fn batch_write_untill_processed(
     cx: app::Context,
     request_items: HashMap<String, Vec<WriteRequest>>,
-) -> Pin<Box<dyn Future<Output = Result<(), RusotoError<BatchWriteItemError>>>>> {
+) -> Pin<Box<dyn Future<Output = Result<(), aws_smithy_http::result::SdkError<BatchWriteItemError>>>>>
+{
     Box::pin(async move {
         match batch_write_item_api(cx.clone(), request_items).await {
             Ok(result) => {
@@ -260,12 +269,6 @@ pub async fn convert_jsonvals_to_request_items(
     let mut write_requests = Vec::<WriteRequest>::new();
 
     for item_jsonval in items_jsonval {
-        // Initialize a WriteRequest, which consists of a put_request for a single item.
-        let mut write_request = WriteRequest {
-            delete_request: None,
-            put_request: None,
-        };
-
         // Focusing on an item - iterate over attributes in an item.
         let mut item = HashMap::<String, AttributeValue>::new();
         for (attr_name, body) in item_jsonval
@@ -279,9 +282,11 @@ pub async fn convert_jsonvals_to_request_items(
             );
         }
 
-        // Fill meaningful put_request here, then push it to the write_requests. Then go to the next item.
-        write_request.put_request = Some(PutRequest { item });
-        write_requests.push(write_request);
+        write_requests.push(
+            WriteRequest::builder()
+                .put_request(PutRequest::builder().set_item(Some(item)).build())
+                .build(),
+        );
     }
 
     // A single table name as a key, and insert all (up to 25) write_requests under the single table.
@@ -317,12 +322,6 @@ pub async fn csv_matrix_to_request_items(
     let mut write_requests = Vec::<WriteRequest>::new();
 
     for cells in matrix {
-        // Initialize a WriteRequest, which consists of a put_request for a single item.
-        let mut write_request = WriteRequest {
-            delete_request: None,
-            put_request: None,
-        };
-
         // Build an item. Note that DynamoDB data type of attributes are left to how serde_json::from_str parse the value in the cell.
         let mut item = HashMap::<String, AttributeValue>::new();
         for i in 0..headers.len() {
@@ -337,9 +336,11 @@ pub async fn csv_matrix_to_request_items(
             );
         }
 
-        // Fill meaningful put_request here, then push it to the write_requests. Then go to the next item.
-        write_request.put_request = Some(PutRequest { item });
-        write_requests.push(write_request);
+        write_requests.push(
+            WriteRequest::builder()
+                .put_request(PutRequest::builder().set_item(Some(item)).build())
+                .build(),
+        );
     }
 
     // A single table name as a key, and insert all (up to 25) write_requests under the single table.
@@ -420,30 +421,15 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
 
     // following list of if-else statements would be return value of this function.
     if let Some(x) = ddb_jsonval.get("S") {
-        Some(AttributeValue {
-            s: Some(x.as_str().unwrap().to_string()),
-            ..Default::default()
-        })
+        Some(AttributeValue::S(x.as_str().unwrap().to_string()))
     } else if let Some(x) = ddb_jsonval.get("N") {
-        Some(AttributeValue {
-            n: Some(x.as_str().unwrap().to_string()),
-            ..Default::default()
-        })
+        Some(AttributeValue::N(x.as_str().unwrap().to_string()))
     } else if let Some(x) = ddb_jsonval.get("BOOL") {
-        Some(AttributeValue {
-            bool: Some(x.as_bool().unwrap()),
-            ..Default::default()
-        })
+        Some(AttributeValue::Bool(x.as_bool().unwrap()))
     } else if let Some(x) = ddb_jsonval.get("SS") {
-        Some(AttributeValue {
-            ss: Some(set_logic(x)),
-            ..Default::default()
-        })
+        Some(AttributeValue::Ss(set_logic(x)))
     } else if let Some(x) = ddb_jsonval.get("NS") {
-        Some(AttributeValue {
-            ns: Some(set_logic(x)),
-            ..Default::default()
-        })
+        Some(AttributeValue::Ns(set_logic(x)))
     } else if let Some(x) = ddb_jsonval.get("L") {
         let list_element = x
             .as_array()
@@ -452,21 +438,12 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
             .map(|el| ddbjson_val_to_attrval(el).expect("failed to digest a list element"))
             .collect::<Vec<AttributeValue>>();
         debug!("List Element: {:?}", list_element);
-        Some(AttributeValue {
-            l: Some(list_element),
-            ..Default::default()
-        })
+        Some(AttributeValue::L(list_element))
     } else if let Some(x) = ddb_jsonval.get("M") {
         let inner_map: HashMap<String, AttributeValue> = ddbjson_attributes_to_attrvals(x);
-        Some(AttributeValue {
-            m: Some(inner_map),
-            ..Default::default()
-        })
+        Some(AttributeValue::M(inner_map))
     } else if ddb_jsonval.get("NULL").is_some() {
-        Some(AttributeValue {
-            null: Some(true),
-            ..Default::default()
-        })
+        Some(AttributeValue::Null(true))
     } else {
         None
     }

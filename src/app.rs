@@ -15,21 +15,23 @@
  */
 
 use ::serde::{Deserialize, Serialize};
+use aws_config::{meta::region::RegionProviderChain, SdkConfig};
+use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
+use aws_types::region::Region;
 use log::{debug, error, info};
-use rusoto_dynamodb::{AttributeDefinition, KeySchemaElement, TableDescription};
-use rusoto_signature::Region;
 use serde_yaml::Error as SerdeYAMLError;
 use std::{
     collections::HashMap,
     env, error,
-    fmt::{self, Display, Error as FmtError, Formatter},
+    fmt::{self, Formatter},
     fs,
     io::Error as IOError,
     path,
-    str::FromStr,
 };
 
 use super::control;
+use super::key;
+use super::util;
 
 /* =================================================
 struct / enum / const
@@ -39,6 +41,7 @@ const CONFIG_DIR: &str = ".dynein";
 const CONFIG_PATH_ENV_VAR_NAME: &str = "DYNEIN_CONFIG_DIR";
 const CONFIG_FILE_NAME: &str = "config.yml";
 const CACHE_FILE_NAME: &str = "cache.yml";
+const LOCAL_REGION: &str = "local";
 
 pub enum DyneinFileType {
     ConfigFile,
@@ -49,10 +52,10 @@ pub enum DyneinFileType {
 pub struct TableSchema {
     pub region: String,
     pub name: String,
-    pub pk: Key,
-    pub sk: Option<Key>,
+    pub pk: key::Key,
+    pub sk: Option<key::Key>,
     pub indexes: Option<Vec<IndexSchema>>,
-    pub mode: control::Mode,
+    pub mode: util::Mode,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -61,86 +64,8 @@ pub struct IndexSchema {
     /// Type of index. i.e. GSI (Global Secondary Index) or LSI (Local Secondary Index).
     /// Use 'kind' as 'type' is a keyword in Rust.
     pub kind: IndexType,
-    pub pk: Key,
-    pub sk: Option<Key>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Key {
-    pub name: String,
-    /// Data type of the primary key. i.e. "S" (String), "N" (Number), or "B" (Binary).
-    /// Use 'kind' as 'type' is a keyword in Rust.
-    pub kind: KeyType,
-}
-
-impl Key {
-    /// return String with "<pk name> (<pk type>)", e.g. "myPk (S)". Used in desc command outputs.
-    pub fn display(&self) -> String {
-        format!("{} ({})", self.name, self.kind)
-    }
-}
-
-/// Restrict acceptable DynamoDB data types for primary keys.
-///     enum witn methods/FromStr ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#226-258
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub enum KeyType {
-    S,
-    N,
-    B,
-}
-
-/// implement Display for KeyType to simply print a single letter "S", "N", or "B".
-impl Display for KeyType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                KeyType::S => "S",
-                KeyType::N => "N",
-                KeyType::B => "B",
-            }
-        )
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ParseKeyTypeError {
-    message: String,
-}
-
-impl std::error::Error for ParseKeyTypeError {
-    fn description(&self) -> &str {
-        &self.message
-    }
-}
-
-impl Display for ParseKeyTypeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl ParseKeyTypeError {
-    /// Parses a region given as a string literal into a type `KeyType'
-    pub fn new(input: &str) -> Self {
-        Self {
-            message: format!("Not a valid DynamoDB primary key type: {}", input),
-        }
-    }
-}
-
-impl FromStr for KeyType {
-    type Err = ParseKeyTypeError;
-
-    fn from_str(s: &str) -> Result<Self, ParseKeyTypeError> {
-        match s {
-            "S" => Ok(Self::S),
-            "N" => Ok(Self::N),
-            "B" => Ok(Self::B),
-            x => Err(ParseKeyTypeError::new(x)),
-        }
-    }
+    pub pk: key::Key,
+    pub sk: Option<key::Key>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -205,6 +130,25 @@ pub struct Context {
  Overwritten information is retrieved with `effective_*` functions as 1st priority.
 */
 impl Context {
+    pub fn is_local(&self) -> bool {
+        let region = self.effective_region();
+        region.as_ref() == LOCAL_REGION
+    }
+
+    pub async fn effective_sdk_config(&self) -> SdkConfig {
+        let region = self.effective_region();
+        let region_name = region.as_ref();
+
+        self.effective_sdk_config_with_region(region_name).await
+    }
+
+    pub async fn effective_sdk_config_with_region(&self, region_name: &str) -> SdkConfig {
+        let sdk_region = Region::new(region_name.to_owned());
+
+        let provider = RegionProviderChain::first_try(sdk_region);
+        aws_config::from_env().region(provider).load().await
+    }
+
     pub fn effective_region(&self) -> Region {
         // if region is overwritten by --region comamnd, use it.
         if let Some(ow_region) = &self.overwritten_region {
@@ -226,7 +170,7 @@ impl Context {
         // e.g. region set via AWS CLI (check: $ aws configure get region), or environment variable `AWS_DEFAULT_REGION`.
         //      ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#282-290
         //      ref: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-        Region::default()
+        Region::from_static("us-east-1")
     }
 
     pub fn effective_table_name(&self) -> String {
@@ -260,7 +204,7 @@ impl Context {
     pub fn effective_cache_key(&self) -> String {
         format!(
             "{}/{}",
-            &self.effective_region().name(),
+            &self.effective_region().as_ref(),
             &self.effective_table_name()
         )
     }
@@ -285,9 +229,8 @@ impl Context {
         found_table_schema.map(|schema| schema.to_owned())
     }
 
-    pub fn with_region(mut self, ec2_region: &rusoto_ec2::Region) -> Self {
-        self.overwritten_region =
-            Some(Region::from_str(&ec2_region.to_owned().region_name.unwrap()).unwrap());
+    pub fn with_region(mut self, ec2_region: &str) -> Self {
+        self.overwritten_region = Some(Region::new(ec2_region.to_owned()));
         self
     }
 
@@ -348,8 +291,8 @@ Public functions
 pub fn region_from_str(s: Option<String>, p: Option<u32>) -> Option<Region> {
     let port = p.unwrap_or(8000);
     match s.as_deref() {
-        Some("local") => Some(region_dynamodb_local(port)),
-        Some(x) => Region::from_str(x).ok(), // convert Result<T, E> into Option<T>
+        Some(LOCAL_REGION) => Some(region_dynamodb_local(port)),
+        Some(x) => Some(Region::new(x.to_owned())), // convert Result<T, E> into Option<T>
         None => None,
     }
 }
@@ -439,9 +382,9 @@ pub async fn use_table(
             debug!("describing the table: {}", tbl);
             let region = cx.effective_region();
             let tbl = tbl.clone();
-            let desc: TableDescription = control::describe_table_api(&region, tbl.clone()).await;
+            let desc: TableDescription = control::describe_table_api(cx, &region, tbl.clone()).await;
             save_using_target(cx, desc)?;
-            println!("Now you're using the table '{}' ({}).", tbl, &region.name());
+            println!("Now you're using the table '{}' ({}).", tbl, &region.as_ref());
         },
         None => bye(1, "You have to specify a table. How to use (1). 'dy use --table mytable', or (2) 'dy use mytable'."),
     };
@@ -461,14 +404,14 @@ pub fn insert_to_table_cache(
     let region: Region = cx.effective_region();
     debug!(
         "Under the region '{}', trying to save table schema of '{}'",
-        &region.name(),
+        &region.as_ref(),
         &table_name
     );
 
     // retrieve current cache from Context and update target table desc.
     // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
     let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
-    let cache_key = format!("{}/{}", region.name(), table_name);
+    let cache_key = format!("{}/{}", region.as_ref(), table_name);
 
     let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
         Some(ts) => ts,
@@ -482,12 +425,12 @@ pub fn insert_to_table_cache(
     table_schema_hashmap.insert(
         cache_key,
         TableSchema {
-            region: String::from(region.name()),
+            region: String::from(region.as_ref()),
             name: table_name,
-            pk: typed_key("HASH", &desc).expect("pk should exist"),
-            sk: typed_key("RANGE", &desc),
+            pk: key::typed_key("HASH", &desc).expect("pk should exist"),
+            sk: key::typed_key("RANGE", &desc),
             indexes: index_schemas(&desc),
-            mode: control::extract_mode(&desc.billing_mode_summary),
+            mode: util::extract_mode(&desc.billing_mode_summary),
         },
     );
     cache.tables = Some(table_schema_hashmap);
@@ -513,37 +456,6 @@ pub fn remove_dynein_files() -> Result<(), DyneinConfigError> {
     Ok(())
 }
 
-/// returns Option of a tuple (attribute_name, attribute_type (S/N/B)).
-/// Used when you want to know "what is the Partition Key name and its data type of this table".
-pub fn typed_key(pk_or_sk: &str, desc: &TableDescription) -> Option<Key> {
-    // extracting key schema of "base table" here
-    let ks = desc.clone().key_schema.unwrap();
-    typed_key_for_schema(pk_or_sk, &ks, &desc.clone().attribute_definitions.unwrap())
-}
-
-/// Receives key data type (HASH or RANGE), KeySchemaElement(s), and AttributeDefinition(s),
-/// In many cases it's called by typed_key, but when retrieving index schema, this method can be used directly so put it as public.
-pub fn typed_key_for_schema(
-    pk_or_sk: &str,
-    ks: &[KeySchemaElement],
-    attrs: &[AttributeDefinition],
-) -> Option<Key> {
-    // Fetch Partition Key ("HASH") or Sort Key ("RANGE") from given Key Schema. pk should always exists, but sk may not.
-    let target_key = ks.iter().find(|x| x.key_type == pk_or_sk);
-    target_key.map(|key| Key {
-        name: key.clone().attribute_name,
-        // kind should be one of S/N/B, Which can be retrieved from AttributeDefinition's attribute_type.
-        kind: KeyType::from_str(
-            &attrs
-                .iter()
-                .find(|at| at.attribute_name == key.attribute_name)
-                .expect("primary key should be in AttributeDefinition.")
-                .attribute_type,
-        )
-        .unwrap(),
-    })
-}
-
 // If you explicitly specify target table by `--table/-t` option, this function executes DescribeTable API to gather table schema info.
 // Otherwise, load table schema info from config file.
 // fn table_schema(region: &Region, config: &config::Config, table_overwritten: Option<String>) -> TableSchema {
@@ -553,18 +465,19 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
         Some(table_name) => {
             // TODO: reduce # of DescribeTable API calls. table_schema function is called every time you do something.
             let desc: TableDescription = control::describe_table_api(
+                cx,
                 &cx.effective_region(),
                 table_name, /* should be equal to 'cx.effective_table_name()' */
             )
             .await;
 
             TableSchema {
-                region: String::from(cx.effective_region().name()),
+                region: String::from(cx.effective_region().as_ref()),
                 name: desc.clone().table_name.unwrap(),
-                pk: typed_key("HASH", &desc).expect("pk should exist"),
-                sk: typed_key("RANGE", &desc),
+                pk: key::typed_key("HASH", &desc).expect("pk should exist"),
+                sk: key::typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
-                mode: control::extract_mode(&desc.billing_mode_summary),
+                mode: util::extract_mode(&desc.billing_mode_summary),
             }
         }
         None => {
@@ -596,9 +509,9 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
             indexes.push(IndexSchema {
                 name: gsi.index_name.unwrap(),
                 kind: IndexType::Gsi,
-                pk: typed_key_for_schema("HASH", &gsi.key_schema.clone().unwrap(), attr_defs)
+                pk: key::typed_key_for_schema("HASH", &gsi.key_schema.clone().unwrap(), attr_defs)
                     .expect("pk should exist"),
-                sk: typed_key_for_schema("RANGE", &gsi.key_schema.unwrap(), attr_defs),
+                sk: key::typed_key_for_schema("RANGE", &gsi.key_schema.unwrap(), attr_defs),
             });
         }
     };
@@ -608,9 +521,9 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
             indexes.push(IndexSchema {
                 name: lsi.index_name.unwrap(),
                 kind: IndexType::Lsi,
-                pk: typed_key_for_schema("HASH", &lsi.key_schema.clone().unwrap(), attr_defs)
+                pk: key::typed_key_for_schema("HASH", &lsi.key_schema.clone().unwrap(), attr_defs)
                     .expect("pk should exist"),
-                sk: typed_key_for_schema("RANGE", &lsi.key_schema.unwrap(), attr_defs),
+                sk: key::typed_key_for_schema("RANGE", &lsi.key_schema.unwrap(), attr_defs),
             });
         }
     };
@@ -631,16 +544,14 @@ pub fn bye(code: i32, msg: &str) {
 Private functions
 ================================================= */
 
+// TODO: fix
 fn region_dynamodb_local(port: u32) -> Region {
     let endpoint_url = format!("http://localhost:{}", port);
     debug!(
         "setting DynamoDB Local '{}' as target region.",
         &endpoint_url
     );
-    Region::Custom {
-        name: "local".to_owned(),
-        endpoint: endpoint_url,
-    }
+    Region::from_static(LOCAL_REGION)
 }
 
 fn retrieve_dynein_file_path(dft: DyneinFileType) -> Result<String, DyneinConfigError> {
@@ -682,7 +593,7 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
     let port: u32 = cx.effective_port();
 
     // retrieve current config from Context and update "using target".
-    let region = Some(String::from(cx.effective_region().name()));
+    let region = Some(String::from(cx.effective_region().as_ref()));
     let mut config = cx.config.as_mut().expect("cx should have config");
     config.using_region = region;
     config.using_table = Some(table_name);
@@ -722,7 +633,7 @@ mod tests {
             overwritten_port: None,
             output: None,
         };
-        assert_eq!(cx1.effective_region(), Region::default());
+        assert_eq!(cx1.effective_region(), Region::from_static("us-east-1"));
         // cx1.effective_table_name(); ... exit(1)
 
         let cx2 = Context {
@@ -737,29 +648,35 @@ mod tests {
             overwritten_port: None,
             output: None,
         };
-        assert_eq!(cx2.effective_region(), Region::from_str("ap-northeast-1")?);
+        assert_eq!(
+            cx2.effective_region(),
+            Region::from_static("ap-northeast-1")
+        );
         assert_eq!(cx2.effective_table_name(), String::from("cfgtbl"));
 
         let cx3 = Context {
-            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
-            overwritten_table_name: Some(String::from("argtbl")),     // --table argtbl
+            overwritten_region: Some(Region::from_static("us-east-1")), // --region us-east-1
+            overwritten_table_name: Some(String::from("argtbl")),       // --table argtbl
             ..cx2.clone()
         };
-        assert_eq!(cx3.effective_region(), Region::from_str("us-east-1")?);
+        assert_eq!(cx3.effective_region(), Region::from_static("us-east-1"));
         assert_eq!(cx3.effective_table_name(), String::from("argtbl"));
 
         let cx4 = Context {
-            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
+            overwritten_region: Some(Region::from_static("us-east-1")), // --region us-east-1
             ..cx2.clone()
         };
-        assert_eq!(cx4.effective_region(), Region::from_str("us-east-1")?);
+        assert_eq!(cx4.effective_region(), Region::from_static("us-east-1"));
         assert_eq!(cx4.effective_table_name(), String::from("cfgtbl"));
 
         let cx5 = Context {
             overwritten_table_name: Some(String::from("argtbl")), // --table argtbl
             ..cx2.clone()
         };
-        assert_eq!(cx5.effective_region(), Region::from_str("ap-northeast-1")?);
+        assert_eq!(
+            cx5.effective_region(),
+            Region::from_static("ap-northeast-1")
+        );
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
 
         Ok(())

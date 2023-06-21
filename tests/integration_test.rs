@@ -20,10 +20,11 @@ use std::env;
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
+use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
+use aws_types::region::Region as SdkRegion;
 use once_cell::sync::Lazy;
 use regex::bytes::Regex;
-use rusoto_core::Region;
-use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::fs::File;
 use std::io::{self, Write}; // Used when check results by printing to stdout
 use std::sync::Mutex;
@@ -112,12 +113,17 @@ async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error
 
     // Wait dynamodb-local
     let health_check_url = format!("http://localhost:{}", port);
-    let ddb = DynamoDbClient::new(Region::Custom {
-        name: "local".to_owned(),
-        endpoint: health_check_url,
-    });
+
+    let sdk_region = SdkRegion::new("local");
+    let provider = RegionProviderChain::first_try(sdk_region);
+    let config = aws_config::from_env()
+        .region(provider)
+        .endpoint_url(health_check_url)
+        .load()
+        .await;
+    let ddb = DynamoDbSdkClient::new(&config);
     loop {
-        if let Ok(_result) = ddb.list_tables(Default::default()).await {
+        if let Ok(_result) = ddb.list_tables().send().await {
             println!("ListTables API succeeded.");
             break;
         } else {

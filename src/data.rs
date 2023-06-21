@@ -23,17 +23,19 @@ use std::{
     vec::Vec,
 };
 
+use aws_sdk_dynamodb::{
+    operation::scan::ScanOutput,
+    types::{AttributeValue, ReturnValue},
+    Client as DynamoDbSdkClient,
+};
 use log::{debug, error};
 use regex::Regex;
-use rusoto_dynamodb::{
-    AttributeValue, DeleteItemInput, DynamoDb, DynamoDbClient, GetItemInput, PutItemInput,
-    QueryInput, ScanInput, ScanOutput, UpdateItemInput,
-};
 use serde_json::Value as JsonValue;
 use tabwriter::TabWriter;
 // use bytes::Bytes;
 
 use super::app;
+use super::key;
 
 /* =================================================
 struct / enum / const
@@ -100,7 +102,7 @@ pub async fn scan(
     consistent_read: bool,
     attributes: &Option<String>,
     keys_only: bool,
-    limit: i64,
+    limit: i32,
 ) {
     let ts: app::TableSchema = app::table_schema(&cx).await;
 
@@ -139,7 +141,7 @@ pub async fn scan_api(
     consistent_read: bool,
     attributes: &Option<String>,
     keys_only: bool,
-    limit: Option<i64>,
+    limit: Option<i32>,
     esk: Option<HashMap<String, AttributeValue>>,
 ) -> ScanOutput {
     debug!("context: {:#?}", &cx);
@@ -147,30 +149,31 @@ pub async fn scan_api(
 
     let scan_params: GeneratedScanParams = generate_scan_expressions(&ts, attributes, keys_only);
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: ScanInput = ScanInput {
-        table_name: ts.name.to_string(),
-        index_name: index,
-        limit,
-        projection_expression: scan_params.exp,
-        expression_attribute_names: scan_params.names,
-        consistent_read: Some(consistent_read),
-        exclusive_start_key: esk,
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    ddb.scan(req).await.unwrap_or_else(|e| {
-        debug!("Scan API call got an error -- {:?}", e);
-        error!("{}", e.to_string());
-        std::process::exit(1);
-    })
+    ddb.scan()
+        .table_name(ts.name)
+        .set_index_name(index)
+        .set_limit(limit)
+        .set_projection_expression(scan_params.exp)
+        .set_expression_attribute_names(scan_params.names)
+        .consistent_read(consistent_read)
+        .set_exclusive_start_key(esk)
+        .send()
+        .await
+        .unwrap_or_else(|e| {
+            debug!("Scan API call got an error -- {:?}", e);
+            error!("{}", e.into_service_error());
+            std::process::exit(1);
+        })
 }
 
 pub struct QueryParams {
     pub pval: String,
     pub sort_key_expression: Option<String>,
     pub index: Option<String>,
-    pub limit: Option<i64>,
+    pub limit: Option<i32>,
     pub consistent_read: bool,
     pub descending: bool,
     pub attributes: Option<String>,
@@ -204,21 +207,23 @@ pub async fn query(cx: app::Context, params: QueryParams) {
         &ts.name, &query_params
     );
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: QueryInput = QueryInput {
-        table_name: ts.name.to_string(),
-        index_name: params.index,
-        limit: params.limit,
-        key_condition_expression: query_params.exp,
-        expression_attribute_names: query_params.names,
-        expression_attribute_values: query_params.vals,
-        consistent_read: Some(params.consistent_read),
-        scan_index_forward: params.descending.then_some(false),
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
+
+    let req = ddb
+        .query()
+        .table_name(ts.name.to_string())
+        .set_index_name(params.index)
+        .set_limit(params.limit)
+        .set_key_condition_expression(query_params.exp)
+        .set_expression_attribute_names(query_params.names)
+        .set_expression_attribute_values(query_params.vals)
+        .consistent_read(params.consistent_read)
+        .set_scan_index_forward(params.descending.then_some(false));
+
     debug!("Request: {:#?}", req);
 
-    match ddb.query(req).await {
+    match req.send().await {
         Ok(res) => {
             match res.items {
                 None => panic!("This message should not be shown"), // as Query returns 'Some([])' if there's no item to return.
@@ -243,7 +248,7 @@ pub async fn query(cx: app::Context, params: QueryParams) {
         }
         Err(e) => {
             debug!("Query API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error());
             std::process::exit(1);
         }
     }
@@ -261,15 +266,17 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
         &ts.name, &primary_keys
     );
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: GetItemInput = GetItemInput {
-        table_name: ts.name,
-        key: primary_keys,
-        consistent_read: Some(consistent_read),
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.get_item(req).await {
+    match ddb
+        .get_item()
+        .table_name(ts.name)
+        .set_key(Some(primary_keys))
+        .consistent_read(consistent_read)
+        .send()
+        .await
+    {
         Ok(res) => match res.item {
             None => println!("No item found."),
             Some(item) => match cx.output.as_deref() {
@@ -293,7 +300,7 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
         },
         Err(e) => {
             debug!("GetItem API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error());
             std::process::exit(1);
         }
     }
@@ -333,21 +340,22 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
 
     debug!("Calling PutItem API to insert: {:?}", &full_item_image);
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: PutItemInput = PutItemInput {
-        table_name: ts.name.to_string(),
-        item: full_item_image, // HashMap<String, AttributeValue>,
-        // return_values: `PutItem does not recognize any values other than NONE or ALL_OLD`. So leave it as default (NONE).
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.put_item(req).await {
+    match ddb
+        .put_item()
+        .table_name(ts.name.to_string())
+        .set_item(Some(full_item_image))
+        .send()
+        .await
+    {
         Ok(_) => {
             println!("Successfully put an item to the table '{}'.", &ts.name);
         }
         Err(e) => {
             debug!("PutItem API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error());
             std::process::exit(1);
         }
     }
@@ -364,14 +372,16 @@ pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
         &ts.name, &primary_keys
     );
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: DeleteItemInput = DeleteItemInput {
-        table_name: ts.name.to_string(),
-        key: primary_keys,
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.delete_item(req).await {
+    match ddb
+        .delete_item()
+        .table_name(ts.name.to_string())
+        .set_key(Some(primary_keys))
+        .send()
+        .await
+    {
         // NOTE: DynamoDB DeleteItem API is idempotent and returns "OK" even if an item trying to delete doesn't exist.
         Ok(_) => {
             println!(
@@ -381,7 +391,7 @@ pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
         }
         Err(e) => {
             debug!("Deletetem API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error());
             std::process::exit(1);
         }
     }
@@ -419,18 +429,20 @@ pub async fn update_item(
         panic!("Neither --set nor --remove is not specified, but this should not be catched here.");
     };
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: UpdateItemInput = UpdateItemInput {
-        table_name: ts.name.to_string(),
-        key: primary_keys,
-        update_expression: update_params.exp,
-        expression_attribute_names: update_params.names,
-        expression_attribute_values: update_params.vals,
-        return_values: Some(String::from("ALL_NEW")), // ask DynamoDB to return updated item.
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.update_item(req).await {
+    match ddb
+        .update_item()
+        .table_name(ts.name.to_string())
+        .set_key(Some(primary_keys))
+        .set_update_expression(update_params.exp)
+        .set_expression_attribute_names(update_params.names)
+        .set_expression_attribute_values(update_params.vals)
+        .return_values(ReturnValue::AllNew) // ask DynamoDB to return updated item.
+        .send()
+        .await
+    {
         Ok(res) => {
             println!("Successfully updated an item in the table '{}'.", &ts.name);
             println!(
@@ -440,7 +452,7 @@ pub async fn update_item(
         }
         Err(e) => {
             debug!("UpdateItem API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error());
             std::process::exit(1);
         }
     }
@@ -723,17 +735,12 @@ fn build_attrval_scalar(_ktype: &str, _kval: &str) -> AttributeValue {
         _ktype, _kval
     );
 
-    let mut attrval: AttributeValue = AttributeValue {
-        ..Default::default()
-    };
     match _ktype {
-        "S" => attrval.s = Some(String::from(_kval)),
-        "N" => attrval.n = Some(String::from(_kval)), // NOTE: pass string, not number
+        "S" => AttributeValue::S(String::from(_kval)),
+        "N" => AttributeValue::N(String::from(_kval)), // NOTE: pass string, not number
         // "B" => { attrval.b = Some(Bytes::from(_kval.clone().as_str())) },
         _ => panic!("ERROR: Unknown DynamoDB Data Type: {}", _ktype),
     }
-
-    attrval
 }
 
 // for SS and NS DynamoDB Attributes.
@@ -745,86 +752,53 @@ fn build_attrval_set(ktype: &str, kval: &[JsonValue]) -> AttributeValue {
         ktype, kval
     );
 
-    let mut attrval: AttributeValue = AttributeValue {
-        ..Default::default()
-    };
     match ktype {
-        "SS" => {
-            attrval.ss = Some(
-                kval.iter()
-                    .map(|x| x.as_str().unwrap().to_string())
-                    .collect(),
-            )
-        }
-        "NS" => {
-            attrval.ns = Some(
-                kval.iter()
-                    .map(|x| x.as_i64().unwrap().to_string())
-                    .collect(),
-            )
-        }
+        "SS" => AttributeValue::Ss(
+            kval.iter()
+                .map(|x| x.as_str().unwrap().to_string())
+                .collect(),
+        ),
+        "NS" => AttributeValue::Ns(
+            kval.iter()
+                .map(|x| x.as_i64().unwrap().to_string())
+                .collect(),
+        ),
         // NOTE: Currently BS is not supported.
         // "BS": Vec<bytes::Bytes> (serialize_with = "::rusoto_core::serialization::SerdeBlobList::serialize_blob_list")
         _ => panic!("ERROR: Unknown DynamoDB Data Type: {}", ktype),
     }
-
-    attrval
 }
 
 /// for "L" DynamoDB Attributes
 /// used only for 'simplified JSON' format. Not compatible with DynamoDB JSON.
 fn build_attrval_list(vec: &[JsonValue]) -> AttributeValue {
-    let mut attrval: AttributeValue = AttributeValue {
-        ..Default::default()
-    };
-
     let mut inside_attrvals = Vec::<AttributeValue>::new();
     for v in vec {
         debug!("this is an element of vec: {:?}", v);
         inside_attrvals.push(dispatch_jsonvalue_to_attrval(v));
     }
-    attrval.l = Some(inside_attrvals);
-
-    attrval
+    AttributeValue::L(inside_attrvals)
 }
 
 /// for "M" DynamoDB Attributes
 /// used only for 'simplified JSON' format. Not compatible with DynamoDB JSON.
 fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>) -> AttributeValue {
-    let mut result = AttributeValue {
-        ..Default::default()
-    };
-
     let mut mapval = HashMap::<String, AttributeValue>::new();
     for (k, v) in json_map {
         debug!("working on key '{}', and value '{:?}'", k, v);
         mapval.insert(k.to_string(), dispatch_jsonvalue_to_attrval(v));
     }
-    result.m = Some(mapval);
-
-    result
+    AttributeValue::M(mapval)
 }
 
 /// Convert from serde_json::Value (standard JSON values) into DynamoDB style AttributeValue
 pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
     match jv {
         // scalar types
-        JsonValue::String(val) => AttributeValue {
-            s: Some(val.to_string()),
-            ..Default::default()
-        },
-        JsonValue::Number(val) => AttributeValue {
-            n: Some(val.to_string()),
-            ..Default::default()
-        },
-        JsonValue::Bool(val) => AttributeValue {
-            bool: Some(*val),
-            ..Default::default()
-        },
-        JsonValue::Null => AttributeValue {
-            null: Some(true),
-            ..Default::default()
-        },
+        JsonValue::String(val) => AttributeValue::S(val.to_string()),
+        JsonValue::Number(val) => AttributeValue::N(val.to_string()),
+        JsonValue::Bool(val) => AttributeValue::Bool(*val),
+        JsonValue::Null => AttributeValue::Null(true),
 
         // document types. they can be recursive.
         JsonValue::Object(obj) => build_attrval_map(obj),
@@ -851,7 +825,7 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
 
 /// `strip_items` calls `strip_item` for each item.
 fn strip_items(
-    items: &[HashMap<String, rusoto_dynamodb::AttributeValue>],
+    items: &[HashMap<String, AttributeValue>],
 ) -> Vec<HashMap<String, serde_json::Value>> {
     items.iter().map(strip_item).collect()
 }
@@ -878,13 +852,12 @@ fn strip_items(
 /// by utilizing Serialize derive of the struct:
 /// https://docs.rs/rusoto_dynamodb/0.42.0/src/rusoto_dynamodb/generated.rs.html#38
 /// https://docs.rs/rusoto_dynamodb/0.42.0/rusoto_dynamodb/struct.AttributeValue.html
-fn strip_item(
-    item: &HashMap<String, rusoto_dynamodb::AttributeValue>,
-) -> HashMap<String, serde_json::Value> {
+fn strip_item(item: &HashMap<String, AttributeValue>) -> HashMap<String, serde_json::Value> {
     item.iter()
         .map(|attr|
-        // Serialization: `serde_json::to_value(sth: rusoto_dynamodb::AttributeValue)`
-        (attr.0.to_string(), serde_json::to_value(attr.1).unwrap()))
+        // Serialization: `serde_json::to_value(sth: AttributeValue)`
+        // TODO: fix attr.1
+        (attr.0.to_string(), serde_json::to_value("attr.1").unwrap()))
         .collect()
 }
 
@@ -897,7 +870,7 @@ fn generate_query_expressions(
     let expression: String = String::from("#DYNEIN_PKNAME = :DYNEIN_PKVAL");
     let mut names = HashMap::<String, String>::new();
     let mut vals = HashMap::<String, AttributeValue>::new();
-    let mut sort_key_of_target_table_or_index: Option<app::Key> = None;
+    let mut sort_key_of_target_table_or_index: Option<key::Key> = None;
 
     match index {
         None =>
@@ -980,7 +953,7 @@ fn generate_query_expressions(
 /// Using existing key condition expr (e.g. "myId <= :idVal") and supplementary mappings (expression_attribute_names, expression_attribute_values),
 /// this method returns GeneratedQueryParams struct. Note that it's called only when sort key expression (ske) exists.
 fn append_sort_key_expression(
-    sort_key: Option<app::Key>,
+    sort_key: Option<key::Key>,
     partition_key_expression: &str,
     sort_key_expression: &str,
     mut names: HashMap<String, String>,
@@ -1212,55 +1185,38 @@ fn attrval_to_cell_print(optional_attrval: Option<AttributeValue>) -> String {
     match optional_attrval {
         None => String::from(""),
         Some(attrval) => {
-            if let Some(v) = &attrval.s {
-                String::from(v)
-            } else if let Some(v) = &attrval.n {
-                String::from(v)
-            } else if let Some(v) = &attrval.bool {
-                v.to_string()
-            } else if let Some(vs) = &attrval.ss {
-                serde_json::to_string(&vs).unwrap()
-            } else if let Some(vs) = &attrval.ns {
-                serde_json::to_string(
-                    &vs.iter()
+            match attrval {
+                AttributeValue::S(v) => v,
+                AttributeValue::N(v) => v,
+                AttributeValue::Bool(v) => v.to_string(),
+                AttributeValue::Ss(v) => serde_json::to_string(&v).unwrap(),
+                AttributeValue::Ns(v) => serde_json::to_string(
+                    &v.iter()
                         .map(|v| str_to_json_num(v))
                         .collect::<Vec<JsonValue>>(),
                 )
-                .unwrap()
-            } else if attrval.null.is_some() {
-                String::from("null")
-            } else {
-                String::from("(snip)")
-            } // B, BS, L, and M are not shown.
+                .unwrap(),
+                AttributeValue::Null(_) => String::from("null"),
+                _ => String::from("(snip)"), // B, BS, L, and M are not shown.
+            }
         }
     }
 }
 
 /// https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html
 pub fn attrval_to_type(attrval: &AttributeValue) -> Option<String> {
-    // following list of if-else statements would be return value of this function.
-    if attrval.s.is_some() {
-        Some(String::from("String"))
-    } else if attrval.n.is_some() {
-        Some(String::from("Number"))
-    } else if attrval.b.is_some() {
-        Some(String::from("Binary"))
-    } else if attrval.bool.is_some() {
-        Some(String::from("Boolian"))
-    } else if attrval.null.is_some() {
-        Some(String::from("Null"))
-    } else if attrval.ss.is_some() {
-        Some(String::from("Set (String)"))
-    } else if attrval.ns.is_some() {
-        Some(String::from("Set (Number)"))
-    } else if attrval.bs.is_some() {
-        Some(String::from("Set (Binary)"))
-    } else if attrval.m.is_some() {
-        Some(String::from("Map"))
-    } else if attrval.l.is_some() {
-        Some(String::from("List"))
-    } else {
-        None
+    match attrval {
+        AttributeValue::S(_) => Some(String::from("String")),
+        AttributeValue::N(_) => Some(String::from("Number")),
+        AttributeValue::B(_) => Some(String::from("Binary")),
+        AttributeValue::Bool(_) => Some(String::from("Boolian")),
+        AttributeValue::Null(_) => Some(String::from("Null")),
+        AttributeValue::Ss(_) => Some(String::from("Set (String)")),
+        AttributeValue::Ns(_) => Some(String::from("Set (Number)")),
+        AttributeValue::Bs(_) => Some(String::from("Set (Binary)")),
+        AttributeValue::M(_) => Some(String::from("Map")),
+        AttributeValue::L(_) => Some(String::from("List")),
+        _ => None,
     }
 }
 
@@ -1351,34 +1307,20 @@ fn str_to_json_num(s: &str) -> JsonValue {
 
 fn attrval_to_jsonval(attrval: &AttributeValue) -> JsonValue {
     let unsupported: &str = "<<<JSON output doesn't support this type attributes>>>";
-    //  following list of if-else statements would be return value of this function.
-    if let Some(v) = &attrval.s {
-        serde_json::to_value(v).unwrap()
-    } else if let Some(v) = &attrval.n {
-        str_to_json_num(v)
-    } else if let Some(v) = &attrval.bool {
-        serde_json::to_value(v).unwrap()
-    } else if let Some(vs) = &attrval.ss {
-        serde_json::to_value(vs).unwrap()
-    } else if let Some(vs) = &attrval.ns {
-        vs.iter().map(|v| str_to_json_num(v)).collect()
-    }
-    // In List (L) type, each element is a DynamoDB AttributeValue (e.g. {"S": "xxxx"}). recursively apply this method to elements.
-    else if let Some(vlst) = &attrval.l {
-        vlst.iter().map(attrval_to_jsonval).collect()
-    } else if let Some(vmap) = &attrval.m {
-        attrval_to_json_map(vmap)
-    } else if attrval.null.is_some() {
-        serde_json::to_value(()).unwrap()
-    }
-    // Binary (B) and BinarySet (BS) attributes are not supported to display in JSON output format.
-    else if attrval.b.is_some() || attrval.bs.is_some() {
-        serde_json::to_value(unsupported).unwrap()
-    } else {
-        panic!(
+    match attrval {
+        AttributeValue::S(v) => serde_json::to_value(v).unwrap(),
+        AttributeValue::N(v) => str_to_json_num(v),
+        AttributeValue::Bool(v) => serde_json::to_value(v).unwrap(),
+        AttributeValue::Null(_) => serde_json::to_value(()).unwrap(),
+        AttributeValue::Ss(v) => serde_json::to_value(v).unwrap(),
+        AttributeValue::Ns(v) => v.iter().map(|v| str_to_json_num(v)).collect(),
+        AttributeValue::B(_) | AttributeValue::Bs(_) => serde_json::to_value(unsupported).unwrap(),
+        AttributeValue::M(v) => attrval_to_json_map(v),
+        AttributeValue::L(v) => v.iter().map(attrval_to_jsonval).collect(),
+        _ => panic!(
             "DynamoDB AttributeValue is not in valid status: {:#?}",
             &attrval
-        );
+        ),
     }
 }
 
@@ -1469,10 +1411,7 @@ mod tests {
             actual.vals,
             Some(HashMap::from([(
                 ":DYNEIN_ATTRVAL0".to_owned(),
-                AttributeValue {
-                    n: Some("123".to_owned()),
-                    ..Default::default()
-                },
+                AttributeValue::N("123".to_owned()),
             )]))
         );
     }
@@ -1500,17 +1439,11 @@ mod tests {
             Some(HashMap::from([
                 (
                     ":DYNEIN_ATTRVAL0".to_owned(),
-                    AttributeValue {
-                        n: Some("0".to_owned()),
-                        ..Default::default()
-                    },
+                    AttributeValue::N("0".to_owned()),
                 ),
                 (
                     ":DYNEIN_ATTRVAL1".to_owned(),
-                    AttributeValue {
-                        s: Some("OPEN".to_owned()),
-                        ..Default::default()
-                    },
+                    AttributeValue::S("OPEN".to_owned()),
                 ),
             ])),
         );
@@ -1534,10 +1467,7 @@ mod tests {
             actual.vals,
             Some(HashMap::from([(
                 ":DYNEIN_ATTRVAL0".to_owned(),
-                AttributeValue {
-                    s: Some("Math".to_owned()),
-                    ..Default::default()
-                },
+                AttributeValue::S("Math".to_owned()),
             )])),
         );
     }
@@ -1560,10 +1490,7 @@ mod tests {
             actual.vals,
             Some(HashMap::from([(
                 ":DYNEIN_ATTRVAL0".to_owned(),
-                AttributeValue {
-                    n: Some("1".to_owned()),
-                    ..Default::default()
-                },
+                AttributeValue::N("1".to_owned()),
             )])),
         );
     }
@@ -1586,10 +1513,7 @@ mod tests {
             actual.vals,
             Some(HashMap::from([(
                 ":DYNEIN_ATTRVAL0".to_owned(),
-                AttributeValue {
-                    n: Some("1".to_owned()),
-                    ..Default::default()
-                },
+                AttributeValue::N("1".to_owned()),
             )])),
         );
     }

@@ -119,7 +119,7 @@ pub enum Sub {
     Scan {
         /// Limit number of items to return.
         #[structopt(short, long, default_value = "100")]
-        limit: i64,
+        limit: i32,
 
         /// Attributes to show, separated by commas, which is mapped to ProjectionExpression (e.g. --attributes name,address,age).
         /// Note that primary key(s) are always included in results regardless of what you've passed to --attributes.
@@ -184,7 +184,7 @@ pub enum Sub {
 
         /// Limit the number of items to return. By default, the number of items is determined by DynamoDB.
         #[structopt(short, long)]
-        limit: Option<i64>,
+        limit: Option<i32>,
 
         /// Attributes to show, separated by commas, which is mapped to ProjectionExpression (e.g. --attributes name,address,age).
         /// Note that primary key(s) are always included in results regardless of what you've passed to --attributes.
