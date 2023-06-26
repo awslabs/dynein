@@ -18,12 +18,17 @@ use crate::data::QueryParams;
 use log::debug;
 use std::error::Error;
 
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
+
 mod app;
 mod batch;
 mod bootstrap;
 mod cmd;
 mod control;
 mod data;
+mod parser;
 mod shell;
 mod transfer;
 

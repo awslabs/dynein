@@ -621,13 +621,17 @@ $ dy get 999
 
 with dynein, you can use `--set` or `--remove` option. Here's an exmaple:
 
-```
+```bash
+$ dy put 42 -i '{"flag": true}'
+Successfully put an item to the table 'test'.
+
 $ dy get 42
 {
   "flag": true,
   "id": 42
 }
 
+# Set a boolean
 $ dy upd 42 --set "flag = false"
 Successfully updated an item in the table 'write_test'.
 
@@ -636,23 +640,267 @@ $ dy get 42
   "flag": false,
   "id": 42
 }
+
+# Set a string value
+$ dy upd 42 --set "date = '2022-02-22T22:22:22Z'"
+$ dy get 42
+{
+  "date": "2022-02-22T22:22:22Z",
+  "id": "42",
+  "flag": false
+}
+
+# Set a number
+$ dy upd 42 --set 'pi = +3.14159265358979323846'
+$ dy get 42
+{
+  "date": "2022-02-22T22:22:22Z",
+  "pi": 3.141592653589793,
+  "id": "42",
+  "flag": false
+}
+
+# You can apply an addition (+) and a subtraction (-) to the numbers. Please note that DynamoDB does not support unary operator (+, -), multiplication and division.
+$ dy upd 42 --set 'pi = pi + 10'
+$ dy get 42 | jq .pi
+13.141592653589793
+
+$ dy upd 42 --set 'pi = 1 - pi'
+$ dy get 42 | jq .pi
+-12.141592653589793
 ```
 
 Next let me show an example to use `--remove`. Note that `--remove` in `dy upd` command never remove "item" itself, instead `--remove` just removes an "attribute".
 
-```
-$ dy upd 42 --remove "flag"
+```bash
+$ dy upd 42 --remove flag
 Successfully updated an item in the table 'write_test'.
 
 $ dy get 42
 {
-  "id": 42
+  "id": "42",
+  "date": "2022-02-22T22:22:22Z",
+  "pi": 3.141592653589793
+}
+
+# You can remove multiple attributes
+$ dy upd 42 --remove "date, pi"
+$ dy get 42
+{
+  "id": "42"
 }
 ```
 
-dynein has a special command named `--atomic-counter`. It increases specified number atribute by `1`.
+DynamoDB supports a list type which has order. Let's try it with dynein.
 
+```bash
+# Create an empty list
+$ dy upd 42 --set "list = []"
+$ dy get 42
+{
+  "id": "42",
+  "list": []
+}
+
+# Add an elements into the list
+$ dy upd 42 --set "list = list_append(list, ['item1'])"
+$ dy get 42
+{
+  "id": "42",
+  "list": [
+    "item1"
+  ]
+}
+
+# Prepend an element to the list
+$ dy upd 42 --set "list = list_append(['item0'], list)"
+$ dy get 42 | jq .list
+[
+  "item0",
+  "item1"
+]
+
+# Add more elements
+$ dy upd 42 --set "list = list_append(list, ['item2', 'item3'])"
+$ dy get 42 | jq .list
+[
+  "item0",
+  "item1",
+  "item2",
+  "item3"
+]
+
+# You can directly modify the list element
+$ dy upd 42 --set "list[0] = 'item0 modified'"
+$ dy get 42 | jq .list
+[
+  "item0 modified",
+  "item1",
+  "item2",
+  "item3"
+]
+
+# Delete the element from the list
+$ dy upd 42 --remove 'list[0]'
+$ dy get 42 | jq .list
+[
+  "item1",
+  "item2",
+  "item3"
+]
+
+# Remove the list attribute
+$ dy upd 42 --remove list
+$ dy get 42
+{
+  "id": "42"
+}
 ```
+
+Furthermore, it's possible to update multiple attributes simultaneously.
+
+```bash
+# Set numbers
+$ dy upd 42 --set "n1 = 0, n2 = 1"
+$ dy get 42
+{
+  "n2": 1,
+  "id": "42",
+  "n1": 0
+}
+
+# Calculate Fibonacci numbers
+$ dy upd 42 --set "n1 = n2, n2 = n1 + n2"
+$ dy get 42 | jq -c '[.n1,.n2]'
+[1,1]
+
+# Calculate the next value
+$ dy upd 42 --set "n1 = n2, n2 = n1 + n2"
+$ dy get 42 | jq -c '[.n1,.n2]'
+[1,2]
+
+# You can get more sequence
+$ dy upd 42 --set "n1 = n2, n2 = n1 + n2"
+$ dy get 42 | jq -c '[.n1,.n2]'
+[2,3]
+
+$ dy upd 42 --set "n1 = n2, n2 = n1 + n2"
+$ dy get 42 | jq -c '[.n1,.n2]'
+[3,5]
+
+# Clean up the attributes
+$ dy upd 42 --remove "n1,n2"
+$ dy get 42
+{
+  "id": "42"
+}
+```
+
+As demonstrated in `dy put`, map type expresses nested values. Let's manipulate it with dynein.
+
+```bash
+$ dy upd 42 --set 'ProductReviews = {"metadata": {"counts": 0, "average": null}}'
+$ dy get 42
+{
+  "id": "42",
+  "ProductReviews": {
+    "metadata": {
+      "average": null,
+      "counts": 0
+    }
+  }
+}
+
+$ dy upd 42 --set 'ProductReviews.FiveStar = ["Excellent product"], ProductReviews.metadata = {"average": 5, "sum": 5, "counts": 1}'
+$ dy get 42
+{
+  "id": "42",
+  "ProductReviews": {
+    "FiveStar": [
+      "Excellent product"
+    ],
+    "metadata": {
+      "average": 5,
+      "counts": 1,
+      "sum": 5
+    }
+  }
+}
+
+$ dy upd 42 --set 'ProductReviews.FiveStar[1] = "Very happy with my purchase", ProductReviews.ThreeStar = ["Just OK - not that great"], ProductReviews.metadata = {"average": 4.3, "sum": 13, "counts": 3}'
+$ dy get 42
+{
+  "id": "42",
+  "ProductReviews": {
+    "FiveStar": [
+      "Excellent product",
+      "Very happy with my purchase"
+    ],
+    "ThreeStar": [
+      "Just OK - not that great"
+    ],
+    "metadata": {
+      "average": 4.3,
+      "counts": 3,
+      "sum": 13
+    }
+  }
+}
+
+$ dy upd 42 --set 'ProductReviews.OneStar = if_not_exists(ProductReviews.OneStar, [])'
+$ dy get 42
+{
+  "id": "42",
+  "ProductReviews": {
+    "FiveStar": [
+      "Excellent product",
+      "Very happy with my purchase"
+    ],
+    "OneStar": [],
+    "ThreeStar": [
+      "Just OK - not that great"
+    ],
+    "metadata": {
+      "average": 4.3,
+      "counts": 3,
+      "sum": 13
+    }
+  }
+}
+
+$ dy upd 42 --set 'ProductReviews.OneStar = list_append(ProductReviews.OneStar, ["Broken"]), ProductReviews.metadata = {"average": 3.5, "sum": 14, "counts": 4}'
+$ dy get 42
+{
+  "ProductReviews": {
+    "FiveStar": [
+      "Excellent product",
+      "Very happy with my purchase"
+    ],
+    "OneStar": [
+      "Broken"
+    ],
+    "ThreeStar": [
+      "Just OK - not that great"
+    ],
+    "metadata": {
+      "average": 3.5,
+      "counts": 4,
+      "sum": 14
+    }
+  },
+  "id": "42"
+}
+
+$ dy upd 42 --remove ProductReviews
+$ dy get 42
+{
+  "id": "42"
+}
+```
+
+dynein has a special command named `--atomic-counter`. It increases specified number attribute by `1`.
+
+```bash
 $ dy get 52
 {
   "age": 28,
@@ -671,11 +919,65 @@ $ dy get 52
 }
 ```
 
+##### Supported String Literals
+
+There are two types of string literals that you can use:
+
+- Double quote (`"`): Double quoted string literals support escape sequences such as `\0`, `\r`, `\n`, `\t`, `\\`, `\"`, and `\'`. Each of them represents a null character, carriage return, new line, horizontal tab, backslash, double quote, and single quote, respectively. If you need to include a double quote inside the literal, you must escape it.
+- Single quote (`'`): Single-quoted string literals are interpreted as you input them. However, you cannot specify a string that includes a single quote. In such cases, you can use a double-quoted string literal.
+
+##### Supported Functions
+
+The `upd` command supports the following functions:
+
+- `list_append`: This function is used to concatenate two lists, where each list can be a literal or a path to an attribute. When you call `list_append([l1,l2], [l3,l4,l5])`, it will return `[l1,l2,l3,l4,l5]`.
+- `if_not_exists`: This fungiction allows you to set a default value for the `null` case. The left-hand argument represents the path to an attribute, while the right-hand argument specifies the default value for the `null`.
+
+For more details, please refer to the [official documentation](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.UpdateExpressions.html#Expressions.UpdateExpressions.SET.UpdatingListElements).
+
+#### Quoting a Path of an Attribute
+
+Sometimes, you may need to specify a path that includes a space or special characters that are not allowed by dynein. In such cases, you can use backticks to quote the path. For example, consider the following item:
+
+```json
+{
+  "id": {"S":  "55"},
+  "map": {
+    "M": {
+      "Do you have spaces?": {
+        "S": "Yes"
+      },
+      "Dou you `?": {
+        "S": "Yes"
+      },
+      "路径": {"S": "Chinese"},
+      "パス": {"S": "Japanese"},
+      "경로": {"S": "Korean"}
+    }
+  }
+}
+```
+
+You can specify a path using the following syntax:
+
+* ```dy upd 55 --set 'map.`Do you have spaces?` = "Allowed"'```
+* ```dy upd 55 --set 'map.`Dou you ``?` = "Maybe"'```
+
+As demonstrated above, you can use double backticks (``) to represent a backtick (`) within the path.
+
+Please note that you may not need to escape for non-ASCI paths like CJK characters. For example, you can specify `路径`, `パス`　, and `경로` without quotes. Dynein allows to specify a path in which the first character is the `ID_Start` class and the rest of the characters are the `ID_Continue` class without escape. Those classes are defined by [unicode standard](https://www.unicode.org/reports/tr31/tr31-37.html). Following examples work.
+
+Please note that you may not need to escape non-ASCII paths like CJK characters. For example, you can specify `路径`, `パス`, and `경로` without quotes. Dynein allows you to specify a path where the first character belongs to the `ID_Start` class and the subsequent characters belong to the `ID_Continue` class without requiring escape sequences. These classes are defined by the [Unicode standard](https://www.unicode.org/reports/tr31/tr31-37.html). The following examples illustrate this:
+
+* ```dy upd 55 --set 'map.路径 = "A word of Chinese"'```
+* ```dy upd 55 --set 'map.パス = "A word of Japanese"'```
+* ```dy upd 55 --set 'map.경로 = "A word of Korean"'```
+
 #### `dy del`
 
 To delete an item, you use `dy del` command with primary key to identify an item.
 
-```
+```bash
 $ dy get 42
 { "id": 42 }
 $ dy del 42
@@ -839,20 +1141,6 @@ To see verbose output for troubleshooting purpose, you can change log level by `
 
 ```
 $ RUST_LOG=debug RUST_BACKTRACE=1 dy scan --table your_table
-```
-
-## Known issues
-
-- Cannot set string value that include hyphen
-
-```
-$ dy update <keys> --set 'LastPostedBy = "2020-02-24T22:22:22Z"'
-```
-
-- Cannot use single quote that surround string
-
-```
-$ dy update <keys> --set "key = 'value'"
 ```
 
 ## Ideas for future works
