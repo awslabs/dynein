@@ -23,8 +23,8 @@ use std::{
     vec::Vec,
 };
 
+use crate::parser::DyneinParser;
 use log::{debug, error};
-use regex::Regex;
 use rusoto_dynamodb::{
     AttributeValue, DeleteItemInput, DynamoDb, DynamoDbClient, GetItemInput, PutItemInput,
     QueryInput, ScanInput, ScanOutput, UpdateItemInput,
@@ -486,126 +486,51 @@ As dynein prefer simple UX over minor use-cases, currently dynein doesn't suppor
 
 Support status of various examples ([x] = not available for now, [o] = supported):
 - [o] "SET Price = :newval" => in dynein: `$ dy update <keys> --set 'Price = 123'`.
-- [x] "SET LastPostedBy = :lastpostedby" => in dynein: `$ dy update <keys> --set 'LastPostedBy = "2020-02-24T22:22:22Z"'`.
+- [o] "SET LastPostedBy = :lastpostedby" => in dynein: `$ dy update <keys> --set 'LastPostedBy = "2020-02-24T22:22:22Z"'`.
 - [o] "SET Replies = :zero, Status = :stat" => in dynein: `$ dy update <keys> --set 'Replies = 0, Status = "OPEN"'`.
-- [x] "SET Replies = :zero, LastPostedBy = :lastpostedby" => in dynein: `$ dy update <keys> --set 'Replies = 0, LastPostedBy = "2020-02-24T22:22:22Z"'`.
+- [o] "SET Replies = :zero, LastPostedBy = :lastpostedby" => in dynein: `$ dy update <keys> --set 'Replies = 0, LastPostedBy = "2020-02-24T22:22:22Z"'`.
 - [o] "SET #cls = :val" => in dynein you can pass reserved words normally: `$ dy update <keys> --set 'class = "Math"'`.
 - [o] "SET Price = Price + :incr" => --set 'Price = Price + 1' works. If :incr is 1, you can consider using --atomic-counter.
-- [x] "SET RelatedItems[1] = :ri"
-- [x] "SET #pr.#5star[1] = :r5, #pr.#3star = :r3"
-- [x] "SET #ri = list_append(#ri, :vals)"
-- [x] "SET #ri = list_append(:vals, #ri)"
-- [x] "SET Price = if_not_exists(Price, :p)"
+- [o] "SET RelatedItems[1] = :ri" => --set 'RelatedItems[1] = "item1"'
+- [o] "SET #pr.#5star[1] = :r5, #pr.#3star = :r3" => --set 'pr.`5star`[1] = 7, pr.`3star` = 3'
+- [o] "SET #ri = list_append(#ri, :vals)" => --set 'RelatedItems = list_append(RelatedItems, ["item2"])'
+- [o] "SET #ri = list_append(:vals, #ri)" => --set 'RelatedItems = list_append(["item2"], RelatedItems)'
+- [o] "SET Price = if_not_exists(Price, :p)" => --set 'Price = if_not_exists(Price, 123)'
 - [o] "REMOVE Brand, InStock, QuantityOnHand" => in dynein: `$ dy update <keys> --remove 'Brand, InStock, QuantityOnHand'`.
-- [x] "REMOVE RelatedItems[1], RelatedItems[2]"
+- [o] "REMOVE RelatedItems[1], RelatedItems[2]" => --remove 'RelatedItems[1], RelatedItems[2]'
 */
 fn generate_update_expressions(
     action_type: UpdateActionType,
     given_expression: &str,
 ) -> GeneratedUpdateParams {
     let mut expression: String = String::from("");
-    let mut names = HashMap::<String, String>::new();
-    let mut vals = HashMap::<String, AttributeValue>::new();
+    let names;
+    let vals;
 
     match action_type {
         UpdateActionType::Set => {
-            /*
-            BNF style syntax of UpdateExpression SET action is below, where "function" is one of "list_append" or "if_not_exists".
-                set-action ::=
-                    path = value
-                value ::=
-                    operand
-                    | operand '+' operand
-                    | operand '-' operand
-                operand ::=
-                    path | function
-            */
-            check_update_expression_compatibility(given_expression);
-
-            let statements: Vec<&str> = given_expression.split(',').map(|x| x.trim()).collect();
-            debug!("given_expression splitted by ',': {:?}", statements);
-
             expression.push_str("SET ");
+            let mut parser = DyneinParser::new();
 
-            for (i, statement) in statements.into_iter().enumerate() {
-                debug!("parsing a statement: {}", &statement);
-                let path_and_value: Vec<&str> = statement.split('=').map(|x| x.trim()).collect();
-                if path_and_value.len() != 2 {
-                    error!(
-                        "failed to parse a statement '{}' in 'path = value' style.",
-                        &statement
-                    );
-                    std::process::exit(1);
-                };
-                let left_hand: &str = path_and_value[0];
-                let right_hand: &str = path_and_value[1];
-                debug!("path: {}, value: {}", &left_hand, &right_hand);
-
-                debug!("left hand ... {:#?}", left_hand);
-                let name_placeholder = String::from("#DYNEIN_ATTRNAME") + &i.to_string();
-                if i > 0 {
-                    expression.push_str(", ")
-                };
-                expression.push_str(&name_placeholder);
-                expression.push_str(" = ");
-                names.insert(name_placeholder.clone(), String::from(left_hand));
-
-                debug!("right hand ... {:#?}", right_hand);
-                let val_placeholder = String::from(":DYNEIN_ATTRVAL") + &i.to_string();
-                // TODO: currently --set 'thatdate = "2020-02-02"' doesn't work bacause of "-". Need to use more smart parser.
-                // TODO: support --set 'listAttr = [1,2]'. Currently mistakenly parse/split it by "," as ["listAttr = [1" and "2]".
-                let right_hand_operands: Vec<&str> = right_hand
-                    .split(|c| c == '+' || c == '-')
-                    .map(|x| x.trim())
-                    .collect();
-                if right_hand_operands.len() == 1 {
-                    // --set 'Attr = 123', where right_hand_operands = ["val"], of which length is 1.
-                    expression.push_str(val_placeholder.as_str());
-                    vals.insert(
-                        val_placeholder,
-                        str_to_attrval(right_hand).unwrap_or_else(|_| {
-                            panic!(
-                                "failed to parse right hand object '{}' into AttributeValue.",
-                                &right_hand
-                            )
-                        }),
-                    );
-                } else if right_hand_operands.len() == 2 && right_hand_operands[0] == left_hand {
-                    // --set 'Attr = Attr + 100', where right_hand_operands = ["val", 100], of which length is 2.
-                    expression.push_str(&name_placeholder);
-                    if right_hand.contains('+') {
-                        expression.push_str(" + ")
-                    } else if right_hand.contains('-') {
-                        expression.push_str(" - ")
-                    };
-                    expression.push_str(val_placeholder.as_str());
-                    vals.insert(
-                        val_placeholder,
-                        str_to_attrval(right_hand_operands[1]).unwrap_or_else(|_| {
-                            panic!(
-                                "failed to parse right hand object '{}' into AttributeValue.",
-                                &right_hand_operands[1]
-                            )
-                        }),
-                    );
-                } else {
-                    panic!("failed to parse a right hand statement '{}'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'", &right_hand);
-                }
-            }
+            // TODO: the error should bubble up for better error handling.
+            let result = parser
+                .parse_set_action(given_expression)
+                .expect("Failed to parse given expression");
+            expression.push_str(&result.get_expression());
+            names = result.get_names();
+            vals = result.get_values();
         }
         UpdateActionType::Remove => {
-            // NOTE: REMOVE action for list elements is not supported and currently 'LisAtt[1]' is recognized as one token.
-            check_update_expression_compatibility(given_expression);
-            let mut returning_attributes: Vec<String> = vec![];
-            let attributes: Vec<&str> = given_expression.split(',').map(|x| x.trim()).collect();
-            debug!("given_expression splitted by ',': {:?}", attributes);
-            for (i, attr) in attributes.into_iter().enumerate() {
-                let placeholder = String::from("#DYNEIN_ATTRNAME") + &i.to_string();
-                returning_attributes.push(placeholder.clone());
-                names.insert(placeholder, String::from(attr));
-            }
             expression.push_str("REMOVE ");
-            expression.push_str(&returning_attributes.join(","));
+            let mut parser = DyneinParser::new();
+
+            // TODO: the error should bubble up for better error handling.
+            let result = parser
+                .parse_remove_action(given_expression)
+                .expect("Failed to parse given expression");
+            expression.push_str(&result.get_expression());
+            names = result.get_names();
+            vals = result.get_values();
         }
     }; // match action_type
 
@@ -617,20 +542,6 @@ fn generate_update_expressions(
         exp: Some(expression),
         names: if names.is_empty() { None } else { Some(names) },
         vals: if vals.is_empty() { None } else { Some(vals) },
-    }
-}
-
-fn check_update_expression_compatibility(e: &str) {
-    if Regex::new(r"\[\d+\]").unwrap().is_match(e) {
-        error!("given expression '{}' contains at least one list element (e.g. [0]), which dynein doesn't support for now.", e);
-        std::process::exit(1);
-    } else if Regex::new(r"list_append|if_not_exists")
-        .unwrap()
-        .is_match(e)
-    {
-        // TODO: support list_append|if_not_exists in update SET action.
-        error!("given expression '{}' contains SET functions ('list_append' or 'if_not_exists'), which dynein doesn't support for now.", e);
-        std::process::exit(1);
     }
 }
 
@@ -665,16 +576,6 @@ fn identify_target(
         &target
     );
     target
-}
-
-fn str_to_attrval(s: &str) -> Result<AttributeValue, serde_json::Error> {
-    debug!(
-        "Trying to convert given string '{}' into DynamoDB AttributeValue.",
-        s
-    );
-    let json_value: JsonValue = serde_json::from_str(s)?;
-    let attrval = dispatch_jsonvalue_to_attrval(&json_value);
-    Ok(attrval)
 }
 
 /// this function converts a JSON string argument passed by `--item/-i` option into DynamoDB AttributeValue.
@@ -1456,7 +1357,7 @@ mod tests {
         let actual = generate_update_expressions(UpdateActionType::Set, "Price = 123");
         assert_eq!(
             actual.exp,
-            Some("SET #DYNEIN_ATTRNAME0 = :DYNEIN_ATTRVAL0".to_owned())
+            Some("SET #DYNEIN_ATTRNAME0=:DYNEIN_ATTRVAL0".to_owned())
         );
         assert_eq!(
             actual.names,
@@ -1484,7 +1385,7 @@ mod tests {
         assert_eq!(
             actual.exp,
             Some(
-                "SET #DYNEIN_ATTRNAME0 = :DYNEIN_ATTRVAL0, #DYNEIN_ATTRNAME1 = :DYNEIN_ATTRVAL1"
+                "SET #DYNEIN_ATTRNAME0=:DYNEIN_ATTRVAL0,#DYNEIN_ATTRNAME1=:DYNEIN_ATTRVAL1"
                     .to_owned()
             )
         );
@@ -1521,7 +1422,7 @@ mod tests {
         let actual = generate_update_expressions(UpdateActionType::Set, "class = \"Math\"");
         assert_eq!(
             actual.exp,
-            Some("SET #DYNEIN_ATTRNAME0 = :DYNEIN_ATTRVAL0".to_owned())
+            Some("SET #DYNEIN_ATTRNAME0=:DYNEIN_ATTRVAL0".to_owned())
         );
         assert_eq!(
             actual.names,
@@ -1547,7 +1448,7 @@ mod tests {
         let actual = generate_update_expressions(UpdateActionType::Set, "Price = Price + 1");
         assert_eq!(
             actual.exp,
-            Some("SET #DYNEIN_ATTRNAME0 = #DYNEIN_ATTRNAME0 + :DYNEIN_ATTRVAL0".to_owned())
+            Some("SET #DYNEIN_ATTRNAME0=#DYNEIN_ATTRNAME0+:DYNEIN_ATTRVAL0".to_owned())
         );
         assert_eq!(
             actual.names,
@@ -1573,7 +1474,7 @@ mod tests {
         let actual = generate_update_expressions(UpdateActionType::Set, "Price = Price - 1");
         assert_eq!(
             actual.exp,
-            Some("SET #DYNEIN_ATTRNAME0 = #DYNEIN_ATTRNAME0 - :DYNEIN_ATTRVAL0".to_owned())
+            Some("SET #DYNEIN_ATTRNAME0=#DYNEIN_ATTRNAME0-:DYNEIN_ATTRVAL0".to_owned())
         );
         assert_eq!(
             actual.names,
@@ -1594,23 +1495,268 @@ mod tests {
         );
     }
 
-    #[should_panic(
-        expected = "failed to parse a right hand statement '\"2020-02-24T22:22:22Z\"'. Valid syntax would be: 'Attr = \"val\"', or 'Attr = Attr + 100'"
-    )]
     #[test]
     fn test_generate_update_expressions_set_hyphen() {
-        // To use hyphen is not supported yet
-        generate_update_expressions(
+        let actual = generate_update_expressions(
             UpdateActionType::Set,
             "LastPostedBy = \"2020-02-24T22:22:22Z\"",
         );
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0=:DYNEIN_ATTRVAL0".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "LastPostedBy".to_owned(),
+            )]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    s: Some("2020-02-24T22:22:22Z".to_owned()),
+                    ..Default::default()
+                },
+            )]))
+        );
     }
 
-    #[should_panic(expected = "failed to parse right hand object ''value'' into AttributeValue.")]
+    #[test]
+    fn test_generate_multi_update_expressions_include_hyphen() {
+        let actual = generate_update_expressions(
+            UpdateActionType::Set,
+            "Replies = 0, LastPostedBy = \"2020-02-24T22:22:22Z\"",
+        );
+        assert_eq!(
+            actual.exp,
+            Some(
+                "SET #DYNEIN_ATTRNAME0=:DYNEIN_ATTRVAL0,#DYNEIN_ATTRNAME1=:DYNEIN_ATTRVAL1"
+                    .to_owned()
+            )
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([
+                ("#DYNEIN_ATTRNAME0".to_owned(), "Replies".to_owned()),
+                ("#DYNEIN_ATTRNAME1".to_owned(), "LastPostedBy".to_owned()),
+            ]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([
+                (
+                    ":DYNEIN_ATTRVAL0".to_owned(),
+                    AttributeValue {
+                        n: Some("0".to_owned()),
+                        ..Default::default()
+                    }
+                ),
+                (
+                    ":DYNEIN_ATTRVAL1".to_owned(),
+                    AttributeValue {
+                        s: Some("2020-02-24T22:22:22Z".to_owned()),
+                        ..Default::default()
+                    }
+                ),
+            ]))
+        );
+    }
+
     #[test]
     fn test_generate_update_expressions_set_single_quote() {
         // To use single quote is not supported yet
-        generate_update_expressions(UpdateActionType::Set, "key = 'value'");
+        let actual = generate_update_expressions(UpdateActionType::Set, "key = 'value'");
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0=:DYNEIN_ATTRVAL0".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "key".to_owned(),
+            )]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    s: Some("value".to_owned()),
+                    ..Default::default()
+                },
+            )]))
+        );
+    }
+
+    // --set 'RelatedItems[1] = "item1"'
+    #[test]
+    fn test_generate_update_expressions_set_array_element() {
+        let actual =
+            generate_update_expressions(UpdateActionType::Set, "RelatedItems[1] = \"item1\"");
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0[1]=:DYNEIN_ATTRVAL0".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "RelatedItems".to_owned()
+            ),]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    s: Some("item1".to_owned()),
+                    ..Default::default()
+                }
+            )]))
+        );
+    }
+
+    // --set 'pr.5star[1] = 7, pr.3star = 3'
+    #[test]
+    fn test_generate_update_expressions_set_array_element_nested() {
+        let actual =
+            generate_update_expressions(UpdateActionType::Set, "pr.`5star`[1] = 7, pr.`3star` = 3");
+        assert_eq!(
+            actual.exp,
+            Some("SET #DYNEIN_ATTRNAME0.#DYNEIN_ATTRNAME1[1]=:DYNEIN_ATTRVAL0,#DYNEIN_ATTRNAME0.#DYNEIN_ATTRNAME2=:DYNEIN_ATTRVAL1".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([
+                ("#DYNEIN_ATTRNAME0".to_owned(), "pr".to_owned()),
+                ("#DYNEIN_ATTRNAME1".to_owned(), "5star".to_owned()),
+                ("#DYNEIN_ATTRNAME2".to_owned(), "3star".to_owned()),
+            ]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([
+                (
+                    ":DYNEIN_ATTRVAL0".to_owned(),
+                    AttributeValue {
+                        n: Some("7".to_owned()),
+                        ..Default::default()
+                    }
+                ),
+                (
+                    ":DYNEIN_ATTRVAL1".to_owned(),
+                    AttributeValue {
+                        n: Some("3".to_owned()),
+                        ..Default::default()
+                    }
+                ),
+            ]))
+        )
+    }
+
+    // --set 'RelatedItems = list_append(RelatedItems, ["item2"])'
+    #[test]
+    fn test_generate_update_expressions_list_append() {
+        let actual = generate_update_expressions(
+            UpdateActionType::Set,
+            "RelatedItems = list_append(RelatedItems, [\"item2\"])",
+        );
+        assert_eq!(
+            actual.exp,
+            Some(
+                "SET #DYNEIN_ATTRNAME0=list_append(#DYNEIN_ATTRNAME0,:DYNEIN_ATTRVAL0)".to_owned()
+            )
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "RelatedItems".to_owned()
+            ),]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    l: Some(vec![AttributeValue {
+                        s: Some("item2".to_owned()),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                }
+            )]))
+        );
+    }
+
+    // --set 'RelatedItems = list_append(["item2"], RelatedItems)'
+    #[test]
+    fn test_generate_update_expressions_list_prepend() {
+        let actual = generate_update_expressions(
+            UpdateActionType::Set,
+            "RelatedItems = list_append([\"item2\"], RelatedItems)",
+        );
+        assert_eq!(
+            actual.exp,
+            Some(
+                "SET #DYNEIN_ATTRNAME0=list_append(:DYNEIN_ATTRVAL0,#DYNEIN_ATTRNAME0)".to_owned()
+            )
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "RelatedItems".to_owned()
+            ),]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    l: Some(vec![AttributeValue {
+                        s: Some("item2".to_owned()),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                }
+            )]))
+        );
+    }
+
+    // --set 'Price = if_not_exists(Price, 123)'
+    #[test]
+    fn test_generate_update_expressions_if_not_exists() {
+        let actual =
+            generate_update_expressions(UpdateActionType::Set, "Price = if_not_exists(Price, 123)");
+        assert_eq!(
+            actual.exp,
+            Some(
+                "SET #DYNEIN_ATTRNAME0=if_not_exists(#DYNEIN_ATTRNAME0,:DYNEIN_ATTRVAL0)"
+                    .to_owned()
+            )
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "Price".to_owned()
+            ),]))
+        );
+        assert_eq!(
+            actual.vals,
+            Some(HashMap::from([(
+                ":DYNEIN_ATTRVAL0".to_owned(),
+                AttributeValue {
+                    n: Some("123".to_owned()),
+                    ..Default::default()
+                }
+            ),]))
+        )
     }
 
     #[test]
@@ -1629,6 +1775,27 @@ mod tests {
                 ("#DYNEIN_ATTRNAME2".to_owned(), "QuantityOnHand".to_owned()),
             ])),
         );
-        assert_eq!(actual.vals, None,);
+        assert_eq!(actual.vals, None);
+    }
+
+    // --remove "RelatedItems[1], RelatedItems[2]"
+    #[test]
+    fn test_generate_update_expressions_array_element() {
+        let actual = generate_update_expressions(
+            UpdateActionType::Remove,
+            "RelatedItems[1], RelatedItems[2]",
+        );
+        assert_eq!(
+            actual.exp,
+            Some("REMOVE #DYNEIN_ATTRNAME0[1],#DYNEIN_ATTRNAME0[2]".to_owned())
+        );
+        assert_eq!(
+            actual.names,
+            Some(HashMap::from([(
+                "#DYNEIN_ATTRNAME0".to_owned(),
+                "RelatedItems".to_owned()
+            )]))
+        );
+        assert_eq!(actual.vals, None);
     }
 }

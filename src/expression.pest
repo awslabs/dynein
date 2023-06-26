@@ -1,0 +1,119 @@
+/*
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+WHITESPACE = _{ SEPARATOR }
+
+// EOI always produces token.
+// I use eoi instead of EIO to suppress generating token.
+// See: https://github.com/pest-parser/pest/issues/304
+eoi = _{ !ANY }
+
+// You can find the grammar for actions of UpdateItem in the following link.
+// https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.UpdateExpressions.html
+set_action = { SOI ~ path ~ "=" ~ value ~ ("," ~ path ~ "=" ~ value)* ~ eoi }
+remove_action = { SOI ~ path ~ ("," ~ path)* ~ eoi }
+
+path = { attr_access ~ ("." ~ attr_access)* }
+attr_access = _{ attr_name ~ list_elem* }
+
+// Attribute name can be quoted by backticks.
+attr_name = _{ "`" ~ quoted_identifier ~ "`" | non_quoted_identifier }
+
+// You can write attribute name for a`b with a``b like MySQL.
+// https://dev.mysql.com/doc/refman/8.0/en/identifiers.html
+quoted_identifier = @{ ("``" | (!"`" ~ ANY))+ }
+
+// Dynein allows non ASCII path identifier without quoting.
+non_quoted_identifier = @{ (!special_character ~ XID_START) ~ (!special_character ~ XID_CONTINUE)* }
+
+// Backtick (`), double quote ("), single quote (') and back slash (\) have a special meaning in dynein.
+// Currently, DynamoDB does not use an asterisk (*), slash (/), percent sign (%) as a special character.
+// However, dynein treats them as special characters for understandability.
+special_character = _{
+  SEPARATOR | "\\" | "`" | "\"" | "'" | "=" | "<" | "<" | ">" | "[" | "]" | "+" | "-" | "*" | "/" | "%" | "."
+}
+
+// DynamoDB does not allow the plus sign for an index of a list.
+list_elem = _{ "[" ~ list_index_number ~ "]" }
+list_index_number = @{ (ASCII_NONZERO_DIGIT+ ~ ASCII_DIGIT*) | "0" }
+
+// DynamoDB allows parentheses to group expressions but does not allow redundancy.
+value = { "(" ~ plus_expression ~ ")" | "(" ~ minus_expression ~ ")" | plus_expression | minus_expression | operand }
+plus_expression = { operand ~ "+" ~ operand }
+minus_expression = { operand ~ "-" ~ operand }
+
+// Note: Unary operators, plus (+), minus (-) are not allowed in DynamoDB.
+//       But, they can be prepended before a number literal.
+operand = { function | literal | path  }
+function = { list_append_function | if_not_exists_function }
+list_append_function = { ^"list_append" ~ "(" ~ list_append_parameter ~ "," ~ list_append_parameter ~ ")" }
+list_append_parameter = { path | list_literal }
+if_not_exists_function = { ^"if_not_exists" ~ "(" ~ path ~ "," ~ value ~ ")" }
+
+// Literals
+literal = _{
+  boolean_literal | null_literal | b_literal | list_literal | map_literal  | string_literal | number_literal |
+  set_literal
+}
+
+// Boolean literals
+boolean_literal = _{ true_literal | false_literal }
+true_literal = @{ ^"true" }
+false_literal = @{ ^"false" }
+
+// Null literal
+null_literal = @{ ^"null" }
+
+// String literals
+string_literal = _{ double_quote_literal | single_quote_literal }
+double_quote_literal = @{ "\"" ~ ("\\0" | "\\r" | "\\n" | "\\t" | "\\\\" | "\\\"" | "\\'" | (!"\"" ~ ANY))* ~ "\"" }
+single_quote_literal = @{ "'" ~ (!"\'" ~ ANY)* ~ "'" }
+
+// Number literals
+number_literal = @{ exp_number_literal | decimal_floating_number_literal | integer_literal }
+integer_literal = _{ ("+" | "-")? ~ ASCII_DIGIT+ }
+decimal_floating_number_literal = _{
+  ("+" | "-")? ~ ((ASCII_DIGIT* ~ "." ~ ASCII_DIGIT+) | (ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT*))
+}
+exp_number_literal = _{ (decimal_floating_number_literal | integer_literal) + ~ ^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+ }
+
+// Binary literals
+// We introduce the same grammar and semantics that Rust uses without SUFFIX.
+// See: https://doc.rust-lang.org/reference/tokens.html#byte-and-byte-string-literals
+b_literal = _{ "b" ~ (binary_string_literal | binary_literal) }
+binary_literal = @{ "'" ~ (byte_escape | ascii_for_char)* ~ "'" }
+ascii_for_char = _{ !("'" | "\\" | "\n" | "\r" | "\t") ~ '\x00'..'\x7F' }
+byte_escape = _{ "\\x" ~ ASCII_HEX_DIGIT ~ ASCII_HEX_DIGIT | "\\n" | "\\r" | "\\t" | "\\\\" | "\\0" | "\\'" | "\\\"" }
+binary_string_literal = @{ "\"" ~ (byte_escape | string_continue | ascii_for_string)* ~ "\"" }
+string_continue = _{ "\\" ~ &"\n" }
+ascii_for_string = _{ !(isolated_cr | "\"" | "\\") ~ '\x00'..'\x7F' }
+isolated_cr = _{ "\r" ~ &"\n" }
+
+// List literal
+list_literal = { "[" ~ literal? ~ ("," ~ literal)* ~ "]" }
+
+// Map literal
+map_literal = { "{" ~ map_pair? ~ ("," ~ map_pair)* ~ "}" }
+map_pair = { map_key ~ ":" ~ map_value }
+map_key = { string_literal }
+map_value = { literal }
+
+// We allow PartiQL style string set literal and number set literal.
+set_literal = _{ "<<" ~ (string_set_literal | binary_set_literal | number_set_literal) ~ ">>" }
+string_set_literal = { string_set_element ~ ("," ~ string_set_element)* }
+string_set_element = _{ (double_quote_literal | single_quote_literal) }
+number_set_literal = { number_literal ~ ("," ~ number_literal)*  }
+binary_set_literal = { b_literal ~ ("," ~ b_literal)* }
