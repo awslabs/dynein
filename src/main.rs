@@ -278,9 +278,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     } else {
         // Neiter subcommand nor --shell specified
-        use structopt::StructOpt;
+        use clap::CommandFactory;
         eprintln!("Invalid argument: please specify a subcommand or '--shell'");
-        cmd::Dynein::clap().print_help()?;
+        cmd::Dynein::command().print_help()?;
         std::process::exit(1);
     }
 
