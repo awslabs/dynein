@@ -965,8 +965,6 @@ You can specify a path using the following syntax:
 
 As demonstrated above, you can use double backticks (``) to represent a backtick (`) within the path.
 
-Please note that you may not need to escape for non-ASCI paths like CJK characters. For example, you can specify `路径`, `パス`　, and `경로` without quotes. Dynein allows to specify a path in which the first character is the `ID_Start` class and the rest of the characters are the `ID_Continue` class without escape. Those classes are defined by [unicode standard](https://www.unicode.org/reports/tr31/tr31-37.html). Following examples work.
-
 Please note that you may not need to escape non-ASCII paths like CJK characters. For example, you can specify `路径`, `パス`, and `경로` without quotes. Dynein allows you to specify a path where the first character belongs to the `ID_Start` class and the subsequent characters belong to the `ID_Continue` class without requiring escape sequences. These classes are defined by the [Unicode standard](https://www.unicode.org/reports/tr31/tr31-37.html). The following examples illustrate this:
 
 * ```dy upd 55 --set 'map.路径 = "A word of Chinese"'```
