@@ -20,65 +20,32 @@ use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use tempfile::Builder;
 
 #[tokio::test]
 async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = "table--test_batch_write";
+    let table_name = util::create_temporary_table(vec!["pk"]).await?;
 
-    let mut c = util::setup().await?;
-    c.args(&[
-        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
-    ])
-    .output()?;
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/resources/test_batch_write.json");
+    let test_json_content = std::fs::read_to_string(path)?;
 
     let tmpdir = Builder::new().tempdir()?; // defining stand alone variable here as tempfile::tempdir creates directory and deletes it when the destructor is run.
     let batch_input_file_path = tmpdir.path().join("test_batch_write.json");
     let mut f = File::create(tmpdir.path().join("test_batch_write.json"))?;
-    f.write_all(b"
-     {
-         \"table--test_batch_write\": [
-             {
-                 \"PutRequest\": {
-                     \"Item\": {
-                         \"pk\": { \"S\": \"ichi\" },
-                         \"ISBN\": { \"S\": \"111-1111111111\" },
-                         \"Price\": { \"N\": \"2\" },
-                         \"Dimensions\": { \"SS\": [\"Giraffe\", \"Hippo\" ,\"Zebra\"] },
-                         \"PageCount\": { \"NS\": [\"42.2\", \"-19\", \"7.5\", \"3.14\"] },
-                         \"InPublication\": { \"BOOL\": false },
-                         \"Nothing\": { \"NULL\": true },
-                         \"Authors\": {
-                             \"L\": [
-                                 { \"S\": \"Author1\" },
-                                 { \"S\": \"Author2\" },
-                                 { \"N\": \"42\" }
-                             ]
-                         },
-                         \"Details\": {
-                             \"M\": {
-                                 \"Name\": { \"S\": \"Joe\" },
-                                 \"Age\":  { \"N\": \"35\" },
-                                 \"Misc\": {
-                                     \"M\": {
-                                         \"hope\": { \"BOOL\": true },
-                                         \"dream\": { \"L\": [ { \"N\": \"35\" }, { \"NULL\": true } ] }
-                                     }
-                                 }
-                             }
-                         }
-                     }
-                 }
-             }
-         ]
-     }
-     ")?;
+    f.write_all(
+        test_json_content
+            .replace("__TABLE_NAME__", &table_name)
+            .as_bytes(),
+    )?;
+
     let mut c = util::setup().await?;
     c.args(&[
         "--region",
         "local",
         "--table",
-        table_name,
+        &table_name,
         "bwrite",
         "--input",
         batch_input_file_path.to_str().unwrap(),
@@ -86,7 +53,7 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     .output()?;
 
     let mut c = util::setup().await?;
-    let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
+    let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
@@ -131,7 +98,7 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         }
     */
     let mut c = util::setup().await?;
-    let get_cmd = c.args(&["--region", "local", "--table", table_name, "get", "ichi"]);
+    let get_cmd = c.args(&["--region", "local", "--table", &table_name, "get", "ichi"]);
     let output = get_cmd.output()?.stdout;
 
     // more verification would be nice
@@ -140,5 +107,5 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         predicate::str::is_match("\"Dimensions\":")?.eval(String::from_utf8(output)?.as_str())
     );
 
-    util::cleanup(vec![table_name]).await
+    util::cleanup(vec![&table_name]).await
 }
