@@ -187,3 +187,25 @@ pub async fn cleanup_config(dummy_dir: &str) -> io::Result<()> {
 
     remove_dir_all(dummy_dir)
 }
+
+pub fn assert_eq_json(cmd: &mut Command, expected: &str) {
+    cmd.assert().success();
+    let stdout = cmd.output().unwrap().stdout;
+    let output = String::from_utf8(stdout).unwrap();
+
+    assert_eq!(
+        output.parse::<serde_json::Value>().unwrap(),
+        expected.parse::<serde_json::Value>().unwrap(),
+    )
+}
+
+pub fn assert_eq_yaml(cmd: &mut Command, expected: &str) {
+    cmd.assert().success();
+    let stdout = cmd.output().unwrap().stdout;
+    let output = String::from_utf8(stdout).unwrap();
+
+    assert_eq!(
+        serde_yaml::from_str::<serde_yaml::Value>(&output).unwrap(),
+        serde_yaml::from_str::<serde_yaml::Value>(expected).unwrap(),
+    )
+}
