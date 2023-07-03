@@ -37,42 +37,32 @@ async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>
 
 #[tokio::test]
 async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = "table--test_scan_blank_table";
+    let table_name = util::create_temporary_table(vec!["pk"]).await?;
 
     let mut c = util::setup().await?;
-    c.args(&[
-        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
-    ])
-    .output()?;
-    let mut c = util::setup().await?;
-    let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
+    let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("No item to show"));
 
-    util::cleanup(vec![table_name]).await
+    util::cleanup(vec![&table_name]).await
 }
 
 #[tokio::test]
 async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = "table--test_simple_scan";
+    let table_name = util::create_temporary_table(vec!["pk"]).await?;
 
     let mut c = util::setup().await?;
-    c.args(&[
-        "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
-    ])
-    .output()?;
-    let mut c = util::setup().await?;
-    c.args(&["--region", "local", "--table", table_name, "put", "abc"])
+    c.args(&["--region", "local", "--table", &table_name, "put", "abc"])
         .output()?;
 
     let mut c = util::setup().await?;
-    let scan_cmd = c.args(&["--region", "local", "--table", table_name, "scan"]);
+    let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("pk  attributes\nabc"));
 
-    util::cleanup(vec![table_name]).await
+    util::cleanup(vec![&table_name]).await
 }

@@ -20,6 +20,7 @@ use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
 use once_cell::sync::Lazy;
+use rand::{distributions::Alphanumeric, Rng};
 use regex::bytes::Regex;
 use rusoto_core::Region;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
@@ -123,6 +124,29 @@ pub async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::E
     }
 
     Ok(Command::cargo_bin("dy")?)
+}
+
+pub async fn create_temporary_table(keys: Vec<&str>) -> Result<String, Box<dyn std::error::Error>> {
+    let table_name: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect();
+
+    let mut c = setup().await?;
+    let mut args = vec![
+        "--region",
+        "local",
+        "admin",
+        "create",
+        "table",
+        &table_name,
+        "--keys",
+    ];
+    args.extend(keys);
+    c.args(args).assert().success();
+
+    Ok(table_name)
 }
 
 pub async fn cleanup(tables: Vec<&str>) -> Result<(), Box<dyn std::error::Error>> {
