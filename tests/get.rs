@@ -31,6 +31,8 @@ async fn test_get_non_existent_table() -> Result<(), Box<dyn std::error::Error>>
         "42",
     ]);
     cmd.assert().failure().stderr(predicate::str::contains(
+        // The error message is different between DynamoDB local and real service.
+        // It should be "Requested resource not found: Table: table not found" actually.
         "Cannot do operations on a non-existent table",
     ));
     Ok(())
