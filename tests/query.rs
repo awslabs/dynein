@@ -83,7 +83,7 @@ async fn test_query_limit() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn prepare_pk_sk_table() -> Result<String, Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk,S", "sk,N"]).await?;
+    let table_name = util::create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = util::setup().await?;
     c.args(&[
