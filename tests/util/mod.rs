@@ -126,7 +126,10 @@ pub async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::E
     Ok(Command::cargo_bin("dy")?)
 }
 
-pub async fn create_temporary_table(keys: Vec<&str>) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn create_temporary_table(
+    pk: &'static str,
+    sk: Option<&'static str>,
+) -> Result<String, Box<dyn std::error::Error>> {
     let table_name: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
@@ -144,8 +147,63 @@ pub async fn create_temporary_table(keys: Vec<&str>) -> Result<String, Box<dyn s
         &table_name,
         "--keys",
     ];
+    let mut keys = vec![pk];
+    if let Some(sk) = sk {
+        keys.push(sk);
+    }
+
     args.extend(keys);
     c.args(args).assert().success();
+
+    Ok(table_name)
+}
+
+pub struct TemporaryItem {
+    pval: &'static str,
+    sval: Option<&'static str>,
+    item: Option<&'static str>,
+}
+
+impl TemporaryItem {
+    pub fn new(
+        pval: &'static str,
+        sval: Option<&'static str>,
+        item: Option<&'static str>,
+    ) -> TemporaryItem {
+        TemporaryItem {
+            pval: pval,
+            sval: sval,
+            item: item,
+        }
+    }
+
+    pub fn keys(&self) -> Vec<&'static str> {
+        let mut result = vec![self.pval];
+        if let Some(sval) = self.sval {
+            result.push(sval);
+        }
+
+        result
+    }
+}
+
+pub async fn create_temporary_table_with_items(
+    pk: &'static str,
+    sk: Option<&'static str>,
+    items: Vec<TemporaryItem>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let table_name = create_temporary_table(pk, sk).await?;
+
+    for ti in items {
+        let mut c = setup().await?;
+        let mut args = vec!["--region", "local", "--table", &table_name, "put"];
+        args.extend(ti.keys());
+        if let Some(item) = ti.item {
+            args.extend(vec!["--item", item]);
+        }
+
+        c.args(args).assert().success();
+    }
 
     Ok(table_name)
 }

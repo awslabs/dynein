@@ -26,7 +26,7 @@ async fn test_get_non_existent_table() -> Result<(), Box<dyn std::error::Error>>
         "--region",
         "local",
         "--table",
-        "dummy-table-doent-exist",
+        "dummy-table-doesnt-exist",
         "get",
         "42",
     ]);
@@ -40,7 +40,7 @@ async fn test_get_non_existent_table() -> Result<(), Box<dyn std::error::Error>>
 
 #[tokio::test]
 async fn test_get_non_existent_item() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk"]).await?;
+    let table_name = util::create_temporary_table("pk", None).await?;
 
     let mut c = util::setup().await?;
     let cmd = c.args(&["--region", "local", "--table", &table_name, "get", "42"]);
@@ -150,7 +150,7 @@ async fn test_get_item_output_raw() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn prepare_table_with_item() -> Result<String, Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk"]).await?;
+    let table_name = util::create_temporary_table("pk", None).await?;
 
     let mut c = util::setup().await?;
     c.args(&[

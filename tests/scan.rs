@@ -26,7 +26,7 @@ async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>
         "--region",
         "local",
         "--table",
-        "dummy-table-doent-exist",
+        "dummy-table-doesnt-exist",
         "scan",
     ]);
     cmd.assert().failure().stderr(predicate::str::contains(
@@ -39,7 +39,7 @@ async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>
 
 #[tokio::test]
 async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk"]).await?;
+    let table_name = util::create_temporary_table("pk", None).await?;
 
     let mut c = util::setup().await?;
     let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
@@ -53,7 +53,7 @@ async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk"]).await?;
+    let table_name = util::create_temporary_table("pk", None).await?;
 
     let mut c = util::setup().await?;
     c.args(&["--region", "local", "--table", &table_name, "put", "abc"])

@@ -25,7 +25,7 @@ use tempfile::Builder;
 
 #[tokio::test]
 async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk"]).await?;
+    let table_name = util::create_temporary_table("pk", None).await?;
 
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests/resources/test_batch_write.json");
