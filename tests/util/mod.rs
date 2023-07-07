@@ -132,6 +132,7 @@ pub async fn create_temporary_table(keys: Vec<&str>) -> Result<String, Box<dyn s
         .take(16)
         .map(char::from)
         .collect();
+    println!("create temporary table: {}", table_name);
 
     let mut c = setup().await?;
     let mut args = vec![
