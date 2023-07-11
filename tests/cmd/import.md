@@ -11,13 +11,16 @@ dy admin update table your_table --mode ondemand).
 would be primary key(s).
 
 USAGE:
-    dy import [OPTIONS] --input-file <input-file>
+    dy import [FLAGS] [OPTIONS] --input-file <input-file>
 
 FLAGS:
-    -h, --help       
+        --enable-set-inference    
+            Enable type inference for set types. This option is provided for backward compatibility
+
+    -h, --help                    
             Prints help information
 
-    -V, --version    
+    -V, --version                 
             Prints version information
 
 
@@ -53,11 +56,13 @@ dy admin update table your_table --mode ondemand).
 would be primary key(s).
 
 USAGE:
-    dy import [OPTIONS] --input-file <input-file>
+    dy import [FLAGS] [OPTIONS] --input-file <input-file>
 
 FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+        --enable-set-inference    Enable type inference for set types. This option is provided for backward
+                                  compatibility
+    -h, --help                    Prints help information
+    -V, --version                 Prints version information
 
 OPTIONS:
     -f, --format <format>            Data format for import items.

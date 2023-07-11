@@ -609,7 +609,7 @@ fn convert_jsonval_to_attrvals_in_hashmap_val(
     let mut result = HashMap::<String, AttributeValue>::new();
     for (k, v) in hashmap {
         debug!("working on key '{}', and value '{:?}'", k, v);
-        result.insert(k, dispatch_jsonvalue_to_attrval(&v));
+        result.insert(k, dispatch_jsonvalue_to_attrval(&v, true));
     }
     result
 }
@@ -674,7 +674,7 @@ fn build_attrval_set(ktype: &str, kval: &[JsonValue]) -> AttributeValue {
 
 /// for "L" DynamoDB Attributes
 /// used only for 'simplified JSON' format. Not compatible with DynamoDB JSON.
-fn build_attrval_list(vec: &[JsonValue]) -> AttributeValue {
+fn build_attrval_list(vec: &[JsonValue], enable_set_inference: bool) -> AttributeValue {
     let mut attrval: AttributeValue = AttributeValue {
         ..Default::default()
     };
@@ -682,7 +682,7 @@ fn build_attrval_list(vec: &[JsonValue]) -> AttributeValue {
     let mut inside_attrvals = Vec::<AttributeValue>::new();
     for v in vec {
         debug!("this is an element of vec: {:?}", v);
-        inside_attrvals.push(dispatch_jsonvalue_to_attrval(v));
+        inside_attrvals.push(dispatch_jsonvalue_to_attrval(v, enable_set_inference));
     }
     attrval.l = Some(inside_attrvals);
 
@@ -691,7 +691,10 @@ fn build_attrval_list(vec: &[JsonValue]) -> AttributeValue {
 
 /// for "M" DynamoDB Attributes
 /// used only for 'simplified JSON' format. Not compatible with DynamoDB JSON.
-fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>) -> AttributeValue {
+fn build_attrval_map(
+    json_map: &serde_json::Map<std::string::String, JsonValue>,
+    enable_set_inference: bool,
+) -> AttributeValue {
     let mut result = AttributeValue {
         ..Default::default()
     };
@@ -699,7 +702,10 @@ fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>)
     let mut mapval = HashMap::<String, AttributeValue>::new();
     for (k, v) in json_map {
         debug!("working on key '{}', and value '{:?}'", k, v);
-        mapval.insert(k.to_string(), dispatch_jsonvalue_to_attrval(v));
+        mapval.insert(
+            k.to_string(),
+            dispatch_jsonvalue_to_attrval(v, enable_set_inference),
+        );
     }
     result.m = Some(mapval);
 
@@ -707,7 +713,7 @@ fn build_attrval_map(json_map: &serde_json::Map<std::string::String, JsonValue>)
 }
 
 /// Convert from serde_json::Value (standard JSON values) into DynamoDB style AttributeValue
-pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
+pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue, enable_set_inference: bool) -> AttributeValue {
     match jv {
         // scalar types
         JsonValue::String(val) => AttributeValue {
@@ -728,15 +734,15 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
         },
 
         // document types. they can be recursive.
-        JsonValue::Object(obj) => build_attrval_map(obj),
+        JsonValue::Object(obj) => build_attrval_map(obj, enable_set_inference),
         JsonValue::Array(vec) => {
-            if vec.iter().all(|v| v.is_string()) {
+            if enable_set_inference && vec.iter().all(|v| v.is_string()) {
                 debug!(
                     "All elements in this attribute are String - treat it as 'SS': {:?}",
                     vec
                 );
                 build_attrval_set(&String::from("SS"), vec)
-            } else if vec.iter().all(|v| v.is_number()) {
+            } else if enable_set_inference && vec.iter().all(|v| v.is_number()) {
                 debug!(
                     "All elements in this attribute are Number - treat it as 'NS': {:?}",
                     vec
@@ -744,7 +750,7 @@ pub fn dispatch_jsonvalue_to_attrval(jv: &JsonValue) -> AttributeValue {
                 build_attrval_set(&String::from("NS"), vec)
             } else {
                 debug!("Elements are not uniform - treat it as 'L': {:?}", vec);
-                build_attrval_list(vec)
+                build_attrval_list(vec, enable_set_inference)
             }
         }
     }
@@ -1349,7 +1355,8 @@ fn generate_scan_expressions(
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_update_expressions, AttributeValue, UpdateActionType};
+    use super::*;
+    use serde_json::Value;
     use std::collections::HashMap;
 
     #[test]
@@ -1797,5 +1804,98 @@ mod tests {
             )]))
         );
         assert_eq!(actual.vals, None);
+    }
+
+    #[test]
+    fn test_dispatch_jsonvalue_to_attrval() {
+        let string_list = r#"
+        [
+            "+44 1234567",
+            "+44 2345678"
+        ]"#;
+        let string_list: Value = serde_json::from_str(string_list).unwrap();
+        let actual = dispatch_jsonvalue_to_attrval(&string_list, false);
+        assert_eq!(
+            actual,
+            AttributeValue {
+                l: Some(vec!(
+                    AttributeValue {
+                        s: Some("+44 1234567".to_owned()),
+                        ..Default::default()
+                    },
+                    AttributeValue {
+                        s: Some("+44 2345678".to_owned()),
+                        ..Default::default()
+                    }
+                )),
+                ..Default::default()
+            }
+        );
+        let actual = dispatch_jsonvalue_to_attrval(&string_list, true);
+        assert_eq!(
+            actual,
+            AttributeValue {
+                ss: Some(vec!("+44 1234567".to_owned(), "+44 2345678".to_owned())),
+                ..Default::default()
+            }
+        );
+
+        let number_list = r#"
+        [
+            12345,
+            67890
+        ]"#;
+        let number_list: Value = serde_json::from_str(number_list).unwrap();
+        let actual = dispatch_jsonvalue_to_attrval(&number_list, false);
+        assert_eq!(
+            actual,
+            AttributeValue {
+                l: Some(vec!(
+                    AttributeValue {
+                        n: Some("12345".to_owned()),
+                        ..Default::default()
+                    },
+                    AttributeValue {
+                        n: Some("67890".to_owned()),
+                        ..Default::default()
+                    }
+                )),
+                ..Default::default()
+            }
+        );
+        let actual = dispatch_jsonvalue_to_attrval(&number_list, true);
+        assert_eq!(
+            actual,
+            AttributeValue {
+                ns: Some(vec!["12345".to_owned(), "67890".to_owned()]),
+                ..Default::default()
+            }
+        );
+
+        let mix_list = r#"
+        [
+            "text",
+            1234
+        ]"#;
+        let mix_list: Value = serde_json::from_str(mix_list).unwrap();
+        for flag in [true, false] {
+            let actual = dispatch_jsonvalue_to_attrval(&mix_list, flag);
+            assert_eq!(
+                actual,
+                AttributeValue {
+                    l: Some(vec!(
+                        AttributeValue {
+                            s: Some("text".to_owned()),
+                            ..Default::default()
+                        },
+                        AttributeValue {
+                            n: Some("1234".to_owned()),
+                            ..Default::default()
+                        }
+                    )),
+                    ..Default::default()
+                }
+            );
+        }
     }
 }
