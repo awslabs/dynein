@@ -3,7 +3,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - main
+    - main
 
 name: CI
 
@@ -12,40 +12,42 @@ jobs:
     name: Rust project
     runs-on: ubuntu-latest
     env:
+      RUST_LOG: debug # Output debug log
+      RUST_BACKTRACE: 1 # Dump backtrace on panic
       DYNEIN_TEST_NO_DOCKER_SETUP: true
       # define AWS credentials in environment for test
-      AWS_ACCESS_KEY_ID: "test"
-      AWS_SECRET_ACCESS_KEY: "test"
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
     services:
       dynamodb:
         # Pinned to the version not to be broken with latest
         image: amazon/dynamodb-local:1.22.0
         ports:
-          - 8000:8000
-          - 8001:8000
+        - 8000:8000
+        - 8001:8000
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.69.0
-          components: rustfmt, clippy
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.69.0
+        components: rustfmt, clippy
       # Pinned to the commit hash of v2.2.1
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
-        with:
-          shared-key: build-and-test
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: -- -D warnings
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --no-fail-fast --all-features
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --all-features
+    - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
+      with:
+        shared-key: build-and-test
+    - uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: --all -- --check
+    - uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: -- -D warnings
+    - uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --no-fail-fast --all-features
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --all-features
