@@ -347,6 +347,10 @@ pub enum Sub {
         ///   csv = comma-separated values with header. Header columns are considered to be DynamoDB attributes.
         #[structopt(short, long, possible_values = &["csv", "json", "jsonl", "json-compact"])]
         format: Option<String>,
+
+        /// Enable type inference for set types. This option is provided for backward compatibility.
+        #[structopt(long)]
+        enable_set_inference: bool,
     },
 
     /// Take backup of a DynamoDB table using on-demand backup

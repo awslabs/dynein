@@ -210,9 +210,11 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             output_file,
             format,
         } => transfer::export(context.clone(), attributes, keys_only, output_file, format).await?,
-        cmd::Sub::Import { input_file, format } => {
-            transfer::import(context.clone(), input_file, format).await?
-        }
+        cmd::Sub::Import {
+            input_file,
+            format,
+            enable_set_inference,
+        } => transfer::import(context.clone(), input_file, format, enable_set_inference).await?,
         cmd::Sub::Backup { list, all_tables } => {
             if list {
                 control::list_backups(context.clone(), all_tables).await?

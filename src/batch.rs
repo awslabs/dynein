@@ -255,6 +255,7 @@ pub async fn batch_write_item(
 pub async fn convert_jsonvals_to_request_items(
     cx: &app::Context,
     items_jsonval: Vec<JsonValue>,
+    enable_set_inference: bool,
 ) -> Result<HashMap<String, Vec<WriteRequest>>, DyneinBatchError> {
     let mut results = HashMap::<String, Vec<WriteRequest>>::new();
     let mut write_requests = Vec::<WriteRequest>::new();
@@ -275,7 +276,7 @@ pub async fn convert_jsonvals_to_request_items(
         {
             item.insert(
                 attr_name.to_string(),
-                data::dispatch_jsonvalue_to_attrval(body),
+                data::dispatch_jsonvalue_to_attrval(body, enable_set_inference),
             );
         }
 
@@ -301,6 +302,7 @@ pub async fn csv_matrix_to_request_items(
     cx: &app::Context,
     matrix: &[Vec<&str>],
     headers: &[&str],
+    enable_set_inference: bool,
 ) -> Result<HashMap<String, Vec<WriteRequest>>, DyneinBatchError> {
     let total_elements_in_matrix: usize = matrix
         .iter()
@@ -333,7 +335,7 @@ pub async fn csv_matrix_to_request_items(
             );
             item.insert(
                 headers[i].to_string(),
-                data::dispatch_jsonvalue_to_attrval(&jsonval),
+                data::dispatch_jsonvalue_to_attrval(&jsonval, enable_set_inference),
             );
         }
 

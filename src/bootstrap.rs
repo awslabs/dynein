@@ -208,7 +208,12 @@ e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingSta
                         .expect("each item should be a valid JSON object.");
                     let item_attrval: HashMap<String, AttributeValue> = item_json
                         .iter()
-                        .map(|(k, v)| (String::from(k), data::dispatch_jsonvalue_to_attrval(v)))
+                        .map(|(k, v)| {
+                            (
+                                String::from(k),
+                                data::dispatch_jsonvalue_to_attrval(v, true),
+                            )
+                        })
                         .collect();
                     write_requests.push(WriteRequest {
                         put_request: Some(PutRequest { item: item_attrval }),

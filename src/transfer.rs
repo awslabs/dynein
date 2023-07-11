@@ -194,6 +194,7 @@ pub async fn import(
     cx: app::Context,
     input_file: String,
     format: Option<String>,
+    enable_set_inference: bool,
 ) -> Result<(), batch::DyneinBatchError> {
     let format_str: Option<&str> = format.as_deref();
 
@@ -216,7 +217,8 @@ pub async fn import(
     match format_str {
         None | Some("json") | Some("json-compact") => {
             let array_of_json_obj: Vec<JsonValue> = serde_json::from_str(&input_string)?;
-            write_array_of_jsons_with_chunked_25(cx, array_of_json_obj).await?;
+            write_array_of_jsons_with_chunked_25(cx, array_of_json_obj, enable_set_inference)
+                .await?;
         }
         Some("jsonl") => {
             // JSON Lines can be deserialized with into_iter() as below.
@@ -225,7 +227,8 @@ pub async fn import(
             // list_of_jsons contains deserialize results. Filter them and get only valid items.
             let array_of_valid_json_obj: Vec<JsonValue> =
                 array_of_json_obj.filter_map(Result::ok).collect();
-            write_array_of_jsons_with_chunked_25(cx, array_of_valid_json_obj).await?;
+            write_array_of_jsons_with_chunked_25(cx, array_of_valid_json_obj, enable_set_inference)
+                .await?;
         }
         Some("csv") => {
             let lines: Vec<&str> = input_string
@@ -243,13 +246,13 @@ pub async fn import(
                 debug!("splitted line => {:?}", cells);
                 matrix.push(cells);
                 if i % 25 == 0 {
-                    write_csv_matrix(&cx, matrix.clone(), &headers).await?;
+                    write_csv_matrix(&cx, matrix.clone(), &headers, enable_set_inference).await?;
                     matrix.clear();
                 }
             }
             debug!("rest of matrix => {:?}", matrix);
             if !matrix.is_empty() {
-                write_csv_matrix(&cx, matrix.clone(), &headers).await?;
+                write_csv_matrix(&cx, matrix.clone(), &headers, enable_set_inference).await?;
             }
         }
         Some(o) => panic!("Invalid input format is given: {}", o),
@@ -436,9 +439,10 @@ fn build_csv_header(
 async fn write_array_of_jsons_with_chunked_25(
     cx: app::Context,
     array_of_json_obj: Vec<JsonValue>,
+    enable_set_inference: bool,
 ) -> Result<(), batch::DyneinBatchError> {
     for chunk /* Vec<JsonValue> */ in array_of_json_obj.chunks(25) { // As BatchWriteItem request can have up to 25 items.
-        let request_items: HashMap<String, Vec<WriteRequest>> = batch::convert_jsonvals_to_request_items(&cx, chunk.to_vec()).await?;
+        let request_items: HashMap<String, Vec<WriteRequest>> = batch::convert_jsonvals_to_request_items(&cx, chunk.to_vec(), enable_set_inference).await?;
         batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     }
     Ok(())
@@ -456,9 +460,10 @@ async fn write_csv_matrix(
     cx: &app::Context,
     matrix: Vec<Vec<&str>>,
     headers: &[&str],
+    enable_set_inference: bool,
 ) -> Result<(), batch::DyneinBatchError> {
     let request_items: HashMap<String, Vec<WriteRequest>> =
-        batch::csv_matrix_to_request_items(cx, &matrix, headers).await?;
+        batch::csv_matrix_to_request_items(cx, &matrix, headers, enable_set_inference).await?;
     batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     Ok(())
 }
