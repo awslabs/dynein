@@ -9,6 +9,7 @@ jobs:
   build_dynein_binary:
     runs-on: ${{ matrix.os }}
     env:
+      RUST_LOG: debug # Output debug log
       RUST_BACKTRACE: 1 # Dump backtrace on panic
     strategy:
       fail-fast: false
