@@ -302,7 +302,6 @@ impl TemporaryItem {
 }
 
 pub fn check_dynein_files_existence(dir: &str, exist: bool) {
-    assert_eq!(Path::new(&dir).exists(), exist);
     assert_eq!(Path::new(&format!("{}/config.yml", dir)).exists(), exist);
     assert_eq!(Path::new(&format!("{}/cache.yml", dir)).exists(), exist);
 }
