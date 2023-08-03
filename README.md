@@ -1067,6 +1067,103 @@ To import data into a table, you use with specified `--format` option. Here defa
 $ dy import --table target_movie --format json --input-file movie.json
 ```
 
+#### Enable set type inference
+
+Dynein provides the type inference for set types (number set, string set) for backward compatibility.
+If you want to retain the inference behavior before 0.3.0, you can use `--enable-set-inference` option.
+
+Without option, all JSON lists are inferred as list type.
+
+```bash
+$ cat load.json
+{"pk":1,"string-set":["1","2","3"]}
+{"pk":2,"number-set":[1,2,3]}
+{"pk":3,"list":["1",2,"3"]}
+
+$ dy admin create table target_movie -k pk,N
+$ dy import --table target_movie --format jsonl --input-file load.json
+$ aws dynamodb get-item --table-name target_movie --key '{"pk":{"N":"1"}}'
+{
+    "Item": {
+        "string-set": {
+            "L": [
+                {
+                    "S": "1"
+                },
+                {
+                    "S": "2"
+                },
+                {
+                    "S": "3"
+                }
+            ]
+        },
+        "pk": {
+            "N": "1"
+        }
+    }
+}
+```
+
+With `--enable-set-inference` option, JSON lists are inferred based on their content.
+
+```bash
+$ dy admin create table target_movie2 -k pk,N
+$ dy import --table target_movie --format jsonl --enable-set-inference --input-file load.json
+$ aws dynamodb get-item eu-north-1 --table-name target_movie --key '{"pk":{"N":"1"}}'
+{
+    "Item": {
+        "string-set": {
+            "SS": [
+                "1",
+                "2",
+                "3"
+            ]
+        },
+        "pk": {
+            "N": "1"
+        }
+    }
+}
+
+$ aws dynamodb get-item --table-name target_movie --key '{"pk":{"N":"2"}}'
+{
+    "Item": {
+        "pk": {
+            "N": "2"
+        },
+        "number-set": {
+            "NS": [
+                "3",
+                "2",
+                "1"
+            ]
+        }
+    }
+}
+
+$ aws dynamodb get-item --table-name target_movie --key '{"pk":{"N":"3"}}'
+{
+    "Item": {
+        "pk": {
+            "N": "3"
+        },
+        "list": {
+            "L": [
+                {
+                    "S": "1"
+                },
+                {
+                    "N": "2"
+                },
+                {
+                    "S": "3"
+                }
+            ]
+        }
+    }
+}
+```
 
 ## Using DynamoDB Local with `--region local` option
 
