@@ -53,7 +53,7 @@ dynein - DynamoDB CLI
 
 ## Quick Start
 
-- Bootstrap command enables you to launch sample table with sample data sets.
+- [Bootstrap command](#bootstrapping-sample-dynamodb-tables) enables you to launch sample table with sample data sets.
 - Supports DynamoDB Local and you can test DyanmoDB at no charge.
 
 ## For day-to-day tasks
