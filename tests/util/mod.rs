@@ -113,13 +113,23 @@ pub async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::E
         name: "local".to_owned(),
         endpoint: health_check_url,
     });
+    let max_retries = 5;
+    let mut attempts = 0;
     loop {
-        if let Ok(_result) = ddb.list_tables(Default::default()).await {
-            println!("ListTables API succeeded.");
-            break;
-        } else {
-            println!("Couldn't connect. Retry after 3 seconds.");
-            sleep(Duration::from_secs(3)).await;
+        match ddb.list_tables(Default::default()).await {
+            Ok(_result) => {
+                println!("ListTables API succeeded.");
+                break;
+            }
+            Err(e) => {
+                println!("Couldn't connect: {} \n Retry after 3 seconds.", e);
+                sleep(Duration::from_secs(3)).await;
+
+                attempts += 1;
+                if attempts >= max_retries {
+                    panic!("Failed to connect after {} attempts.", max_retries);
+                }
+            }
         }
     }
 
