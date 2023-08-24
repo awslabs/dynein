@@ -40,7 +40,7 @@ async fn test_desc_non_existent_table() -> Result<(), Box<dyn std::error::Error>
 
 #[tokio::test]
 async fn test_desc_table_from_options() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk,S", "sk,N"]).await?;
+    let table_name = util::create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = util::setup().await?;
     let cmd = c.args(&["--region", "local", "--table", &table_name, "desc"]);
@@ -69,7 +69,7 @@ created_at: \".*\"",
 
 #[tokio::test]
 async fn test_desc_table_from_args() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk,S", "sk,N"]).await?;
+    let table_name = util::create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = util::setup().await?;
     let cmd = c.args(&["--region", "local", "desc", &table_name]);
@@ -98,7 +98,7 @@ created_at: \".*\"",
 
 #[tokio::test]
 async fn test_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table(vec!["pk"]).await?;
+    let table_name = util::create_temporary_table("pk", None).await?;
 
     let mut c = util::setup().await?;
     let cmd = c.args(&["--region", "local", "desc", "--all-tables"]);
