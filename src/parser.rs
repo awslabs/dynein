@@ -749,6 +749,24 @@ impl DyneinParser {
         }
     }
 
+    pub fn parse_put_content(
+        &self,
+        initial_item: HashMap<String, AttributeValue>,
+        exp: &str,
+    ) -> Result<HashMap<String, AttributeValue>, ParseError> {
+        let result = GeneratedParser::parse(Rule::map_literal, exp);
+        match result {
+            Ok(mut pair) => {
+                let item = parse_literal(pair.next().unwrap())?.convert_attribute_value();
+                // put content must be map literal
+                let mut image = initial_item;
+                image.extend(item.m.unwrap());
+                Ok(image)
+            }
+            Err(err) => Err(ParseError::ParsingError(Box::new(err))),
+        }
+    }
+
     /// Parse set actions.
     ///
     /// You can call this more than once.
@@ -1400,6 +1418,116 @@ mod tests {
                 ..Default::default()
             }
         );
+    }
+
+    #[test]
+    fn test_parse_put_content() {
+        let parser = DyneinParser::new();
+        assert_eq!(
+            parser
+                .parse_put_content(
+                    HashMap::new(),
+                    r#"{
+                           "k0": null,
+                           "k1": [1, 2, 3, "str"],
+                           "k2": "str",
+                           "k3": {
+                             "l0": <<1, 2>>,
+                             "l1": <<'str1', "str2">>,
+                             "l2": true
+                           },
+                           "k4": b"\x20",
+                           "k5": <<b'This', b"bin">>
+                         }"#
+                )
+                .unwrap(),
+            HashMap::from([
+                (
+                    "k0".to_owned(),
+                    AttributeValue {
+                        null: Some(true),
+                        ..Default::default()
+                    }
+                ),
+                (
+                    "k1".to_owned(),
+                    AttributeValue {
+                        l: Some(Vec::from([
+                            AttributeValue {
+                                n: Some("1".to_owned()),
+                                ..Default::default()
+                            },
+                            AttributeValue {
+                                n: Some("2".to_owned()),
+                                ..Default::default()
+                            },
+                            AttributeValue {
+                                n: Some("3".to_owned()),
+                                ..Default::default()
+                            },
+                            AttributeValue {
+                                s: Some("str".to_owned()),
+                                ..Default::default()
+                            },
+                        ])),
+                        ..Default::default()
+                    }
+                ),
+                (
+                    "k2".to_owned(),
+                    AttributeValue {
+                        s: Some("str".to_owned()),
+                        ..Default::default()
+                    }
+                ),
+                (
+                    "k3".to_owned(),
+                    AttributeValue {
+                        m: Some(HashMap::from([
+                            (
+                                "l0".to_owned(),
+                                AttributeValue {
+                                    ns: Some(vec!["1".to_owned(), "2".to_owned()]),
+                                    ..Default::default()
+                                }
+                            ),
+                            (
+                                "l1".to_owned(),
+                                AttributeValue {
+                                    ss: Some(vec!["str1".to_owned(), "str2".to_owned()]),
+                                    ..Default::default()
+                                }
+                            ),
+                            (
+                                "l2".to_owned(),
+                                AttributeValue {
+                                    bool: Some(true),
+                                    ..Default::default()
+                                }
+                            )
+                        ])),
+                        ..Default::default()
+                    }
+                ),
+                (
+                    "k4".to_owned(),
+                    AttributeValue {
+                        b: Some(Bytes::from_static(b"\x20")),
+                        ..Default::default()
+                    }
+                ),
+                (
+                    "k5".to_owned(),
+                    AttributeValue {
+                        bs: Some(vec!(
+                            Bytes::from_static(b"This"),
+                            Bytes::from_static(b"bin"),
+                        )),
+                        ..Default::default()
+                    }
+                )
+            ])
+        )
     }
 
     #[test]
