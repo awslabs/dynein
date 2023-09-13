@@ -683,7 +683,7 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
 
     // retrieve current config from Context and update "using target".
     let region = Some(String::from(cx.effective_region().name()));
-    let mut config = cx.config.as_mut().expect("cx should have config");
+    let config = cx.config.as_mut().expect("cx should have config");
     config.using_region = region;
     config.using_table = Some(table_name);
     config.using_port = Some(port);
