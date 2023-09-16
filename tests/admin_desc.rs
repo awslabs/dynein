@@ -21,8 +21,10 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_admin_desc_table_from_options() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk,S", Some("sk,N")).await?;
-    let mut c = util::setup().await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk", Some("sk,N")).await?;
+
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "admin", "--table", &table_name, "desc"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
@@ -44,14 +46,15 @@ created_at: \".*\"",
         ))
         .unwrap(),
     );
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_admin_desc_table_from_args() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk,S", Some("sk,N")).await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "admin", "desc", &table_name]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
@@ -73,15 +76,16 @@ created_at: \".*\"",
         ))
         .unwrap(),
     );
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_admin_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name1 = util::create_temporary_table("pk", None).await?;
-    let table_name2 = util::create_temporary_table("pk,S", Some("sk,N")).await?;
+    let mut tm = util::setup_with_lock().await?;
+    let table_name1 = tm.create_temporary_table("pk", None).await?;
+    let table_name2 = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "admin", "desc", "--all-tables"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
@@ -123,5 +127,5 @@ created_at: \".*\"",
             .unwrap(),
         ),
     );
-    util::cleanup(vec![&table_name1, &table_name2]).await
+    Ok(())
 }
