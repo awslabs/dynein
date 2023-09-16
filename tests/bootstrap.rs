@@ -21,7 +21,9 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_bootstrap() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = util::setup().await?;
+    let tm = util::setup().await?;
+
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "bootstrap"]);
     cmd.assert().success().stdout(predicate::str::contains(
         "Now all tables have sample data. Try following commands to play with dynein. Enjoy!",
@@ -104,24 +106,25 @@ async fn test_bootstrap() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (args, expected_json) in test_cases {
-        let mut c = util::setup().await?;
-
+        let mut c = tm.command()?;
         let cmd = c.args(&args);
         util::assert_eq_json(cmd, expected_json);
     }
 
-    util::cleanup(vec!["Forum", "ProductCatalog", "Reply", "Thread"]).await
+    tm.cleanup(vec!["Forum", "ProductCatalog", "Reply", "Thread"])
 }
 
 #[tokio::test]
 async fn test_bootstrap_movie() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = util::setup().await?;
+    let tm = util::setup().await?;
+
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "bootstrap", "--sample", "movie"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("All tables are in ACTIVE."));
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -163,5 +166,5 @@ async fn test_bootstrap_movie() -> Result<(), Box<dyn std::error::Error>> {
       "#,
     );
 
-    util::cleanup(vec!["Movie"]).await
+    tm.cleanup(vec!["Movie"])
 }

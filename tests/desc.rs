@@ -21,7 +21,8 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_desc_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = util::setup().await?;
+    let tm = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -40,9 +41,10 @@ async fn test_desc_non_existent_table() -> Result<(), Box<dyn std::error::Error>
 
 #[tokio::test]
 async fn test_desc_table_from_options() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk,S", Some("sk,N")).await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "--table", &table_name, "desc"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
@@ -64,14 +66,16 @@ created_at: \".*\"",
         ))
         .unwrap(),
     );
-    util::cleanup(vec![&table_name]).await
+
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_desc_table_from_args() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk,S", Some("sk,N")).await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "desc", &table_name]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
@@ -93,14 +97,16 @@ created_at: \".*\"",
         ))
         .unwrap(),
     );
-    util::cleanup(vec![&table_name]).await
+
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
+    let mut tm = util::setup_with_lock().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "desc", "--all-tables"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
@@ -122,5 +128,6 @@ created_at: \".*\"",
         ))
         .unwrap(),
     );
-    util::cleanup(vec![&table_name]).await
+
+    Ok(())
 }
