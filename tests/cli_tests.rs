@@ -18,5 +18,9 @@ use trycmd;
 
 #[test]
 fn cli_tests() {
-    trycmd::TestCases::new().case("tests/cmd/*.md");
+    if cfg!(windows) {
+        trycmd::TestCases::new().case("tests/cmd_windows/*.md");
+    } else {
+        trycmd::TestCases::new().case("tests/cmd/*.md");
+    }
 }
