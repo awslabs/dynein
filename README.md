@@ -1223,9 +1223,19 @@ pre-commit install
 We use [trycmd](https://crates.io/crates/trycmd) to conduct snapshot testing for CLI.
 If the snapshot is needed to be updated, run command;
 
+MacOS and Linux
 ```shell
 TRYCMD=overwrite cargo test --test cli_tests
 ```
+
+Windows (PowerShell)
+```powershell
+$Env:TRYCMD='overwrite'
+cargo test --test cli_tests
+[Environment]::SetEnvironmentVariable('TRYCMD',$null)
+```
+
+Please note that we use different snapshots for the Windows environment. 
 
 ## Asides
 
