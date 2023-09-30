@@ -20,6 +20,7 @@ use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
+use std::path::Path;
 
 #[tokio::test]
 async fn test_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,25 +34,30 @@ async fn test_help() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_custom_config_location() -> Result<(), Box<dyn std::error::Error>> {
-    use std::path::Path;
+    let tm = util::setup().await?;
 
     let dummy_dir = "./tests/dummy_dir";
     let config_dir = dummy_dir.to_string() + "/.dynein";
 
     // cleanup config folder in case it was already there
     util::cleanup_config(dummy_dir).await.ok();
+    check_file_exist(&config_dir, false);
 
-    // dy config clear
-    Command::cargo_bin("dy")?
-        .args(&["config", "clear"])
-        .env("DYNEIN_CONFIG_DIR", dummy_dir)
-        .output()?;
+    // run any dy command to generate default config
+    let mut c = tm.command()?;
+    c.env("DYNEIN_CONFIG_DIR", dummy_dir).assert();
 
     // check config folder created at our desired location
-    assert!(Path::new(&config_dir).exists());
+    check_file_exist(&config_dir, true);
 
     // cleanup config folder
     util::cleanup_config(dummy_dir).await.ok();
 
     Ok(())
+}
+
+fn check_file_exist(dir: &str, exist: bool) {
+    assert_eq!(Path::new(&dir).exists(), exist);
+    assert_eq!(Path::new(&format!("{}/config.yml", dir)).exists(), exist);
+    assert_eq!(Path::new(&format!("{}/cache.yml", dir)).exists(), exist);
 }
