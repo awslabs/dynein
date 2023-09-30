@@ -28,6 +28,7 @@ use std::{
     path,
     str::FromStr,
 };
+use tempfile::NamedTempFile;
 
 use super::control;
 
@@ -378,10 +379,8 @@ pub fn load_or_touch_config_file(first_try: bool) -> Result<Config, DyneinConfig
                 ..Default::default()
             })
             .unwrap();
-            fs::write(
-                retrieve_dynein_file_path(DyneinFileType::ConfigFile)?,
-                yaml_string,
-            )?;
+
+            write_dynein_file(DyneinFileType::ConfigFile, yaml_string)?;
             load_or_touch_config_file(false) // set fisrt_try flag to false in order to avoid infinite loop.
         }
     }
@@ -404,17 +403,14 @@ pub fn load_or_touch_cache_file(first_try: bool) -> Result<Cache, DyneinConfigEr
                 return Err(DyneinConfigError::from(e));
             };
             info!(
-                "Config file doesn't exist in the path, hence creating a blank file: {}",
+                "Cache file doesn't exist in the path, hence creating a blank file: {}",
                 e
             );
             let yaml_string = serde_yaml::to_string(&Cache {
                 ..Default::default()
-            })
-            .unwrap();
-            fs::write(
-                retrieve_dynein_file_path(DyneinFileType::CacheFile)?,
-                yaml_string,
-            )?;
+            })?;
+
+            write_dynein_file(DyneinFileType::CacheFile, yaml_string)?;
             load_or_touch_cache_file(false) // set fisrt_try flag to false in order to avoid infinite loop.
         }
     }
@@ -498,10 +494,7 @@ pub fn insert_to_table_cache(
         "this YAML will be written to the cache file: {:#?}",
         &cache_yaml_string
     );
-    fs::write(
-        retrieve_dynein_file_path(DyneinFileType::CacheFile)?,
-        cache_yaml_string,
-    )?;
+    write_dynein_file(DyneinFileType::CacheFile, cache_yaml_string)?;
 
     Ok(())
 }
@@ -643,8 +636,8 @@ fn region_dynamodb_local(port: u32) -> Region {
     }
 }
 
-fn retrieve_dynein_file_path(dft: DyneinFileType) -> Result<String, DyneinConfigError> {
-    let filename = match dft {
+fn retrieve_dynein_file_path(file_type: DyneinFileType) -> Result<String, DyneinConfigError> {
+    let filename = match file_type {
         DyneinFileType::ConfigFile => CONFIG_FILE_NAME,
         DyneinFileType::CacheFile => CACHE_FILE_NAME,
     };
@@ -691,13 +684,20 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
 
     // write to config file
     let config_yaml_string = serde_yaml::to_string(config)?;
-    fs::write(
-        retrieve_dynein_file_path(DyneinFileType::ConfigFile)?,
-        config_yaml_string,
-    )?;
+    write_dynein_file(DyneinFileType::ConfigFile, config_yaml_string)?;
 
     // save target table info into cache.
     insert_to_table_cache(cx, desc)?;
+
+    Ok(())
+}
+
+fn write_dynein_file(file_type: DyneinFileType, content: String) -> Result<(), DyneinConfigError> {
+    let temp_file = NamedTempFile::new_in(retrieve_or_create_dynein_dir()?)?;
+    let temp_path = temp_file.path();
+
+    fs::write(temp_path, content)?;
+    fs::rename(temp_path, retrieve_dynein_file_path(file_type)?)?;
 
     Ok(())
 }

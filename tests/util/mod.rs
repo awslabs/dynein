@@ -25,6 +25,7 @@ use regex::bytes::Regex;
 use rusoto_core::Region;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::io::{self, Write}; // Used when check results by printing to stdout
+use std::path::Path;
 use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -298,6 +299,12 @@ impl TemporaryItem {
 
         result
     }
+}
+
+pub fn check_dynein_files_existence(dir: &str, exist: bool) {
+    assert_eq!(Path::new(&dir).exists(), exist);
+    assert_eq!(Path::new(&format!("{}/config.yml", dir)).exists(), exist);
+    assert_eq!(Path::new(&format!("{}/cache.yml", dir)).exists(), exist);
 }
 
 pub async fn cleanup_config(dummy_dir: &str) -> io::Result<()> {
