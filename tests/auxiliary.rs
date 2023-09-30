@@ -20,7 +20,6 @@ use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
-use std::path::Path;
 
 #[tokio::test]
 async fn test_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,23 +40,17 @@ async fn test_custom_config_location() -> Result<(), Box<dyn std::error::Error>>
 
     // cleanup config folder in case it was already there
     util::cleanup_config(dummy_dir).await.ok();
-    check_file_exist(&config_dir, false);
+    util::check_dynein_files_existence(&config_dir, false);
 
     // run any dy command to generate default config
     let mut c = tm.command()?;
     c.env("DYNEIN_CONFIG_DIR", dummy_dir).assert();
 
     // check config folder created at our desired location
-    check_file_exist(&config_dir, true);
+    util::check_dynein_files_existence(&config_dir, true);
 
     // cleanup config folder
     util::cleanup_config(dummy_dir).await.ok();
 
     Ok(())
-}
-
-fn check_file_exist(dir: &str, exist: bool) {
-    assert_eq!(Path::new(&dir).exists(), exist);
-    assert_eq!(Path::new(&format!("{}/config.yml", dir)).exists(), exist);
-    assert_eq!(Path::new(&format!("{}/cache.yml", dir)).exists(), exist);
 }
