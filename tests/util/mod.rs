@@ -312,13 +312,17 @@ pub async fn cleanup_config(dummy_dir: &str) -> io::Result<()> {
     remove_dir_all(dummy_dir)
 }
 
-pub fn assert_eq_json(cmd: &mut Command, expected: &str) {
+pub fn assert_eq_cmd_json(cmd: &mut Command, expected: &str) {
     cmd.assert().success();
     let stdout = cmd.output().unwrap().stdout;
     let output = String::from_utf8(stdout).unwrap();
 
+    assert_eq_json(&output, expected)
+}
+
+pub fn assert_eq_json(content: &str, expected: &str) {
     assert_eq!(
-        output.parse::<serde_json::Value>().unwrap(),
+        content.parse::<serde_json::Value>().unwrap(),
         expected.parse::<serde_json::Value>().unwrap(),
     )
 }
