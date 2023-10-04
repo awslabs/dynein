@@ -19,7 +19,9 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_admin_list_table_with_no_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = util::setup().await?;
+    let tm = util::setup().await?;
+
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "admin", "list"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(
@@ -34,10 +36,12 @@ async fn test_admin_list_table_with_no_table() -> Result<(), Box<dyn std::error:
 
 #[tokio::test]
 async fn test_admin_list_table_with_multiple_tables() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
-    let table_name2 = util::create_temporary_table("pk", None).await?;
+    let mut tm = util::setup().await?;
 
-    let mut c = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
+    let table_name2 = tm.create_temporary_table("pk", None).await?;
+
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "admin", "list"]);
     cmd.assert()
         .success()
@@ -45,5 +49,5 @@ async fn test_admin_list_table_with_multiple_tables() -> Result<(), Box<dyn std:
         .stdout(predicate::str::contains(&table_name))
         .stdout(predicate::str::contains(&table_name2));
 
-    util::cleanup(vec![&table_name, &table_name2]).await
+    Ok(())
 }
