@@ -41,6 +41,7 @@ async fn test_admin_list_table_with_multiple_tables() -> Result<(), Box<dyn std:
     let cmd = c.args(&["--region", "local", "admin", "list"]);
     cmd.assert()
         .success()
+        .stdout(predicate::str::contains("DynamoDB tables in region: local"))
         .stdout(predicate::str::contains(&table_name))
         .stdout(predicate::str::contains(&table_name2));
 
