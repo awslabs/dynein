@@ -25,19 +25,151 @@ use regex::bytes::Regex;
 use rusoto_core::Region;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use std::io::{self, Write}; // Used when check results by printing to stdout
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 use tokio::time::sleep;
 
-/// Integration tests would go with DynamoDB Local, so before running them setup() starts up DynamoDB Local with Docker.
-/// FYI: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html
-///      https://hub.docker.com/r/amazon/dynamodb-local
-pub async fn setup() -> Result</* std::process::Command */ Command, Box<dyn std::error::Error>> {
+// We use std::sync::Mutex instead of tokio::sync::Mutex, because mutex must be poisoned after setup failure.
+static SETUP_LOCK: Lazy<RwLock<()>> = Lazy::new(|| RwLock::new(()));
+static SETUP_DOCKER_RUN_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+pub struct TestManager<'a> {
+    port: i32,
+    temporary_tables: Vec<String>,
+    _read_lock: Option<RwLockReadGuard<'a, ()>>,
+    _write_lock: Option<RwLockWriteGuard<'a, ()>>,
+}
+
+impl<'a> TestManager<'a> {
+    pub fn command(&self) -> Result<Command, Box<dyn std::error::Error>> {
+        Ok(Command::cargo_bin("dy")?)
+    }
+
+    /// Create temporary table which is deleted when the struct is dropped.
+    /// You don't need to delete the table manually.
+    pub async fn create_temporary_table(
+        &mut self,
+        pk: &'static str,
+        sk: Option<&'static str>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let table_name: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
+        println!("create temporary table: {}", table_name);
+
+        let mut c = self.command()?;
+        let port = self.port.to_string();
+        let mut args = vec![
+            "--region",
+            "local",
+            "--port",
+            &port,
+            "admin",
+            "create",
+            "table",
+            &table_name,
+            "--keys",
+        ];
+        let mut keys = vec![pk];
+        if let Some(sk) = sk {
+            keys.push(sk);
+        }
+
+        args.extend(keys);
+        c.args(args).assert().success();
+
+        self.temporary_tables.push(table_name.clone());
+
+        Ok(table_name)
+    }
+
+    /// Create temporary table with items via `create_temporary_table`.
+    pub async fn create_temporary_table_with_items(
+        &mut self,
+        pk: &'static str,
+        sk: Option<&'static str>,
+        items: Vec<TemporaryItem>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let table_name = self.create_temporary_table(pk, sk).await?;
+
+        for ti in items {
+            let mut c = self.command()?;
+            let mut args = vec!["--region", "local", "--table", &table_name, "put"];
+            args.extend(ti.keys());
+            if let Some(item) = ti.item {
+                args.extend(vec!["--item", item]);
+            }
+
+            c.args(args).assert().success();
+        }
+
+        Ok(table_name)
+    }
+
+    /// Delete table manually.
+    pub fn cleanup<I, S>(&self, tables: I) -> Result<(), Box<dyn std::error::Error>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for table in tables {
+            let mut c = self.command()?;
+            let cmd = c.args(&[
+                "--region",
+                "local",
+                "--port",
+                &self.port.to_string(),
+                "admin",
+                "delete",
+                "table",
+                "--yes",
+                table.as_ref(),
+            ]);
+            cmd.assert().success();
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a> Drop for TestManager<'a> {
+    fn drop(&mut self) {
+        println!("delete temporary tables: {:?}", self.temporary_tables);
+        let _ = self.cleanup(&self.temporary_tables);
+    }
+}
+
+pub async fn setup() -> Result<TestManager<'static>, Box<dyn std::error::Error>> {
     setup_with_port(8000).await
 }
 
-// We use std::sync::Mutex instead of tokio::sync::Mutex, because mutex must be poisoned after setup failure.
-static SETUP_MUTEX: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
+pub async fn setup_with_port(
+    port: i32,
+) -> Result<TestManager<'static>, Box<dyn std::error::Error>> {
+    let lock = SETUP_LOCK.read().unwrap();
+    setup_container(port).await?;
+
+    Ok(TestManager {
+        port,
+        temporary_tables: vec![],
+        _read_lock: Some(lock),
+        _write_lock: None,
+    })
+}
+
+pub async fn setup_with_lock() -> Result<TestManager<'static>, Box<dyn std::error::Error>> {
+    let lock = SETUP_LOCK.write().unwrap();
+    setup_container(8000).await?;
+
+    Ok(TestManager {
+        port: 8000,
+        temporary_tables: vec![],
+        _read_lock: None,
+        _write_lock: Some(lock),
+    })
+}
 
 /// Check existence of docker process for dynamodb-local
 fn check_dynamodb_local_running(port: u16) -> bool {
@@ -59,7 +191,10 @@ fn check_dynamodb_local_running(port: u16) -> bool {
     port_re.is_match(&check_out.stdout)
 }
 
-pub async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::Error>> {
+/// Integration tests would go with DynamoDB Local, so before running them setup() starts up DynamoDB Local with Docker.
+/// FYI: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html
+///      https://hub.docker.com/r/amazon/dynamodb-local
+async fn setup_container(port: i32) -> Result<(), Box<dyn std::error::Error>> {
     // Stop docker setup if DYNEIN_TEST_NO_DOCKER_SETUP=true.
     // This configuration is useful for skipping the docker setup in the GitHub CI environment.
     // Also, it reduces test time because of skipping of docker checks.
@@ -71,22 +206,22 @@ pub async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::E
         .parse()
         .expect("DYNEIN_TEST_NO_DOCKER_SETUP expects true or false");
     if stop_setup {
-        return Ok(Command::cargo_bin("dy")?);
+        return Ok(());
     }
 
     // Check the current process at first to allow multiple threads to run tests concurrently.
     // This is for performance optimization on Windows and Mac OS.
     // See https://github.com/awslabs/dynein/pull/28#issuecomment-972880324 for detail.
     if check_dynamodb_local_running(port as u16) {
-        return Ok(Command::cargo_bin("dy")?);
+        return Ok(());
     };
 
     // To avoid unnecessary docker container creation, setup docker sequentially
-    let _lock = SETUP_MUTEX.lock();
+    let _lock = SETUP_DOCKER_RUN_MUTEX.lock();
 
     // Recheck whether another thread already started the dynamodb-local
     if check_dynamodb_local_running(port as u16) {
-        return Ok(Command::cargo_bin("dy")?);
+        return Ok(());
     }
 
     let mut docker_for_run = Command::new("docker");
@@ -133,39 +268,7 @@ pub async fn setup_with_port(port: i32) -> Result<Command, Box<dyn std::error::E
         }
     }
 
-    Ok(Command::cargo_bin("dy")?)
-}
-
-pub async fn create_temporary_table(
-    pk: &'static str,
-    sk: Option<&'static str>,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let table_name: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(16)
-        .map(char::from)
-        .collect();
-    println!("create temporary table: {}", table_name);
-
-    let mut c = setup().await?;
-    let mut args = vec![
-        "--region",
-        "local",
-        "admin",
-        "create",
-        "table",
-        &table_name,
-        "--keys",
-    ];
-    let mut keys = vec![pk];
-    if let Some(sk) = sk {
-        keys.push(sk);
-    }
-
-    args.extend(keys);
-    c.args(args).assert().success();
-
-    Ok(table_name)
+    Ok(())
 }
 
 pub struct TemporaryItem {
@@ -195,60 +298,6 @@ impl TemporaryItem {
 
         result
     }
-}
-
-pub async fn create_temporary_table_with_items(
-    pk: &'static str,
-    sk: Option<&'static str>,
-    items: Vec<TemporaryItem>,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let table_name = create_temporary_table(pk, sk).await?;
-
-    for ti in items {
-        let mut c = setup().await?;
-        let mut args = vec!["--region", "local", "--table", &table_name, "put"];
-        args.extend(ti.keys());
-        if let Some(item) = ti.item {
-            args.extend(vec!["--item", item]);
-        }
-
-        c.args(args).assert().success();
-    }
-
-    Ok(table_name)
-}
-
-pub async fn cleanup(tables: Vec<&str>) -> Result<(), Box<dyn std::error::Error>> {
-    for table in tables {
-        let mut dynein_cmd = setup().await?;
-        let cmd = dynein_cmd.args(&[
-            "--region", "local", "admin", "delete", "table", "--yes", table,
-        ]);
-        cmd.assert().success();
-    }
-    Ok(())
-}
-
-pub async fn cleanup_with_port(
-    tables: Vec<&str>,
-    port: i32,
-) -> Result<(), Box<dyn std::error::Error>> {
-    for table in tables {
-        let mut dynein_cmd = setup().await?;
-        let cmd = dynein_cmd.args(&[
-            "--region",
-            "local",
-            "--port",
-            &format!("{}", port),
-            "admin",
-            "delete",
-            "table",
-            "--yes",
-            table,
-        ]);
-        cmd.assert().success();
-    }
-    Ok(())
 }
 
 pub async fn cleanup_config(dummy_dir: &str) -> io::Result<()> {

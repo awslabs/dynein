@@ -570,7 +570,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
     let mut tw = TabWriter::new(io::stdout());
     // First defining header
     tw.write_all(
-        ((vec!["Table", "Status", "CreatedAt", "BackupName (size)"].join("\t")) + "\n").as_bytes(),
+        ((["Table", "Status", "CreatedAt", "BackupName (size)"].join("\t")) + "\n").as_bytes(),
     )?;
     for backup in backups {
         let line = vec![
