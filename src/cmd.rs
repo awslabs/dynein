@@ -427,17 +427,20 @@ pub enum AdminSub {
         #[structopt(subcommand)]
         target_type: DeleteSub,
     },
+
+    /// [WIP] Create or update DynamoDB tables based on CloudFormation template files (.cfn.yml).
+    #[structopt(setting(structopt::clap::AppSettings::Hidden))]
+    Apply {
+        /// Try features under development
+        #[structopt(long)]
+        dev: bool,
+    },
     /*
     /// Compare the desired and current state of a DynamoDB table.
     #[structopt()]
     Plan {
         /// target table name to create/update.
         name: String,
-    },
-
-    /// Create or update DynamoDB tables based on CloudFormation template files (.cfn.yml).
-    #[structopt()]
-    Apply {
     },
 
     /// Delete all items in the target table.

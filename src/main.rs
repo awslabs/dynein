@@ -84,6 +84,13 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
                     yes,
                 } => control::delete_table(context.clone(), table_name_to_delete, yes).await,
             },
+            cmd::AdminSub::Apply { dev } => {
+                if dev {
+                    todo!()
+                } else {
+                    println!("not yet implemented")
+                }
+            }
         },
 
         cmd::Sub::Scan {
