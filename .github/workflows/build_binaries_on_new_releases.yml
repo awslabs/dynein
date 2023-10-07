@@ -27,7 +27,7 @@ jobs:
           os: macos-latest
           target: x86_64-apple-darwin
         - name: windows
-          os: windows-2019
+          os: windows-2022
           target: x86_64-pc-windows-msvc
 
     steps:
@@ -47,7 +47,7 @@ jobs:
     - name: Archive the binary for publishing on release assets
       shell: bash
       run: |
-        if [ "${{ matrix.os }}" = "windows-2019" ]; then
+        if [ "${{ matrix.os }}" = "windows-2022" ]; then
           7z a -tzip dynein-${{ matrix.name }}.zip ./target/release/dy.exe
         else
           tar -C ./target/release/ -cvzf dynein-${{ matrix.name }}.tar.gz dy
