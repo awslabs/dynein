@@ -1,0 +1,97 @@
+on:
+  issue_comment:
+    types: [created]
+
+name: Bot
+
+jobs:
+  pr_pre_comment:
+    # This job only runs for pull request comments
+    name: Comment before taking snapshots
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: "Start taking snapshots for this pull request.\n" +
+                  `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+          });
+  pr_snapshot:
+    # This job only runs for pull request comments
+    name: Generate a snapshot
+    needs: [pr_pre_comment]
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
+    strategy:
+      # Do not run in parallel because we may create a new commit
+      max-parallel: 1
+      matrix:
+        name: [windows, linux]
+        include:
+        - name: windows
+          os: windows-2022
+        - name: linux
+          os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      # Set TRYCMD=overwrite to update snapshot
+      TRYCMD: overwrite
+    steps:
+    - uses: actions/github-script@v6
+      id: target-branch
+      with:
+        result-encoding: string
+        script: |
+          const pull_request = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number
+          });
+          return pull_request.data.head.ref;
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ steps.target-branch.outputs.result }}
+    - uses: actions-rs/toolchain@v1
+      with:
+        components: rustfmt, clippy
+      # Pinned to the commit hash of v2.2.1
+    - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
+      with:
+        shared-key: pr-snapshot-commented-${{ matrix.name }}
+    - uses: actions-rs/cargo@v1
+        # Generate new snapshots
+      with:
+        command: test
+        args: cli_tests
+    - if: matrix.name == 'linux'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git commit -am "test: update snapshot for ${{ matrix.name }}" || true
+        git push || true
+    - if: matrix.name == 'windows'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git commit -am "test: update snapshot for ${{ matrix.name }}"
+        git push
+  pr_post_comment:
+    # This job only runs for pull request comments
+    name: Comment after taking snapshots
+    needs: [pr_snapshot]
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: 'Taking snapshots has been completed.'
+          });
