@@ -1235,7 +1235,11 @@ cargo test --test cli_tests
 [Environment]::SetEnvironmentVariable('TRYCMD',$null)
 ```
 
-Please note that we use different snapshots for the Windows environment. 
+Please note that we use different snapshots for the Windows environment.
+
+### Bot
+If you want to update snapshots of commands, you can use bot command `/snapshot` in your pull request.
+Please note that you must type exactly as written.
 
 ## Asides
 
