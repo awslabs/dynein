@@ -431,7 +431,7 @@ using_table: ~
 
 ## Working with DynamoDB items
 
-As an example let's assume you have [official "Movie" sample data](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Python.02.html). To prepare the table with data loaded, simply you can execute `dy bootstrap --sample movie`.
+As an example let's assume you have [official "Movie" sample data](https://raw.githubusercontent.com/awsdocs/aws-doc-sdk-examples/c2edcff1365d4b454b51075d632a1be844dd3e47/resources/sample_files/movies.json). To prepare the table with data loaded, simply you can execute `dy bootstrap --sample movie`.
 
 ```
 $ dy bootstrap --sample movie
