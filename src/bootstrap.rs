@@ -322,8 +322,9 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
         }
         Err(e) => match e {
             RusotoError::Service(CreateTableError::ResourceInUse(_)) => println!(
-                "[skip] Table '{}' already exists, skipping to create new one.",
-                &table_name
+                "[skip] Table '{}' already exists in {} region, skipping to create new one.",
+                &table_name,
+                &cx.effective_region().name()
             ),
             _ => {
                 debug!("CreateTable API call got an error -- {:#?}", e);
