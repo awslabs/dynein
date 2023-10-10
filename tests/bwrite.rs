@@ -25,7 +25,8 @@ use tempfile::Builder;
 
 #[tokio::test]
 async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
 
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests/resources/test_batch_write.json");
@@ -40,7 +41,7 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
             .as_bytes(),
     )?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     c.args(&[
         "--region",
         "local",
@@ -52,7 +53,7 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
     ])
     .output()?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd
         .assert()
@@ -97,7 +98,7 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
           "ISBN": "111-1111111111"
         }
     */
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let get_cmd = c.args(&["--region", "local", "--table", &table_name, "get", "ichi"]);
     let output = get_cmd.output()?.stdout;
 
@@ -107,5 +108,5 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         predicate::str::is_match("\"Dimensions\":")?.eval(String::from_utf8(output)?.as_str())
     );
 
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }

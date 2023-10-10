@@ -17,9 +17,7 @@
 use std::{
     collections::HashMap,
     error, fmt,
-    fs::{create_dir_all, read_to_string, File},
-    io::{copy, Error as IOError, Write},
-    path::PathBuf,
+    io::{Cursor, Error as IOError, Read},
     thread, time,
 };
 
@@ -30,8 +28,8 @@ use rusoto_dynamodb::{
     AttributeValue, BatchWriteItemError, CreateTableError, PutRequest, WriteRequest,
 };
 use rusoto_signature::Region;
-use tempfile::Builder;
 
+use brotli::Decompressor;
 use serde_json::Value as JsonValue;
 
 use super::app;
@@ -42,8 +40,6 @@ use super::data;
 /* =================================================
 struct / enum / const
 ================================================= */
-
-const USER_AGENT: &str = concat!("dynein/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug)]
 pub enum DyneinBootstrapError {
@@ -152,32 +148,20 @@ e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingSta
 "
     );
 
-    // Step 1. Create tables
+    // Step 1. create tables
     prepare_table(&cx, "Movie", vec!["year,N", "title,S"].as_ref()).await;
 
-    // Step 2. Download & unzip data. The sampledata.zip contains 4 files.
-    let url =
-        "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/samples/moviedata.zip";
-    let download_dir: tempfile::TempDir = download_and_extract_zip(url).await?;
-    let content = read_to_string(download_dir.path().join("moviedata.json"))?;
-    /*
-    moviedata.json (103494 lines, 3.5M bytes)
-    The JSON file is not a DynamoDB style JSON, but standard JSON format like below:
-    [
-        {
-            "year": 2013,
-            "title": "Rush",
-            "info": {
-                "directors": ["Ron Howard"],
-                "release_date": "2013-09-02T00:00:00Z",
-                "rating": 8.3,
-                "genres": [
-                    "Action",
-    */
-
-    // Step 3. wait tables to be created and in ACTIVE status
+    // Step 2. wait tables to be created and in ACTIVE status
     wait_table_creation(&cx, vec!["Movie"]).await;
 
+    // Step 3. decompress data
+    let compressed_data = include_bytes!("./resources/bootstrap/moviedata.json.br");
+    let cursor = Cursor::new(compressed_data);
+    let mut decompressor = Decompressor::new(cursor, 4096);
+    let mut content = String::new();
+    decompressor.read_to_string(&mut content)?;
+
+    // Step 4. load data into tables
     /*
     Array([
         Object({
@@ -268,36 +252,26 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
         prepare_table(&cx, table_name, keys).await
     }
 
-    /* Step 2. Download & unzip data. The sampledata.zip contains 4 files.
-    https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/samples/sampledata.zip
-    - Forum.json          (23 lines)
-    - ProductCatalog.json (306 lines)
-    - Reply.json          (75 lines)
-    - Thread.json         (129 lines)
-
-    These JSON files are already BatchWriteItem format. e.g. Forum.json
-    { "Forum": [
-        { "PutRequest":
-            { "Item": {
-                    "Name": {"S":"Amazon DynamoDB"},
-                    "Category": {"S":"Amazon Web Services"},
-                    "Threads": {"N":"2"},
-                    "Messages": {"N":"4"}, ...
-    */
-    let url =
-        "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/samples/sampledata.zip";
-    let download_dir: tempfile::TempDir = download_and_extract_zip(url).await?;
-
-    // Step 3. wait tables to be created and in ACTIVE status
+    // Step 2. wait tables to be created and in ACTIVE status
     let creating_table_names: Vec<&str> = tables.clone().iter().map(|pair| pair.0).collect();
     wait_table_creation(&cx, creating_table_names).await;
 
-    // Step 4. load data into tables
     println!("Tables are ready and retrieved sample data locally. Now start writing data into samle tables...");
     for (table_name, _) in &tables {
-        let content: String =
-            read_to_string(download_dir.path().join(format!("{}.json", table_name)))?;
-        let request_items = batch::build_batch_request_items(content)?;
+        // Step 3. decompress data
+        let compressed_data = match *table_name {
+            "ProductCatalog" => &include_bytes!("./resources/bootstrap/ProductCatalog.json.br")[..],
+            "Forum" => &include_bytes!("./resources/bootstrap/Forum.json.br")[..],
+            "Thread" => &include_bytes!("./resources/bootstrap/Thread.json.br")[..],
+            "Reply" => &include_bytes!("./resources/bootstrap/Reply.json.br")[..],
+            _ => panic!("No such table name: {}", table_name),
+        };
+        let cursor = Cursor::new(compressed_data);
+        let mut decompressor = Decompressor::new(cursor, 4096);
+        let mut content = String::new();
+        decompressor.read_to_string(&mut content)?;
+        // Step 4. load data into tables
+        let request_items = batch::build_batch_request_items(content.to_string())?;
         batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     }
     println!(
@@ -358,65 +332,6 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
             }
         },
     }
-}
-
-async fn download_and_extract_zip(target: &str) -> Result<tempfile::TempDir, DyneinBootstrapError> {
-    let tmpdir: tempfile::TempDir = Builder::new().tempdir()?;
-    debug!("temporary download & unzip directory: {:?}", &tmpdir);
-
-    println!("Temporarily downloading sample data from {}", target);
-
-    let clinet = reqwest::ClientBuilder::new()
-        .user_agent(USER_AGENT)
-        .build()?;
-    let res_bytes = clinet
-        .get(target)
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
-    let fpath: PathBuf = tmpdir.path().join("downloaded_sampledata.zip");
-    debug!("Downloading the file at: {}", &fpath.display());
-    let mut zfile: File = File::create(fpath.clone())?;
-    zfile.write_all(&res_bytes)?;
-    debug!(
-        "Finished writing content of the downloaded data into '{}'",
-        &fpath.display()
-    );
-
-    let mut zarchive = zip::ZipArchive::new(File::open(fpath)?)?;
-    debug!("Opened the zip archive File just written: {:?}", zarchive);
-
-    for i in 0..zarchive.len() {
-        let mut f: zip::read::ZipFile<'_> = zarchive.by_index(i)?;
-        debug!("target ZipFile name: {}", f.name());
-        let unzipped_fpath = tmpdir.path().join(f.name());
-        debug!(
-            "[file #{}] file in the archive is: {}",
-            &i,
-            unzipped_fpath.display()
-        );
-
-        // create a directory if target file is a directory (ends with '/').
-        if (*f.name()).ends_with('/') {
-            create_dir_all(&unzipped_fpath)?
-        } else {
-            // create missing parent directory before diving into actual file
-            if let Some(p) = unzipped_fpath.parent() {
-                if !p.exists() {
-                    create_dir_all(p)?;
-                }
-            }
-
-            // create unzipped file
-            let mut out = File::create(&unzipped_fpath)?;
-            copy(&mut f, &mut out)?;
-            debug!("[file #{}] done extracting file.", &i);
-        }
-    }
-
-    Ok(tmpdir)
 }
 
 async fn wait_table_creation(cx: &app::Context, mut processing_tables: Vec<&str>) {

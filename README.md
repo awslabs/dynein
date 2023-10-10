@@ -553,7 +553,8 @@ dynein provides subcommands to write to DynamoDB tables as well.
 
 #### `dy put`
 
-`dy put` internally calls [PutItem API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html) and save an item to a target table. To save an item, you need to pass at least primary key that identifies an item among the table.
+`dy put` internally calls [PutItem API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html) and save an item to a target table.
+To save an item, you need to pass at least primary key that identifies an item among the table.
 
 ```
 $ dy admin create table write_test --keys id,N
@@ -566,7 +567,8 @@ id  attributes
 123
 ```
 
-Additionally you can include item body (non-key attributes) by passing `--item` or `-i` option. The `--item` option takes JSON style syntax.
+Additionally, you can include an item body (non-key attributes) by passing `--item` or `-i` option.
+The `--item` option takes a JSON-style expression with extended syntax.
 
 ```
 $ dy put 456 --item '{"a": 9, "b": "str"}'
@@ -578,7 +580,9 @@ id  attributes
 456  {"a":9,"b":"str"}
 ```
 
-As dynein's `--item` option automatically transform standard JSON into DynamoDB style JSON syntax, writing items into a table would be simpler than AWS CLI. See following comparison:
+As the parameter of the `--item` option automatically transforms into DynamoDB-style JSON syntax,
+writing items into a table would be more straightforward than AWS CLI.
+See the following comparison:
 
 ```
 $ dy put 789 --item '{"a": 9, "b": "str"}'
@@ -587,10 +591,13 @@ $ dy put 789 --item '{"a": 9, "b": "str"}'
 $ aws dynamodb put-item --table-name write_test --item '{"id": {"N": "456"}, "a": {"N": "9"}, "b": {"S": "str"}}'
 ```
 
-Finally, in addition to the string ("S") and nubmer ("N"), dynein also supports other data types such as boolean ("BOOL"), null ("NULL"), string set ("SS"), number set ("NS"), list ("L"),  and nested object ("M").
+Please see the [dynein format](./docs/format.md) for details of JSON-style data.
+To summarize, in addition to the string ("S") and number ("N"), dynein also supports other data types such as boolean ("BOOL"),
+null ("NULL"), binary ("B"), string set ("SS"), number set ("NS"), binary set("BS"),
+list ("L"), and nested object ("M").
 
 ```
-$ dy put 999 --item '{"myfield": "is", "nested": {"can": true, "go": false, "deep": [1,2,{"this_is_set": ["x","y","z"]}]}}'
+$ dy put 999 --item '{"myfield": "is", "nested": {"can": true, "go": false, "deep": [1,2,{"this_is_set": <<"x","y","z">>}]}}'
 Successfully put an item to the table 'write_test'.
 $ dy get 999
 {

@@ -21,7 +21,8 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_get_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = util::setup().await?;
+    let tm = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -40,21 +41,23 @@ async fn test_get_non_existent_table() -> Result<(), Box<dyn std::error::Error>>
 
 #[tokio::test]
 async fn test_get_non_existent_item() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "--table", &table_name, "get", "42"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("No item found."));
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_get_item() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = prepare_table_with_item().await?;
+    let mut tm = util::setup().await?;
+    let table_name = prepare_table_with_item(&mut tm).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "--table", &table_name, "get", "42"]);
     util::assert_eq_json(
         cmd,
@@ -64,14 +67,15 @@ async fn test_get_item() -> Result<(), Box<dyn std::error::Error>> {
         }"#,
     );
 
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_get_item_output_json() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = prepare_table_with_item().await?;
+    let mut tm = util::setup().await?;
+    let table_name = prepare_table_with_item(&mut tm).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -90,14 +94,15 @@ async fn test_get_item_output_json() -> Result<(), Box<dyn std::error::Error>> {
         }"#,
     );
 
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_get_item_output_yaml() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = prepare_table_with_item().await?;
+    let mut tm = util::setup().await?;
+    let table_name = prepare_table_with_item(&mut tm).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -116,14 +121,15 @@ pk: "42"
 "#,
     );
 
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_get_item_output_raw() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = prepare_table_with_item().await?;
+    let mut tm = util::setup().await?;
+    let table_name = prepare_table_with_item(&mut tm).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -146,25 +152,23 @@ async fn test_get_item_output_raw() -> Result<(), Box<dyn std::error::Error>> {
         }"#,
     );
 
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
-async fn prepare_table_with_item() -> Result<String, Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
-
-    let mut c = util::setup().await?;
-    c.args(&[
-        "--region",
-        "local",
-        "--table",
-        &table_name,
-        "put",
-        "42",
-        "-i",
-        "{\"flag\": true}",
-    ])
-    .assert()
-    .success();
+async fn prepare_table_with_item<'a>(
+    tm: &mut util::TestManager<'a>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let table_name = tm
+        .create_temporary_table_with_items(
+            "pk",
+            None,
+            vec![util::TemporaryItem::new(
+                "42",
+                None,
+                Some("{\"flag\": true}"),
+            )],
+        )
+        .await?;
 
     Ok(table_name)
 }

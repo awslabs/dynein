@@ -315,16 +315,14 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
     match item {
         None => (),
         Some(_i) => {
-            match json_str_to_attributes(&_i) {
+            let parser = DyneinParser::new();
+            let result = parser.parse_put_content(full_item_image, &_i);
+            match result {
                 Ok(attrs) => {
-                    debug!(
-                        "Merging two HashMaps: {:?} <-- extend -- {:?}",
-                        full_item_image, attrs
-                    );
-                    full_item_image.extend(attrs);
+                    full_item_image = attrs;
                 }
                 Err(e) => {
-                    error!("ERROR: failed to load item. {}", e);
+                    error!("ERROR: failed to load item. {:?}", e);
                     std::process::exit(1);
                 }
             };
@@ -576,42 +574,6 @@ fn identify_target(
         &target
     );
     target
-}
-
-/// this function converts a JSON string argument passed by `--item/-i` option into DynamoDB AttributeValue.
-/// for simplicity `--item` option does NOT force users to construct DynamoDB JSON. i.e.:
-/// - '{"field": { "S": "val"} }' ... this function doesn't support.
-/// - '{"field": "val"}' ... this is the format this function can convert.
-fn json_str_to_attributes(s: &str) -> Result<HashMap<String, AttributeValue>, serde_json::Error> {
-    debug!(
-        "Trying to convert from standard JSON received from command line into attributes: {}",
-        s
-    );
-
-    // In this line we assume that 1st element of JSON is not an array.
-    // i.e. this type annotation assumes single JSON element:
-    //     {"a": "val", "b": "yay"}
-    // on the other hand, cannot be used for JSON begins with array like:
-    //     [ {"a": "val"}, {"b": "yay"} ]
-    let hashmap: HashMap<String, JsonValue> = serde_json::from_str(s)?; // unknown JSON structure
-    debug!("JSON -> HashMap: {:?}", hashmap);
-
-    let result = convert_jsonval_to_attrvals_in_hashmap_val(hashmap);
-    debug!("JSON has been converted to AttributeValue(s): {:?}", result);
-
-    Ok(result)
-}
-
-/// Keeping key String as it is, this function converts HashMap value from serde_json::Value into DynamoDB AttributeValue.
-fn convert_jsonval_to_attrvals_in_hashmap_val(
-    hashmap: HashMap<String, JsonValue>,
-) -> HashMap<String, AttributeValue> {
-    let mut result = HashMap::<String, AttributeValue>::new();
-    for (k, v) in hashmap {
-        debug!("working on key '{}', and value '{:?}'", k, v);
-        result.insert(k, dispatch_jsonvalue_to_attrval(&v, true));
-    }
-    result
 }
 
 // top 3 scalar types that can be used for primary keys.

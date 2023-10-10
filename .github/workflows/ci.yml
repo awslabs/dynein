@@ -29,7 +29,6 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.69.0
         components: rustfmt, clippy
       # Pinned to the commit hash of v2.2.1
     - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f

@@ -26,9 +26,10 @@ async fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
     use std::io::{Seek, SeekFrom};
 
     let table_name = "table--test_shell_mode";
+    let tm = util::setup().await?;
 
     // $ dy admin create table <table_name> --keys pk
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let shell_session = c.args(&["--region", "local", "--shell"]);
     let mut tmpfile = Builder::new().tempfile()?.into_file();
     writeln!(tmpfile, "admin create table {} --keys pk", table_name)?;
@@ -44,5 +45,5 @@ async fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
             &table_name
         )));
 
-    util::cleanup(vec![table_name]).await
+    tm.cleanup(vec![table_name])
 }

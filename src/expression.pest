@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-WHITESPACE = _{ SEPARATOR }
+WHITESPACE = _{ SEPARATOR | "\r\n" | "\n" | "\r" | "\t" }
 
 // EOI always produces token.
 // I use eoi instead of EIO to suppress generating token.

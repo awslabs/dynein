@@ -21,7 +21,8 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = util::setup().await?;
+    let tm = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -39,32 +40,34 @@ async fn test_scan_non_existent_table() -> Result<(), Box<dyn std::error::Error>
 
 #[tokio::test]
 async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("No item to show"));
 
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
+    let mut tm = util::setup().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     c.args(&["--region", "local", "--table", &table_name, "put", "abc"])
         .output()?;
 
-    let mut c = util::setup().await?;
+    let mut c = tm.command()?;
     let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
         .stdout(predicate::str::contains("pk  attributes\nabc"));
 
-    util::cleanup(vec![&table_name]).await
+    Ok(())
 }

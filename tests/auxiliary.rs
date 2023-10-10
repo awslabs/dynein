@@ -33,22 +33,21 @@ async fn test_help() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_custom_config_location() -> Result<(), Box<dyn std::error::Error>> {
-    use std::path::Path;
+    let tm = util::setup().await?;
 
     let dummy_dir = "./tests/dummy_dir";
     let config_dir = dummy_dir.to_string() + "/.dynein";
 
     // cleanup config folder in case it was already there
     util::cleanup_config(dummy_dir).await.ok();
+    util::check_dynein_files_existence(&config_dir, false);
 
-    // dy config clear
-    Command::cargo_bin("dy")?
-        .args(&["config", "clear"])
-        .env("DYNEIN_CONFIG_DIR", dummy_dir)
-        .output()?;
+    // run any dy command to generate default config
+    let mut c = tm.command()?;
+    c.env("DYNEIN_CONFIG_DIR", dummy_dir).assert();
 
     // check config folder created at our desired location
-    assert!(Path::new(&config_dir).exists());
+    util::check_dynein_files_existence(&config_dir, true);
 
     // cleanup config folder
     util::cleanup_config(dummy_dir).await.ok();

@@ -20,32 +20,12 @@ use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
-async fn test_desc_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let tm = util::setup().await?;
-    let mut c = tm.command()?;
-    let cmd = c.args(&[
-        "--region",
-        "local",
-        "--table",
-        "dummy-table-doent-exist",
-        "get",
-        "42",
-    ]);
-    cmd.assert().failure().stderr(predicate::str::contains(
-        // The error message is different between DynamoDB local and real service.
-        // It should be "Requested resource not found: Table: table not found" actually.
-        "Cannot do operations on a non-existent table",
-    ));
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_desc_table_from_options() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_admin_desc_table_from_options() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
+    let table_name = tm.create_temporary_table("pk", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "--table", &table_name, "desc"]);
+    let cmd = c.args(&["--region", "local", "admin", "--table", &table_name, "desc"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
@@ -66,17 +46,16 @@ created_at: \".*\"",
         ))
         .unwrap(),
     );
-
     Ok(())
 }
 
 #[tokio::test]
-async fn test_desc_table_from_args() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_admin_desc_table_from_args() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
     let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "desc", &table_name]);
+    let cmd = c.args(&["--region", "local", "admin", "desc", &table_name]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
@@ -97,17 +76,17 @@ created_at: \".*\"",
         ))
         .unwrap(),
     );
-
     Ok(())
 }
 
 #[tokio::test]
-async fn test_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_admin_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup_with_lock().await?;
-    let table_name = tm.create_temporary_table("pk", None).await?;
+    let table_name1 = tm.create_temporary_table("pk", None).await?;
+    let table_name2 = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "desc", "--all-tables"]);
+    let cmd = c.args(&["--region", "local", "admin", "desc", "--all-tables"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
@@ -124,10 +103,29 @@ stream: ~
 count: 0
 size_bytes: 0
 created_at: \".*\"",
-            table_name
+            table_name1
         ))
-        .unwrap(),
+        .unwrap()
+        .and(
+            predicate::str::is_match(format!(
+                "name: {}
+region: local
+status: ACTIVE
+schema:
+  pk: pk \\(S\\)
+  sk: sk \\(N\\)
+mode: OnDemand
+capacity: ~
+gsi: ~
+lsi: ~
+stream: ~
+count: 0
+size_bytes: 0
+created_at: \".*\"",
+                table_name2
+            ))
+            .unwrap(),
+        ),
     );
-
     Ok(())
 }
