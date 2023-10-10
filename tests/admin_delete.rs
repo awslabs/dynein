@@ -16,12 +16,11 @@
 pub mod util;
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use std::io::Write;
-use std::process::Stdio;
 
 #[tokio::test]
-async fn test_admin_delete_non_existento_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut c = util::setup().await?;
+async fn test_admin_delete_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
+    let tm = util::setup().await?;
+    let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
         "local",
@@ -29,6 +28,7 @@ async fn test_admin_delete_non_existento_table() -> Result<(), Box<dyn std::erro
         "delete",
         "table",
         "dummy-table",
+        "--yes",
     ]);
 
     cmd.assert().failure().stderr(predicate::str::contains(
@@ -42,27 +42,27 @@ async fn test_admin_delete_non_existento_table() -> Result<(), Box<dyn std::erro
 
 #[tokio::test]
 async fn test_admin_delete_non_existent_item() -> Result<(), Box<dyn std::error::Error>> {
-    let table_name = util::create_temporary_table("pk", None).await?;
+    let mut tm = util::setup().await?;
 
-    let mut c = util::setup().await?;
-    let mut cmd = c
-        .args(&["--region", "local", "admin", "delete", "table", &table_name])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to start child process");
+    let table_name = tm.create_temporary_table("pk", None).await?;
+    let mut c = tm.command()?;
 
-    {
-        let stdin = cmd.stdin.as_mut().expect("failed to get stdin");
-        stdin.write_all(b"y\n").expect("failed to write to stdin");
-    }
+    let cmd = c.args(&[
+        "--region",
+        "local",
+        "admin",
+        "delete",
+        "table",
+        &table_name,
+        "--yes",
+    ]);
+    cmd.assert().success().stdout(format!(
+        "Delete operation for the table '{}' has been started.\n",
+        table_name
+    ));
 
-    let out = cmd.wait_with_output().expect("failet to waito on child");
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    println!("stdout {}", stdout);
-    println!("sterr {}", stderr);
+    // Preventing table deletion during Drop for `tm`.
+    std::mem::forget(tm);
 
     Ok(())
 }
