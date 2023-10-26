@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+use crate::apply::RealPathExistenceChecker;
 use crate::data::QueryParams;
 use log::debug;
 use std::error::Error;
@@ -23,6 +24,7 @@ extern crate pest;
 extern crate pest_derive;
 
 mod app;
+mod apply;
 mod batch;
 mod bootstrap;
 mod cmd;
@@ -86,7 +88,7 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             },
             cmd::AdminSub::Apply { dev } => {
                 if dev {
-                    todo!()
+                    apply::apply(&RealPathExistenceChecker)
                 } else {
                     println!("not yet implemented")
                 }
