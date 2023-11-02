@@ -165,7 +165,9 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
                 data::update_item(context.clone(), pval, sval, set, remove).await;
             }
         }
-        cmd::Sub::Bwrite { input } => batch::batch_write_item(context.clone(), input).await?,
+        cmd::Sub::Bwrite { puts, dels, input } => {
+            batch::batch_write_item(context.clone(), puts, dels, input).await?
+        }
 
         cmd::Sub::List { all_regions } => {
             if all_regions {

@@ -316,7 +316,7 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
         None => (),
         Some(_i) => {
             let parser = DyneinParser::new();
-            let result = parser.parse_put_content(full_item_image, &_i);
+            let result = parser.parse_dynein_format(Some(full_item_image), &_i);
             match result {
                 Ok(attrs) => {
                     full_item_image = attrs;

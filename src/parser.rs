@@ -201,6 +201,18 @@ pub enum ParseError {
     InvalidEscapeByte(EscapeByteError),
 }
 
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            ParseError::ParsingError(ref e) => write!(f, "{}", e),
+            ParseError::UnexpectedEndOfSequence(ref e) => write!(f, "{}", e),
+            ParseError::InvalidUnicodeChar(ref e) => write!(f, "{}", e),
+            ParseError::InvalidEscapeChar(ref e) => write!(f, "{}", e),
+            ParseError::InvalidEscapeByte(ref e) => write!(f, "{}", e),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum AttrVal {
     N(String),
@@ -836,17 +848,20 @@ impl DyneinParser {
         }
     }
 
-    pub fn parse_put_content(
+    pub fn parse_dynein_format(
         &self,
-        initial_item: HashMap<String, AttributeValue>,
+        initial_item: Option<HashMap<String, AttributeValue>>,
         exp: &str,
     ) -> Result<HashMap<String, AttributeValue>, ParseError> {
         let result = GeneratedParser::parse(Rule::map_literal, exp);
         match result {
             Ok(mut pair) => {
                 let item = parse_literal(pair.next().unwrap())?.convert_attribute_value();
-                // put content must be map literal
-                let mut image = initial_item;
+                // content must be map literal
+                let mut image = match initial_item {
+                    Some(init_item) => init_item,
+                    None => HashMap::new(),
+                };
                 image.extend(item.m.unwrap());
                 Ok(image)
             }
@@ -1557,12 +1572,12 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_put_content() {
+    fn test_parse_dynein_format() {
         let parser = DyneinParser::new();
         assert_eq!(
             parser
-                .parse_put_content(
-                    HashMap::new(),
+                .parse_dynein_format(
+                    None,
                     r#"{
                            "k0": null,
                            "k1": [1, 2, 3, "str"],
