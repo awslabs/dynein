@@ -51,10 +51,11 @@ jobs:
             repo: context.repo.repo,
             pull_number: context.issue.number
           });
-          return pull_request.data.head.ref;
-    - uses: actions/checkout@v2
+          return {"ref": pull_request.data.head.ref, "repo": pull_request.data.head.repo.full_name };
+    - uses: actions/checkout@v4
       with:
-        ref: ${{ steps.target-branch.outputs.result }}
+        repository: ${{ steps.target-branch.outputs.result.repo }}
+        ref: ${{ steps.target-branch.outputs.result.ref }}
     - uses: actions-rs/toolchain@v1
       with:
         components: rustfmt, clippy
@@ -67,18 +68,52 @@ jobs:
       with:
         command: test
         args: cli_tests
-    - if: matrix.name == 'linux'
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git commit -am "test: update snapshot for ${{ matrix.name }}" || true
-        git push || true
-    - if: matrix.name == 'windows'
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git commit -am "test: update snapshot for ${{ matrix.name }}"
-        git push
+    - uses: actions/github-script@v6
+      if: matrix.name == 'linux'
+      with:
+        script: |
+          // Create a diff and comment it on the pull request.
+          let stdOutput = '';
+          let errOutput = '';
+          
+          const options = {};
+          options.listeners = {
+            stdout: (data) => {
+              stdOutput += data.toString();
+            },
+            stderr: (data) => {
+              errOutput += data.toString();
+            }
+          };
+          
+          const code = await exec.exec('git', ['diff', '--patch', '--indent-heuristic', '--exit-code'], options);
+          
+          // Output error
+          if (errOutput !== '') {
+            console.log(errOutput);
+            return;
+          }
+          
+          if (code == 1) {
+            // There are differences
+            const body = `You can apply a snapshot for windows using the following diff, git apply <diff-file>.
+          
+          <details>
+          <summary>git diff</summary>
+          
+          \`\`\`diff
+          ${stdOutput}
+          \`\`\`
+          </details>`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body,
+            });
+          } else {
+            // There are no differences
+          }
   pr_post_comment:
     # This job only runs for pull request comments
     name: Comment after taking snapshots
