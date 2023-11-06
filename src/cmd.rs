@@ -50,6 +50,10 @@ pub struct Dynein {
 
     #[structopt(long, required_if("child", "None"), conflicts_with("child"))]
     pub shell: bool,
+
+    #[allow(dead_code)]
+    #[structopt(long)]
+    test: bool,
 }
 
 // NOTE: need to be placed in the same module as Dynein struct
