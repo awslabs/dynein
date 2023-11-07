@@ -1238,8 +1238,15 @@ cargo test --test cli_tests
 Please note that we use different snapshots for the Windows environment.
 
 ### Bot
-If you want to update snapshots of commands, you can use bot command `/snapshot` in your pull request.
-Please note that you must type exactly as written.
+If you want to update snapshots of commands, you can use the bot command `/snapshot` in your pull request.
+Please note that you must type a command exactly as written.
+
+The bot creates diff files for both Windows and Linux. You can use generated diff to patch your commit.
+
+For example, if you have developed in a Linux environment and modified the command option,
+you must also update the snapshot for the Windows environment.
+In this case, you can create a pull request for draft mode and execute `/snapshot` to create a diff file for Windows.
+Generated diff can be copied into a file and applied by `git diff <file-name>` command.
 
 ## Asides
 
