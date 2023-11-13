@@ -104,7 +104,8 @@ created_at: \".*\"",
 #[tokio::test]
 async fn test_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup_with_lock().await?;
-    let table_name = tm.create_temporary_table("pk", None).await?;
+    let table_name1 = tm.create_temporary_table("pk", None).await?;
+    let table_name2 = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "desc", "--all-tables"]);
@@ -124,10 +125,29 @@ stream: ~
 count: 0
 size_bytes: 0
 created_at: \".*\"",
-            table_name
+            table_name1
         ))
-        .unwrap(),
+        .unwrap()
+        .and(
+            predicate::str::is_match(format!(
+                "name: {}
+region: local
+status: ACTIVE
+schema:
+  pk: pk \\(S\\)
+  sk: sk \\(N\\)
+mode: OnDemand
+capacity: ~
+gsi: ~
+lsi: ~
+stream: ~
+count: 0
+size_bytes: 0
+created_at: \".*\"",
+                table_name2
+            ))
+            .unwrap(),
+        ),
     );
-
     Ok(())
 }
