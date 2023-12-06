@@ -19,7 +19,7 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_admin_list_table_with_no_table() -> Result<(), Box<dyn std::error::Error>> {
-    let tm = util::setup().await?;
+    let tm = util::setup_with_lock().await?;
 
     let mut c = tm.command()?;
     let cmd = c.args(&["--region", "local", "admin", "list"]);
@@ -36,7 +36,7 @@ async fn test_admin_list_table_with_no_table() -> Result<(), Box<dyn std::error:
 
 #[tokio::test]
 async fn test_admin_list_table_with_multiple_tables() -> Result<(), Box<dyn std::error::Error>> {
-    let mut tm = util::setup().await?;
+    let mut tm = util::setup_with_lock().await?;
 
     let table_name = tm.create_temporary_table("pk", None).await?;
     let table_name2 = tm.create_temporary_table("pk", None).await?;
@@ -46,8 +46,8 @@ async fn test_admin_list_table_with_multiple_tables() -> Result<(), Box<dyn std:
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("DynamoDB tables in region: local"))
-        .stdout(predicate::str::contains(&table_name))
-        .stdout(predicate::str::contains(&table_name2));
+        .stdout(predicate::str::contains(format!("* {table_name}")))
+        .stdout(predicate::str::contains(format!("* {table_name2}")));
 
     Ok(())
 }
