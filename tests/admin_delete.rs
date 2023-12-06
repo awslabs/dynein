@@ -19,7 +19,7 @@ use predicates::prelude::*; // Used for writing assertions
 
 #[tokio::test]
 async fn test_admin_delete_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let tm = util::setup().await?;
+    let tm = util::setup_with_lock().await?;
     let mut c = tm.command()?;
     let cmd = c.args(&[
         "--region",
@@ -42,7 +42,7 @@ async fn test_admin_delete_non_existent_table() -> Result<(), Box<dyn std::error
 
 #[tokio::test]
 async fn test_admin_delete_existent_table() -> Result<(), Box<dyn std::error::Error>> {
-    let mut tm = util::setup().await?;
+    let mut tm = util::setup_with_lock().await?;
 
     let table_name = tm.create_temporary_table("pk", None).await?;
     let mut c = tm.command()?;
