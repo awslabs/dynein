@@ -1,0 +1,142 @@
+on:
+  issue_comment:
+    types: [created]
+
+name: Bot
+
+jobs:
+  pr_pre_comment:
+    # This job only runs for pull request comments
+    name: Comment before taking snapshots
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: "Start taking snapshots for this pull request.\n" +
+                  `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+          });
+  pr_snapshot:
+    # This job only runs for pull request comments
+    name: Generate a snapshot
+    needs: [pr_pre_comment]
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
+    strategy:
+      # Do not run in parallel because we may create a new commit
+      max-parallel: 1
+      matrix:
+        name: [windows, linux]
+        include:
+        - name: windows
+          os: windows-2022
+        - name: linux
+          os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      # Set TRYCMD=overwrite to update snapshot
+      TRYCMD: overwrite
+    steps:
+    - uses: actions/github-script@v6
+      id: target-branch
+      with:
+        result-encoding: json
+        script: |
+          const pull_request = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number
+          });
+          console.log("Target repo: " + pull_request.data.head.repo.full_name);
+          console.log("Target ref: " + pull_request.data.head.ref);
+          return { "repo": pull_request.data.head.repo.full_name, "ref": pull_request.data.head.ref };
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ fromJSON(steps.target-branch.outputs.result).repo }}
+        ref: ${{ fromJSON(steps.target-branch.outputs.result).ref }}
+    - uses: actions-rs/toolchain@v1
+      with:
+        components: rustfmt, clippy
+      # Pinned to the commit hash of v2.2.1
+    - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
+      with:
+        shared-key: pr-snapshot-commented-${{ matrix.name }}
+    - uses: actions-rs/cargo@v1
+        # Generate new snapshots
+      with:
+        command: test
+        args: cli_tests
+    - uses: actions/github-script@v6
+      with:
+        script: |
+          // Create a diff and comment it on the pull request.
+          let stdOutput = '';
+          let errOutput = '';
+          
+          const options = {};
+          options.listeners = {
+            stdout: (data) => {
+              stdOutput += data.toString();
+            },
+            stderr: (data) => {
+              errOutput += data.toString();
+            }
+          };
+          
+          const code = await exec.exec('git', ['diff', '--patch', '--indent-heuristic'], options);
+          
+          // Output diff
+          if (stdOutput !== '') {
+            console.log("-- begin stdout --");
+            console.log(stdOutput);
+            console.log("-- end stdout --");
+          }
+          
+          // Output error
+          if (errOutput !== '') {
+            console.log("-- begin stderr --");
+            console.log(errOutput);
+            console.log("-- end stderr --");
+          }
+          
+          if (stdOutput !== '') {
+            console.log("There are differences. Creating a comment...");
+
+            const body = `You can apply a snapshot for ${{ matrix.name }} using \`git apply <diff-file>\`. The patch file is the following.
+          
+          <details>
+          <summary>git diff</summary>
+          
+          \`\`\`diff
+          ${stdOutput}
+          \`\`\`
+          </details>`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body,
+            });
+          } else {
+            console.log("There are no differences. Skipping...");
+          }
+  pr_post_comment:
+    # This job only runs for pull request comments
+    name: Comment after taking snapshots
+    needs: [pr_snapshot]
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: 'Taking snapshots has been completed.'
+          });

@@ -431,7 +431,7 @@ using_table: ~
 
 ## Working with DynamoDB items
 
-As an example let's assume you have [official "Movie" sample data](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Python.02.html). To prepare the table with data loaded, simply you can execute `dy bootstrap --sample movie`.
+As an example let's assume you have [official "Movie" sample data](https://raw.githubusercontent.com/awsdocs/aws-doc-sdk-examples/c2edcff1365d4b454b51075d632a1be844dd3e47/resources/sample_files/movies.json). To prepare the table with data loaded, simply you can execute `dy bootstrap --sample movie`.
 
 ```
 $ dy bootstrap --sample movie
@@ -553,7 +553,8 @@ dynein provides subcommands to write to DynamoDB tables as well.
 
 #### `dy put`
 
-`dy put` internally calls [PutItem API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html) and save an item to a target table. To save an item, you need to pass at least primary key that identifies an item among the table.
+`dy put` internally calls [PutItem API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html) and save an item to a target table.
+To save an item, you need to pass at least primary key that identifies an item among the table.
 
 ```
 $ dy admin create table write_test --keys id,N
@@ -566,7 +567,8 @@ id  attributes
 123
 ```
 
-Additionally you can include item body (non-key attributes) by passing `--item` or `-i` option. The `--item` option takes JSON style syntax.
+Additionally, you can include an item body (non-key attributes) by passing `--item` or `-i` option.
+The `--item` option takes a JSON-style expression with extended syntax.
 
 ```
 $ dy put 456 --item '{"a": 9, "b": "str"}'
@@ -578,7 +580,9 @@ id  attributes
 456  {"a":9,"b":"str"}
 ```
 
-As dynein's `--item` option automatically transform standard JSON into DynamoDB style JSON syntax, writing items into a table would be simpler than AWS CLI. See following comparison:
+As the parameter of the `--item` option automatically transforms into DynamoDB-style JSON syntax,
+writing items into a table would be more straightforward than AWS CLI.
+See the following comparison:
 
 ```
 $ dy put 789 --item '{"a": 9, "b": "str"}'
@@ -587,10 +591,13 @@ $ dy put 789 --item '{"a": 9, "b": "str"}'
 $ aws dynamodb put-item --table-name write_test --item '{"id": {"N": "456"}, "a": {"N": "9"}, "b": {"S": "str"}}'
 ```
 
-Finally, in addition to the string ("S") and nubmer ("N"), dynein also supports other data types such as boolean ("BOOL"), null ("NULL"), string set ("SS"), number set ("NS"), list ("L"),  and nested object ("M").
+Please see the [dynein format](./docs/format.md) for details of JSON-style data.
+To summarize, in addition to the string ("S") and number ("N"), dynein also supports other data types such as boolean ("BOOL"),
+null ("NULL"), binary ("B"), string set ("SS"), number set ("NS"), binary set("BS"),
+list ("L"), and nested object ("M").
 
 ```
-$ dy put 999 --item '{"myfield": "is", "nested": {"can": true, "go": false, "deep": [1,2,{"this_is_set": ["x","y","z"]}]}}'
+$ dy put 999 --item '{"myfield": "is", "nested": {"can": true, "go": false, "deep": [1,2,{"this_is_set": <<"x","y","z">>}]}}'
 Successfully put an item to the table 'write_test'.
 $ dy get 999
 {
@@ -1216,9 +1223,30 @@ pre-commit install
 We use [trycmd](https://crates.io/crates/trycmd) to conduct snapshot testing for CLI.
 If the snapshot is needed to be updated, run command;
 
+MacOS and Linux
 ```shell
 TRYCMD=overwrite cargo test --test cli_tests
 ```
+
+Windows (PowerShell)
+```powershell
+$Env:TRYCMD='overwrite'
+cargo test --test cli_tests
+[Environment]::SetEnvironmentVariable('TRYCMD',$null)
+```
+
+Please note that we use different snapshots for the Windows environment.
+
+### Bot
+If you want to update snapshots of commands, you can use the bot command `/snapshot` in your pull request.
+Please note that you must type a command exactly as written.
+
+The bot creates diff files for both Windows and Linux. You can use generated diff to patch your commit.
+
+For example, if you have developed in a Linux environment and modified the command option,
+you must also update the snapshot for the Windows environment.
+In this case, you can create a pull request for draft mode and execute `/snapshot` to create a diff file for Windows.
+Generated diff can be copied into a file and applied by `git diff <file-name>` command.
 
 ## Asides
 

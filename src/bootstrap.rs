@@ -138,13 +138,13 @@ Private functions
 async fn launch_movie_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
-Bootstrapping - dynein will creates 'Movie' table used in public tutorials:
-e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.NodeJs.02.html
-     https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Ruby.02.html
+Bootstrapping - dynein will create 'Movie' table with official 'Movie' sample data:
 
 'Movie' - composite primary key table
     year (N)
     title (S)
+
+see https://github.com/awslabs/dynein#working-with-dynamodb-items for detail
 "
     );
 
@@ -221,7 +221,7 @@ e.g. https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingSta
 async fn launch_default_sample(cx: app::Context) -> Result<(), DyneinBootstrapError> {
     println!(
         "\
-Bootstrapping - dynein will creates 4 sample tables defined here:
+Bootstrapping - dynein will create 4 sample tables defined here:
 https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleTables.html
 
 'ProductCatalog' - simple primary key table
@@ -322,8 +322,9 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
         }
         Err(e) => match e {
             RusotoError::Service(CreateTableError::ResourceInUse(_)) => println!(
-                "[skip] Table '{}' already exists, skipping to create new one.",
-                &table_name
+                "[skip] Table '{}' already exists in {} region, skipping to create new one.",
+                &table_name,
+                &cx.effective_region().name()
             ),
             _ => {
                 debug!("CreateTable API call got an error -- {:#?}", e);
