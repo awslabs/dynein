@@ -18,6 +18,8 @@ pub mod util;
 
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
+use serde_json::Value;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -107,6 +109,36 @@ async fn test_batch_write() -> Result<(), Box<dyn std::error::Error>> {
         true,
         predicate::str::is_match("\"Dimensions\":")?.eval(String::from_utf8(output)?.as_str())
     );
+
+    let mut c = tm.command()?;
+    let get_cmd = c.args(&[
+        "--region",
+        "local",
+        "--table",
+        &table_name,
+        "get",
+        "ichi",
+        "-o",
+        "raw",
+    ]);
+
+    let output = get_cmd.output()?.stdout;
+    let data: Value = serde_json::from_str(&String::from_utf8(output)?)?;
+
+    let binary = data["Binary"]["B"].as_str().unwrap();
+    assert_eq!(binary, "dGhpcyB0ZXh0IGlzIGJhc2U2NC1lbmNvZGVk");
+
+    // The order of the values within a set is not preserved, so I will use HashSet to compare them.
+    let binary_set: HashSet<String> = data["BinarySet"]["BS"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|s| s.to_string())
+        .collect();
+    let binary_set_expected: HashSet<String> =
+        HashSet::from(["U3Vubnk=", "UmFpbnk=", "U25vd3k="].map(String::from));
+    assert_eq!(binary_set, binary_set_expected);
 
     Ok(())
 }

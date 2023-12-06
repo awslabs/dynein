@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+use base64::{engine::general_purpose, Engine as _};
+use bytes::Bytes;
 use log::{debug, error};
 use rusoto_core::RusotoError;
 use rusoto_dynamodb::{
@@ -431,6 +433,11 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
             n: Some(x.as_str().unwrap().to_string()),
             ..Default::default()
         })
+    } else if let Some(x) = ddb_jsonval.get("B") {
+        Some(AttributeValue {
+            b: Some(json_binary_val_to_bytes(x)),
+            ..Default::default()
+        })
     } else if let Some(x) = ddb_jsonval.get("BOOL") {
         Some(AttributeValue {
             bool: Some(x.as_bool().unwrap()),
@@ -444,6 +451,18 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
     } else if let Some(x) = ddb_jsonval.get("NS") {
         Some(AttributeValue {
             ns: Some(set_logic(x)),
+            ..Default::default()
+        })
+    } else if let Some(x) = ddb_jsonval.get("BS") {
+        let binary_set = x
+            .as_array()
+            .expect("should be valid JSON array")
+            .iter()
+            .map(json_binary_val_to_bytes)
+            .collect::<Vec<Bytes>>();
+        debug!("Binary Set: {:?}", binary_set);
+        Some(AttributeValue {
+            bs: Some(binary_set),
             ..Default::default()
         })
     } else if let Some(x) = ddb_jsonval.get("L") {
@@ -472,4 +491,13 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
     } else {
         None
     }
+}
+
+//  Decodes a base64 encoded binary value to Bytes.
+fn json_binary_val_to_bytes(v: &JsonValue) -> Bytes {
+    Bytes::from(
+        general_purpose::STANDARD
+            .decode(v.as_str().expect("binary inputs should be string value"))
+            .expect("binary inputs should be base64 with padding encoded"),
+    )
 }

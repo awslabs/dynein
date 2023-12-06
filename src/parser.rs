@@ -22,6 +22,8 @@ use rusoto_dynamodb::AttributeValue;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+use std::iter::Enumerate;
+use std::str::Chars;
 
 #[derive(Parser)]
 #[grammar = "expression.pest"]
@@ -118,37 +120,71 @@ impl ExpressionResult {
 
 /// The error context of an unexpected end of a string
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct EscapeEOS {
+pub struct EscapeCharUnexpectedEndOfSequenceError {
     pub handling_target: String,
-    pub escape_char: char,
     pub escape_pos: usize,
 }
 
-impl Display for EscapeEOS {
+impl Display for EscapeCharUnexpectedEndOfSequenceError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Unexpected end of the string at handling escape char '{}' at {} for the string '{}'",
-            self.escape_char, self.escape_pos, self.handling_target
+            "Unexpected end of escape sequences at {} for the string '{}'",
+            self.escape_pos, self.handling_target
         )
     }
 }
 
-/// The error context of an unexpected escape character
+/// The error context of an invalid unicode character
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct EscapePosition {
+pub struct InvalidUnicodeCharError {
     pub handling_target: String,
-    pub escape_char: u8,
     pub escape_pos: usize,
 }
 
-impl Display for EscapePosition {
+impl Display for InvalidUnicodeCharError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Unexpected escape character {}({:x}) at {} parsing '{}'",
-            char::from(self.escape_char),
-            self.escape_char,
+            "Invalid unicode character at {} for the string '{}'",
+            self.escape_pos, self.handling_target
+        )
+    }
+}
+
+/// The error context of an unexpected character a string
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct EscapeCharError {
+    pub handling_target: String,
+    pub invalid_char: char,
+    pub escape_pos: usize,
+}
+
+impl Display for EscapeCharError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Unexpected escaped character at handling char '{}' at {} for the string '{}'",
+            self.invalid_char, self.escape_pos, self.handling_target
+        )
+    }
+}
+
+/// The error context of an unexpected escape byte
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct EscapeByteError {
+    pub handling_target: String,
+    pub escape_byte: u8,
+    pub escape_pos: usize,
+}
+
+impl Display for EscapeByteError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Unexpected escaped byte {}({:x}) at {} parsing '{}'",
+            char::from(self.escape_byte),
+            self.escape_byte,
             self.escape_pos,
             self.handling_target
         )
@@ -159,14 +195,10 @@ impl Display for EscapePosition {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum ParseError {
     ParsingError(Box<pest::error::Error<Rule>>),
-    UnexpectedEndOfSequence(EscapeEOS),
-    InvalidEscapeChar(EscapePosition),
-}
-
-impl From<EscapeEOS> for ParseError {
-    fn from(value: EscapeEOS) -> Self {
-        ParseError::UnexpectedEndOfSequence(value)
-    }
+    UnexpectedEndOfSequence(EscapeCharUnexpectedEndOfSequenceError),
+    InvalidUnicodeChar(InvalidUnicodeCharError),
+    InvalidEscapeChar(EscapeCharError),
+    InvalidEscapeByte(EscapeByteError),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -251,46 +283,101 @@ impl From<AttrVal> for AttributeValue {
 /// | Escape Sequence | Character Represented by Sequence |
 /// |-----------------|-----------------------------------|
 /// |       \0        | An ASCII NUL (X'00') character    |
-/// |       \r        | A carriage return character       |
+/// |       \b        | A backspace character             |
+/// |       \f        | A form feed character             |
 /// |       \n        | A newline (linefeed) character    |
+/// |       \r        | A carriage return character       |
 /// |       \t        | A tab character                   |
-/// |       \\\\      | A backslash (\\) character         |
 /// |       \\\"      | A double quote (") character      |
 /// |       \\\'      | A single quote (') character      |
-fn parse_internal_double_quote_string(str: &str) -> Result<String, EscapeEOS> {
+/// |       \\\\      | A backslash (\\) character        |
+/// |       \\/       | A slash (/) character             |
+/// |     \\uXXXX     | An arbitrary unicode character    |
+fn parse_internal_double_quote_string(str: &str) -> Result<String, ParseError> {
     let mut result = String::with_capacity(str.len());
-    let mut escaping = false;
-    let mut escaping_pos = 0;
-    for (pos, ch) in str.chars().enumerate() {
-        if escaping {
+    let mut iter = str.chars().enumerate();
+
+    while let Some((pos, ch)) = iter.next() {
+        if ch != '\\' {
+            result.push(ch);
+        } else {
+            let escaping_pos = pos;
+            let consume = |iter: &mut Enumerate<Chars>| -> Result<(usize, char), ParseError> {
+                iter.next().ok_or_else(|| {
+                    ParseError::UnexpectedEndOfSequence(EscapeCharUnexpectedEndOfSequenceError {
+                        escape_pos: escaping_pos,
+                        handling_target: str.to_owned(),
+                    })
+                })
+            };
+            let parse_u16 = |iter: &mut Enumerate<Chars>| -> Result<u16, ParseError> {
+                let mut result = 0u16;
+                for _ in 0..4 {
+                    let (_pos, ch) = consume(iter)?;
+                    if let Some(b) = ch.to_digit(16) {
+                        result = (result << 4) + b as u16
+                    } else {
+                        return Err(ParseError::InvalidEscapeChar(EscapeCharError {
+                            handling_target: str.to_owned(),
+                            invalid_char: ch,
+                            escape_pos: escaping_pos,
+                        }));
+                    }
+                }
+                Ok(result)
+            };
+            let (pos, ch) = consume(&mut iter)?;
             match ch {
                 '0' => result.push('\0'),
-                'r' => result.push('\r'),
+                '"' => result.push('"'),
+                '\\' => result.push('\\'),
+                'b' => result.push('\x08'),
+                'f' => result.push('\x0c'),
                 'n' => result.push('\n'),
+                'r' => result.push('\r'),
                 't' => result.push('\t'),
+                'u' => {
+                    let u1 = parse_u16(&mut iter)?;
+                    if let Some(c) = char::from_u32(u1 as u32) {
+                        // This char is in Basic Multilingual Plane.
+                        result.push(c);
+                    } else {
+                        let (_, ch) = consume(&mut iter)?;
+                        if ch != '\\' {
+                            return Err(ParseError::InvalidUnicodeChar(InvalidUnicodeCharError {
+                                handling_target: str.to_owned(),
+                                escape_pos: pos,
+                            }));
+                        }
+                        let (_, ch) = consume(&mut iter)?;
+                        if ch != 'u' {
+                            return Err(ParseError::InvalidUnicodeChar(InvalidUnicodeCharError {
+                                handling_target: str.to_owned(),
+                                escape_pos: pos,
+                            }));
+                        }
+                        let u2 = parse_u16(&mut iter)?;
+                        // All escape sequences have been processed. Try to decode as utf16.
+                        // This `unwrap` is always safe.
+                        result.push(char::decode_utf16([u1, u2]).next().unwrap().map_err(
+                            |_| {
+                                ParseError::InvalidUnicodeChar(InvalidUnicodeCharError {
+                                    handling_target: str.to_owned(),
+                                    escape_pos: pos,
+                                })
+                            },
+                        )?);
+                    }
+                }
                 _ => result.push(ch),
             }
-            escaping = false;
-        } else if ch == '\\' {
-            escaping_pos = pos;
-            escaping = true;
-        } else {
-            result.push(ch);
         }
     }
-    if escaping {
-        Err(EscapeEOS {
-            escape_pos: escaping_pos,
-            escape_char: '\\',
-            handling_target: str.to_owned(),
-        })
-    } else {
-        Ok(result)
-    }
+    Ok(result)
 }
 
 /// Parse double quoted string which accepts escape sequence.
-fn parse_double_quote_literal(str: &str) -> Result<String, EscapeEOS> {
+fn parse_double_quote_literal(str: &str) -> Result<String, ParseError> {
     parse_internal_double_quote_string(&str[1..str.len() - 1])
 }
 
@@ -345,9 +432,9 @@ fn parse_internal_binary_literal(str: &str) -> Result<Bytes, ParseError> {
                 }
                 b'x' => state = State::ByteEscapeFirstChar,
                 _ => {
-                    return Err(ParseError::InvalidEscapeChar(EscapePosition {
+                    return Err(ParseError::InvalidEscapeByte(EscapeByteError {
                         handling_target: str.to_owned(),
-                        escape_char: ch,
+                        escape_byte: ch,
                         escape_pos: idx,
                     }));
                 }
@@ -377,9 +464,9 @@ fn hex_as_byte(parsing_str: &str, idx: usize, ch: u8) -> Result<u8, ParseError> 
     } else if (b'a'..=b'f').contains(&ch) {
         Ok(ch - b'a' + 10)
     } else {
-        Err(ParseError::InvalidEscapeChar(EscapePosition {
+        Err(ParseError::InvalidEscapeByte(EscapeByteError {
             handling_target: parsing_str.to_owned(),
-            escape_char: ch,
+            escape_byte: ch,
             escape_pos: idx,
         }))
     }
@@ -440,9 +527,9 @@ fn parse_internal_binary_string(str: &str) -> Result<Bytes, ParseError> {
                 }
                 b'x' => state = State::ByteEscapeFirstChar,
                 _ => {
-                    return Err(ParseError::InvalidEscapeChar(EscapePosition {
+                    return Err(ParseError::InvalidEscapeByte(EscapeByteError {
                         handling_target: str.to_owned(),
-                        escape_char: ch,
+                        escape_byte: ch,
                         escape_pos: idx,
                     }));
                 }
@@ -954,16 +1041,34 @@ mod tests {
 
     #[test]
     fn test_parse_internal_double_quote_string() {
+        // JSON based syntax
         assert_eq!(parse_internal_double_quote_string("a").unwrap(), "a");
-        assert_eq!(parse_internal_double_quote_string("\\0").unwrap(), "\0");
+        assert_eq!(parse_internal_double_quote_string("'").unwrap(), "'");
         assert_eq!(
             parse_internal_double_quote_string("\\r\\n").unwrap(),
             "\r\n"
         );
-        assert_eq!(parse_internal_double_quote_string("\\r").unwrap(), "\r");
-        assert_eq!(parse_internal_double_quote_string("\\n").unwrap(), "\n");
-        assert_eq!(parse_internal_double_quote_string("\\t").unwrap(), "\t");
+
+        assert_eq!(parse_internal_double_quote_string("\\\"").unwrap(), "\"");
         assert_eq!(parse_internal_double_quote_string("\\\\").unwrap(), "\\");
+        assert_eq!(parse_internal_double_quote_string("\\/").unwrap(), "/");
+        assert_eq!(parse_internal_double_quote_string("\\b").unwrap(), "\x08");
+        assert_eq!(parse_internal_double_quote_string("\\f").unwrap(), "\x0c");
+        assert_eq!(parse_internal_double_quote_string("\\n").unwrap(), "\n");
+        assert_eq!(parse_internal_double_quote_string("\\r").unwrap(), "\r");
+        assert_eq!(parse_internal_double_quote_string("\\t").unwrap(), "\t");
+
+        assert_eq!(parse_internal_double_quote_string("\\u002F").unwrap(), "/");
+        assert_eq!(parse_internal_double_quote_string("\\u002f").unwrap(), "/");
+        assert_eq!(parse_internal_double_quote_string("/").unwrap(), "/");
+
+        assert_eq!(
+            parse_internal_double_quote_string("\\uD834\\uDD1E").unwrap(),
+            "𝄞"
+        );
+
+        // Expanded syntax by dynein (some of which was inspired by Rust)
+        assert_eq!(parse_internal_double_quote_string("\\0").unwrap(), "\0");
         assert_eq!(parse_internal_double_quote_string("\\'").unwrap(), "'");
         assert_eq!(parse_internal_double_quote_string("\\\"").unwrap(), "\"");
         assert_eq!(parse_internal_double_quote_string("\0").unwrap(), "\0");
@@ -971,16 +1076,37 @@ mod tests {
         assert_eq!(parse_internal_double_quote_string("\r").unwrap(), "\r");
         assert_eq!(parse_internal_double_quote_string("\n").unwrap(), "\n");
         assert_eq!(parse_internal_double_quote_string("\t").unwrap(), "\t");
+
+        // The following cases should not happen typically, but we check them for sure of robustness.
+        assert_eq!(parse_internal_double_quote_string("\"").unwrap(), "\"");
+
+        // Invalid escape
         assert_eq!(
             parse_internal_double_quote_string("\\").expect_err("It must not Ok()"),
-            EscapeEOS {
+            ParseError::UnexpectedEndOfSequence(EscapeCharUnexpectedEndOfSequenceError {
                 handling_target: "\\".to_owned(),
                 escape_pos: 0,
-                escape_char: '\\',
-            }
+            })
         );
-        assert_eq!(parse_internal_double_quote_string("'").unwrap(), "'");
-        assert_eq!(parse_internal_double_quote_string("\"").unwrap(), "\"");
+        // g is not valid hex digit
+        assert_eq!(
+            parse_internal_double_quote_string("\\udefg").expect_err("It must not Ok()"),
+            ParseError::InvalidEscapeChar(EscapeCharError {
+                handling_target: "\\udefg".to_owned(),
+                invalid_char: 'g',
+                escape_pos: 0,
+            })
+        );
+        // Incomplete surrogate pair
+        assert_eq!(
+            parse_internal_double_quote_string("\\uD834").expect_err("It must not Ok()"),
+            ParseError::UnexpectedEndOfSequence(EscapeCharUnexpectedEndOfSequenceError {
+                handling_target: "\\uD834".to_owned(),
+                escape_pos: 0,
+            })
+        );
+
+        // Multilingual checks
         assert_eq!(
             parse_internal_double_quote_string("This is a line.\\nこれは行です。").unwrap(),
             "This is a line.\nこれは行です。"
@@ -1008,18 +1134,18 @@ mod tests {
         assert_eq!(hex_as_byte("f", 0, b'f').unwrap(), 15);
         assert_eq!(
             hex_as_byte("g", 0, b'g').unwrap_err(),
-            ParseError::InvalidEscapeChar(EscapePosition {
+            ParseError::InvalidEscapeByte(EscapeByteError {
                 handling_target: "g".to_owned(),
                 escape_pos: 0,
-                escape_char: b'g',
+                escape_byte: b'g',
             })
         );
         assert_eq!(
             hex_as_byte("dummy", 0, b'\xff').unwrap_err(),
-            ParseError::InvalidEscapeChar(EscapePosition {
+            ParseError::InvalidEscapeByte(EscapeByteError {
                 handling_target: "dummy".to_owned(),
                 escape_pos: 0,
-                escape_char: b'\xff',
+                escape_byte: b'\xff',
             })
         );
     }
@@ -1036,10 +1162,10 @@ mod tests {
         );
         assert_eq!(
             parse_internal_binary_literal("\\xZZ").unwrap_err(),
-            ParseError::InvalidEscapeChar(EscapePosition {
+            ParseError::InvalidEscapeByte(EscapeByteError {
                 handling_target: "\\xZZ".to_owned(),
                 escape_pos: 2,
-                escape_char: b'Z',
+                escape_byte: b'Z',
             })
         );
     }
@@ -1093,6 +1219,16 @@ mod tests {
             .unwrap();
         let all_escape_string = parse_literal(parsed_result).unwrap();
         assert_eq!(all_escape_string, AttrVal::S("\0\r\n\t\\\"\'".to_owned()));
+
+        let parsed_result = GeneratedParser::parse(
+            Rule::literal,
+            r###""\"\\\/\b\f\n\r\t\u002F\u002f\uD834\uDD1E""###,
+        )
+        .unwrap()
+        .next()
+        .unwrap();
+        let json_compatible_string = parse_literal(parsed_result).unwrap();
+        assert_eq!(json_compatible_string, AttrVal::S("\u{0022}\u{005c}\u{002f}\u{0008}\u{000c}\u{000a}\u{000d}\u{0009}\u{002f}\u{002f}\u{1d11e}".to_owned()));
 
         // single quoted string literal
         let parsed_result = GeneratedParser::parse(Rule::literal, "'Escape must not work\\n'")

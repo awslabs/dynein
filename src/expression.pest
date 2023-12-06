@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-WHITESPACE = _{ SEPARATOR | "\r\n" | "\n" | "\r" | "\t" }
+// For the sake of compatibility to JSON (RFC 8250 and ECMA-404 2nd Edition),
+// the following four characters are treated as insignificant whitespaces.
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
 
 // EOI always produces token.
 // I use eoi instead of EIO to suppress generating token.
@@ -79,7 +81,8 @@ null_literal = @{ ^"null" }
 
 // String literals
 string_literal = _{ double_quote_literal | single_quote_literal }
-double_quote_literal = @{ "\"" ~ ("\\0" | "\\r" | "\\n" | "\\t" | "\\\\" | "\\\"" | "\\'" | (!"\"" ~ ANY))* ~ "\"" }
+// For the sake of compatibility to JSON, we accept additional escape sequences other than what Rust uses.
+double_quote_literal = @{ "\"" ~ ("\\0" | "\\b" | "\\f" | "\\n" | "\\r" | "\\t" | "\\\\" | "\\/" | "\\\"" | "\\'" | ("\\u" ~ ASCII_HEX_DIGIT{4}) | (!"\"" ~ ANY))* ~ "\"" }
 single_quote_literal = @{ "'" ~ (!"\'" ~ ANY)* ~ "'" }
 
 // Number literals

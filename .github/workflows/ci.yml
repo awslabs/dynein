@@ -9,7 +9,7 @@ name: CI
 
 jobs:
   build_and_test:
-    name: Rust project
+    name: Test and build on Linux
     runs-on: ubuntu-latest
     env:
       RUST_LOG: debug # Output debug log
@@ -46,6 +46,34 @@ jobs:
       with:
         command: test
         args: --no-fail-fast --all-features
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --all-features
+  build_and_test_on_windows:
+    name: Test and build on Windows
+    runs-on: windows-2022
+    env:
+      RUST_LOG: debug # Output debug log
+      RUST_BACKTRACE: 1 # Dump backtrace on panic
+      DYNEIN_TEST_NO_DOCKER_SETUP: true
+      # define AWS credentials in environment for test
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        components: rustfmt, clippy
+        # Pinned to the commit hash of v2.2.1
+    - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
+      with:
+        shared-key: build-and-test-on-windows
+    - uses: actions-rs/cargo@v1
+      with:
+          # Currently, we only conduct snapshot tests because GitHub Actions does not support containers in Windows.
+        command: test
+        args: cli_tests
     - uses: actions-rs/cargo@v1
       with:
         command: build

@@ -65,16 +65,26 @@ The complete list of escape sequences is the following;
 | Escape Sequence | Character Represented by Sequence |
 |-----------------|-----------------------------------|
 |       \0        | An ASCII NUL (X'00') character    |
-|       \r        | A carriage return character       |
+|       \b        | A backspace character             |
+|       \f        | A form feed character             |
 |       \n        | A newline (linefeed) character    |
+|       \r        | A carriage return character       |
 |       \t        | A tab character                   |
-|       \\\\      | A backslash (\\) character        |
 |       \\\"      | A double quote (") character      |
 |       \\\'      | A single quote (') character      |
+|       \\\\      | A backslash (\\) character        |
+|       \\/       | A slash (/) character             |
+|     \\uXXXX     | An arbitrary unicode character    |
 
 ```bash
 dy put 17 -i '{"escape":"\"hello\",\tworld!\n"}'
 ```
+
+To escape an extended character that is not within the Basic Multilingual
+Plane, the character is represented as a 12-character sequence,
+encoded using the UTF-16 surrogate pair. For example, a string
+containing only the G clef character (U+1D11E: 𝄞) may be represented as
+`"\uD834\uDD1E"` as described in [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259.html).
 
 On the other hand, you cannot use escape sequences if you use single quotes to express a string value.
 String values are evaluated as is.

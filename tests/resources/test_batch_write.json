@@ -9,6 +9,8 @@
                     "Dimensions": { "SS": ["Giraffe", "Hippo" ,"Zebra"] },
                     "PageCount": { "NS": ["42.2", "-19", "7.5", "3.14"] },
                     "InPublication": { "BOOL": false },
+                    "Binary": {"B": "dGhpcyB0ZXh0IGlzIGJhc2U2NC1lbmNvZGVk"},
+                    "BinarySet": {"BS": ["U3Vubnk=", "UmFpbnk=", "U25vd3k="]},
                     "Nothing": { "NULL": true },
                     "Authors": {
                         "L": [

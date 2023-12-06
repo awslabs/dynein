@@ -431,7 +431,7 @@ using_table: ~
 
 ## Working with DynamoDB items
 
-As an example let's assume you have [official "Movie" sample data](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Python.02.html). To prepare the table with data loaded, simply you can execute `dy bootstrap --sample movie`.
+As an example let's assume you have [official "Movie" sample data](https://raw.githubusercontent.com/awsdocs/aws-doc-sdk-examples/c2edcff1365d4b454b51075d632a1be844dd3e47/resources/sample_files/movies.json). To prepare the table with data loaded, simply you can execute `dy bootstrap --sample movie`.
 
 ```
 $ dy bootstrap --sample movie
@@ -1223,9 +1223,30 @@ pre-commit install
 We use [trycmd](https://crates.io/crates/trycmd) to conduct snapshot testing for CLI.
 If the snapshot is needed to be updated, run command;
 
+MacOS and Linux
 ```shell
 TRYCMD=overwrite cargo test --test cli_tests
 ```
+
+Windows (PowerShell)
+```powershell
+$Env:TRYCMD='overwrite'
+cargo test --test cli_tests
+[Environment]::SetEnvironmentVariable('TRYCMD',$null)
+```
+
+Please note that we use different snapshots for the Windows environment.
+
+### Bot
+If you want to update snapshots of commands, you can use the bot command `/snapshot` in your pull request.
+Please note that you must type a command exactly as written.
+
+The bot creates diff files for both Windows and Linux. You can use generated diff to patch your commit.
+
+For example, if you have developed in a Linux environment and modified the command option,
+you must also update the snapshot for the Windows environment.
+In this case, you can create a pull request for draft mode and execute `/snapshot` to create a diff file for Windows.
+Generated diff can be copied into a file and applied by `git diff <file-name>` command.
 
 ## Asides
 
