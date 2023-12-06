@@ -41,7 +41,7 @@ async fn test_admin_delete_non_existent_table() -> Result<(), Box<dyn std::error
 }
 
 #[tokio::test]
-async fn test_admin_delete_non_existent_item() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_admin_delete_existent_table() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
 
     let table_name = tm.create_temporary_table("pk", None).await?;
@@ -63,20 +63,6 @@ async fn test_admin_delete_non_existent_item() -> Result<(), Box<dyn std::error:
 
     // Preventing table deletion during Drop for `tm`.
     std::mem::forget(tm);
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_admin_delete_existent_item() -> Result<(), Box<dyn std::error::Error>> {
-    // TODO:
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_admin_delete_existent_item_with_sk() -> Result<(), Box<dyn std::error::Error>> {
-    // TODO:
 
     Ok(())
 }
