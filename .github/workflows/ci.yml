@@ -21,7 +21,7 @@ jobs:
     services:
       dynamodb:
         # Pinned to the version not to be broken with latest
-        image: amazon/dynamodb-local:1.22.0
+        image: amazon/dynamodb-local:2.2.1
         ports:
         - 8000:8000
         - 8001:8000

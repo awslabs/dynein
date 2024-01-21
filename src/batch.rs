@@ -277,7 +277,7 @@ pub async fn batch_write_item(
         if let Some(items) = puts {
             for item in items.iter() {
                 let attrs = parser.parse_dynein_format(None, item)?;
-                validate_item_has_keys(&attrs, &ts)?;
+                validate_item_keys(&attrs, &ts)?;
                 write_requests.push(WriteRequest {
                     put_request: Some(PutRequest { item: attrs }),
                     delete_request: None,
@@ -288,7 +288,7 @@ pub async fn batch_write_item(
         if let Some(keys) = dels {
             for key in keys.iter() {
                 let attrs = parser.parse_dynein_format(None, key)?;
-                validate_item_has_keys(&attrs, &ts)?;
+                validate_item_keys(&attrs, &ts)?;
                 write_requests.push(WriteRequest {
                     put_request: None,
                     delete_request: Some(DeleteRequest { key: attrs }),
@@ -572,7 +572,7 @@ fn json_binary_val_to_bytes(v: &JsonValue) -> Bytes {
 }
 
 // Check if the item has a partition key and sort key.
-fn validate_item_has_keys(
+fn validate_item_keys(
     attrs: &HashMap<String, AttributeValue>,
     ts: &app::TableSchema,
 ) -> Result<(), DyneinBatchError> {

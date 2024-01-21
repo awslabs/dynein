@@ -1,0 +1,25 @@
+{
+    "__TABLE_NAME__1": [
+        {
+            "PutRequest": {
+                "Item": {
+                    "pk": { "S": "ni" }
+                }
+            }
+        },
+        {
+            "PutRequest": {
+                "Item": {
+                    "pk": { "S": "san" }
+                }
+            }
+        },
+        {
+            "DeleteRequest": {
+                "Key": {
+                    "pk": { "S": "ichi" }
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,48 @@
+{
+    "__TABLE_NAME__1": [
+        {
+            "PutRequest": {
+                "Item": {
+                    "pk": { "S": "ni" }
+                }
+            }
+        },
+        {
+            "PutRequest": {
+                "Item": {
+                    "pk": { "S": "san" }
+                }
+            }
+        },
+        {
+            "DeleteRequest": {
+                "Key": {
+                    "pk": { "S": "ichi" }
+                }
+            }
+        }
+    ],
+    "__TABLE_NAME__2": [
+        {
+            "PutRequest": {
+                "Item": {
+                    "pk": { "S": "ni" }
+                }
+            }
+        },
+        {
+            "PutRequest": {
+                "Item": {
+                    "pk": { "S": "san" }
+                }
+            }
+        },
+        {
+            "DeleteRequest": {
+                "Key": {
+                    "pk": { "S": "ichi" }
+                }
+            }
+        }
+    ]
+}

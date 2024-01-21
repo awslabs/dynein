@@ -1,0 +1,21 @@
+{
+    "__TABLE_NAME__1": [
+        {
+            "DeleteRequest": {
+                "Key": {
+                    "pk": { "S": "ichi" }
+                }
+            }
+        }
+    ],
+    "__TABLE_NAME__2": [
+        {
+            "DeleteRequest": {
+                "Key": {
+                    "pk": { "S": "ichi" },
+                    "sk": { "S": "sortkey" }
+                }
+            }
+        }
+    ]
+}
