@@ -200,6 +200,22 @@ pub enum Sub {
         #[structopt(short, long)]
         descending: bool,
 
+        /// Specify the strict mode for parsing query conditions.
+        /// By default, the non-strict mode is used unless specified on the config file.
+        /// You cannot combine with --non-strict option.
+        ///
+        /// In strict mode, you will experience an error if the provided value does not match the table schema.
+        #[structopt(long, conflicts_with = "non_strict")]
+        strict: bool,
+
+        /// Specify the non-strict mode for parsing query conditions.
+        /// By default, the non-strict mode is used unless specified on the config file.
+        /// You cannot combine with --strict option.
+        ///
+        /// In non-strict mode, dynein tries to infer the intention of the provided expression as much as possible.
+        #[structopt(long, conflicts_with = "strict")]
+        non_strict: bool,
+
         /// Switch output format.
         #[structopt(short, long, possible_values = &["table", "json", "raw"])]
         output: Option<String>,

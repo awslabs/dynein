@@ -15,13 +15,15 @@
  */
 
 use crate::pest::Parser;
+use base64::engine::general_purpose;
+use base64::Engine;
 use bytes::Bytes;
 use itertools::Itertools;
 use pest::iterators::Pair;
 use rusoto_dynamodb::AttributeValue;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, Write};
 use std::iter::Enumerate;
 use std::str::Chars;
 
@@ -31,6 +33,120 @@ struct GeneratedParser;
 
 type SetAction = Vec<AtomicSet>;
 type RemoveAction = Vec<AtomicRemove>;
+
+pub struct AttributeDefinition {
+    attribute_name: String,
+    attribute_type: AttributeType,
+}
+
+impl AttributeDefinition {
+    pub fn new(
+        attribute_name: impl Into<String>,
+        key_type: impl Into<AttributeType>,
+    ) -> AttributeDefinition {
+        AttributeDefinition {
+            attribute_name: attribute_name.into(),
+            attribute_type: key_type.into(),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub enum AttributeType {
+    S,
+    N,
+    B,
+    Bool,
+    Null,
+    L,
+    M,
+    NS,
+    SS,
+    BS,
+}
+
+impl Display for AttributeType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AttributeType::S => {
+                write!(f, "string (S)")
+            }
+            AttributeType::N => {
+                write!(f, "number (N)")
+            }
+            AttributeType::B => {
+                write!(f, "binary (B)")
+            }
+            AttributeType::Bool => {
+                write!(f, "boolean (BOOL)")
+            }
+            AttributeType::Null => {
+                write!(f, "null (NULL)")
+            }
+            AttributeType::L => {
+                write!(f, "list (L)")
+            }
+            AttributeType::M => {
+                write!(f, "map (M)")
+            }
+            AttributeType::NS => {
+                write!(f, "nummber set (NS)")
+            }
+            AttributeType::SS => {
+                write!(f, "string set (SS)")
+            }
+            AttributeType::BS => {
+                write!(f, "binary set (BS)")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum SortKeyCondition {
+    Eq(AttrVal),
+    // =, ==
+    Le(AttrVal),
+    // <=
+    Lt(AttrVal),
+    // <
+    Ge(AttrVal),
+    // >=
+    Gt(AttrVal),
+    // >
+    Between(AttrVal, AttrVal),
+    // between A and B, between A B
+    BeginsWith(AttrVal), // begins_with
+}
+
+impl Display for SortKeyCondition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SortKeyCondition::Eq(val) => {
+                write!(f, "= {}", val)?;
+            }
+            SortKeyCondition::Le(val) => {
+                write!(f, "<= {}", val)?;
+            }
+            SortKeyCondition::Lt(val) => {
+                write!(f, "< {}", val)?;
+            }
+            SortKeyCondition::Ge(val) => {
+                write!(f, ">= {}", val)?;
+            }
+            SortKeyCondition::Gt(val) => {
+                write!(f, "> {}", val)?;
+            }
+            SortKeyCondition::Between(begin, end) => {
+                write!(f, "between {} and {}", begin, end)?;
+            }
+            SortKeyCondition::BeginsWith(prefix) => {
+                write!(f, "begins_with {}", prefix)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct AtomicSet {
@@ -118,6 +234,22 @@ impl ExpressionResult {
     }
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct ParsingErrorWithSuggestError {
+    pub parse_error: Box<pest::error::Error<Rule>>,
+    pub suggest: String,
+}
+
+impl Display for ParsingErrorWithSuggestError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\n\nFailed to parse as the strict format. Did you intend '{}'?",
+            *self.parse_error, self.suggest
+        )
+    }
+}
+
 /// The error context of an unexpected end of a string
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct EscapeCharUnexpectedEndOfSequenceError {
@@ -191,24 +323,84 @@ impl Display for EscapeByteError {
     }
 }
 
+/// The error context of invalid type
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct InvalidTypesError {
+    pub expected_type: AttributeType,
+    pub actual_type: AttributeType,
+}
+
+impl Display for InvalidTypesError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Invalid type detected. Expected type is {}, but actual type is {}.",
+            self.expected_type, self.actual_type
+        )
+    }
+}
+
+/// The error context of invalid type
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct InvalidTypesWithSuggestError {
+    pub expected_type: AttributeType,
+    pub actual_type: AttributeType,
+    pub suggest: String,
+}
+
+impl Display for InvalidTypesWithSuggestError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Invalid type detected. Expected type is {}, but actual type is {}.\nDid you intend '{}'?",
+            self.expected_type, self.actual_type, self.suggest
+        )
+    }
+}
 /// The error context of a parsing error
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum ParseError {
     ParsingError(Box<pest::error::Error<Rule>>),
+    ParsingErrorWithSuggest(ParsingErrorWithSuggestError),
     UnexpectedEndOfSequence(EscapeCharUnexpectedEndOfSequenceError),
     InvalidUnicodeChar(InvalidUnicodeCharError),
     InvalidEscapeChar(EscapeCharError),
     InvalidEscapeByte(EscapeByteError),
+    InvalidBeginsWith(String),
+    InvalidTypes(InvalidTypesError),
+    InvalidTypesWithSuggest(InvalidTypesWithSuggestError),
 }
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            ParseError::ParsingError(ref e) => write!(f, "{}", e),
-            ParseError::UnexpectedEndOfSequence(ref e) => write!(f, "{}", e),
-            ParseError::InvalidUnicodeChar(ref e) => write!(f, "{}", e),
-            ParseError::InvalidEscapeChar(ref e) => write!(f, "{}", e),
-            ParseError::InvalidEscapeByte(ref e) => write!(f, "{}", e),
+        match self {
+            ParseError::ParsingError(err) => {
+                write!(f, "{}", err)
+            }
+            ParseError::ParsingErrorWithSuggest(err) => {
+                write!(f, "{}", err)
+            }
+            ParseError::UnexpectedEndOfSequence(err) => {
+                write!(f, "{}", err)
+            }
+            ParseError::InvalidUnicodeChar(err) => {
+                write!(f, "{}", err)
+            }
+            ParseError::InvalidEscapeChar(err) => {
+                write!(f, "{}", err)
+            }
+            ParseError::InvalidEscapeByte(err) => {
+                write!(f, "{}", err)
+            }
+            ParseError::InvalidBeginsWith(input) => {
+                write!(f, "the argument of begins_with is invalid: '{}'", input)
+            }
+            ParseError::InvalidTypes(err) => {
+                write!(f, "{}", err)
+            }
+            ParseError::InvalidTypesWithSuggest(err) => {
+                write!(f, "{}", err)
+            }
         }
     }
 }
@@ -228,6 +420,25 @@ enum AttrVal {
 }
 
 impl AttrVal {
+    fn is_type(&self, t: AttributeType) -> bool {
+        self.attribute_type() == t
+    }
+
+    fn attribute_type(&self) -> AttributeType {
+        match self {
+            AttrVal::N(_) => AttributeType::N,
+            AttrVal::S(_) => AttributeType::S,
+            AttrVal::B(_) => AttributeType::B,
+            AttrVal::Bool(_) => AttributeType::Bool,
+            AttrVal::Null(_) => AttributeType::Null,
+            AttrVal::L(_) => AttributeType::L,
+            AttrVal::M(_) => AttributeType::M,
+            AttrVal::NS(_) => AttributeType::NS,
+            AttrVal::SS(_) => AttributeType::SS,
+            AttrVal::BS(_) => AttributeType::BS,
+        }
+    }
+
     fn convert_attribute_value(self) -> AttributeValue {
         match self {
             AttrVal::N(number) => AttributeValue {
@@ -279,6 +490,86 @@ impl AttrVal {
                 ..Default::default()
             },
         }
+    }
+}
+
+fn format_array_elements<T: Display>(f: &mut Formatter<'_>, vals: &[T]) -> std::fmt::Result {
+    if let Some((last, rest)) = vals.split_last() {
+        for val in rest {
+            write!(f, "{},", val)?;
+        }
+        write!(f, "{}", last)?;
+    }
+    Ok(())
+}
+
+impl Display for AttrVal {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AttrVal::N(val) => {
+                f.write_str(val)?;
+            }
+            AttrVal::S(val) => {
+                write!(f, "\"{}\"", convert_to_escaped_json_string(val))?;
+            }
+            AttrVal::Bool(val) => match val {
+                false => f.write_str("false")?,
+                true => f.write_str("true")?,
+            },
+            AttrVal::Null(_) => {
+                f.write_str("null")?;
+            }
+            AttrVal::B(val) => {
+                write!(f, "b64\"{}\"", general_purpose::STANDARD.encode(val))?;
+            }
+            AttrVal::L(vals) => {
+                f.write_char('[')?;
+                format_array_elements(f, vals)?;
+                f.write_char(']')?;
+            }
+            AttrVal::M(map) => {
+                f.write_char('{')?;
+                let mut first = true;
+                for (k, v) in map.iter() {
+                    if first {
+                        first = false;
+                    } else {
+                        f.write_char(',')?;
+                    }
+                    write!(f, "\"{}\":{}", convert_to_escaped_json_string(k), v)?;
+                }
+                f.write_char('}')?;
+            }
+            AttrVal::NS(vals) => {
+                assert_ne!(vals.len(), 0);
+                f.write_str("<<")?;
+                format_array_elements(f, vals)?;
+                f.write_str(">>")?;
+            }
+            AttrVal::SS(vals) => {
+                assert_ne!(vals.len(), 0);
+                f.write_str("<<")?;
+                if let Some((last, rest)) = vals.split_last() {
+                    for val in rest {
+                        write!(f, "\"{}\",", val)?;
+                    }
+                    write!(f, "\"{}\"", last)?;
+                }
+                f.write_str(">>")?;
+            }
+            AttrVal::BS(vals) => {
+                assert_ne!(vals.len(), 0);
+                f.write_str("<<")?;
+                if let Some((last, rest)) = vals.split_last() {
+                    for val in rest {
+                        write!(f, "b64\"{}\",", general_purpose::STANDARD.encode(val))?;
+                    }
+                    write!(f, "b64\"{}\"", general_purpose::STANDARD.encode(last))?;
+                }
+                f.write_str(">>")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -386,6 +677,63 @@ fn parse_internal_double_quote_string(str: &str) -> Result<String, ParseError> {
         }
     }
     Ok(result)
+}
+
+/// Convert a provided string into escaped string which can be used in JSON string.
+///
+/// This function escapes the following characters:
+///
+/// * Unicode control characters
+/// * a double quote character (\")
+/// * a backslash character (\\)
+/// * a backspace character (\b)
+/// * a form feed character (\f)
+/// * a newline (linefeed) character (\n)
+/// * a carriage return character (\r)
+/// * a tab character (\t)
+fn convert_to_escaped_json_string(str: &str) -> String {
+    let mut result = String::with_capacity(str.len());
+
+    for ch in str.chars() {
+        match ch {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            '\x08' => result.push_str("\\b"),
+            '\x0C' => result.push_str("\\f"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            _ => {
+                if ch.is_control() {
+                    // The following code logic is verbose for control characters because control
+                    // characters are in the Basic Multilingual Plane. However, we would add
+                    // categories other than control characters based on the user's feedback or
+                    // further understanding of Unicode categories unsuitable for displaying
+                    // characters. Therefore, we retain this logic to facilitate future improvements.
+                    let mut b = [0; 2];
+                    for c in ch.encode_utf16(&mut b) {
+                        const HEX: &[u8; 16] = b"0123456789abcdef";
+                        let b0 = ((*c >> 12) as u8 & 0xf) as usize;
+                        let b1 = ((*c >> 8) as u8 & 0xf) as usize;
+                        let b2 = ((*c >> 4) as u8 & 0xf) as usize;
+                        let b3 = (*c as u8 & 0xf) as usize;
+                        result.push_str("\\u");
+                        unsafe {
+                            // Following code is safe because HEX is created from valid string.
+                            result.push(char::from_u32_unchecked(HEX[b0] as u32));
+                            result.push(char::from_u32_unchecked(HEX[b1] as u32));
+                            result.push(char::from_u32_unchecked(HEX[b2] as u32));
+                            result.push(char::from_u32_unchecked(HEX[b3] as u32));
+                        }
+                    }
+                } else {
+                    result.push(ch);
+                }
+            }
+        }
+    }
+
+    result
 }
 
 /// Parse double quoted string which accepts escape sequence.
@@ -793,6 +1141,195 @@ fn parse_value(pair: Pair<Rule>) -> Result<Value, ParseError> {
     }
 }
 
+fn parse_sort_key_condition(pair: Pair<Rule>) -> Result<SortKeyCondition, ParseError> {
+    assert_eq!(pair.as_rule(), Rule::sort_key);
+    // this unwrap is safe because sort_key exactly one children
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::sort_eq => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            let literal = parse_literal(literal_pair)?;
+            Ok(SortKeyCondition::Eq(literal))
+        }
+        Rule::sort_le => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            let literal = parse_literal(literal_pair)?;
+            Ok(SortKeyCondition::Le(literal))
+        }
+        Rule::sort_lt => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            let literal = parse_literal(literal_pair)?;
+            Ok(SortKeyCondition::Lt(literal))
+        }
+        Rule::sort_ge => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            let literal = parse_literal(literal_pair)?;
+            Ok(SortKeyCondition::Ge(literal))
+        }
+        Rule::sort_gt => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            let literal = parse_literal(literal_pair)?;
+            Ok(SortKeyCondition::Gt(literal))
+        }
+        Rule::sort_between => {
+            let mut it = pair.into_inner();
+            // this unwrap is always safe
+            let start_pair = it.next().unwrap();
+            let start = parse_literal(start_pair)?;
+            // this unwrap is always safe
+            let end_pair = it.next().unwrap();
+            let end = parse_literal(end_pair)?;
+            Ok(SortKeyCondition::Between(start, end))
+        }
+        Rule::sort_begins_with => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            let input_str = literal_pair.to_string();
+            let literal = parse_literal(literal_pair)?;
+            if let AttrVal::S(prefix) = literal {
+                Ok(SortKeyCondition::BeginsWith(AttrVal::S(prefix)))
+            } else {
+                Err(ParseError::InvalidBeginsWith(input_str))
+            }
+        }
+        _ => {
+            // this must not happen
+            unreachable!("Unexpected sort condition is detected");
+        }
+    }
+}
+
+fn parse_sort_key_str_pair(pair: Pair<Rule>) -> Result<SortKeyCondition, ParseError> {
+    assert_eq!(pair.as_rule(), Rule::sort_key_str);
+    // this unwrap is safe because sort_key exactly one children
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::bare_str => Ok(SortKeyCondition::Eq(AttrVal::S(pair.as_str().to_owned()))),
+        Rule::sort_eq_str => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Eq(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_le_str => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Le(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_lt_str => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Lt(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_ge_str => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Ge(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_gt_str => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Gt(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_between_str => {
+            let mut it = pair.into_inner();
+            // this unwrap is always safe
+            let start_pair = it.next().unwrap();
+            let start = AttrVal::S(start_pair.as_str().to_owned());
+            // this unwrap is always safe
+            let end_pair = it.next().unwrap();
+            let end = AttrVal::S(end_pair.as_str().to_owned());
+            Ok(SortKeyCondition::Between(start, end))
+        }
+        Rule::sort_begins_with_str => {
+            // this unwrap is always safe
+            let prefix_pair = pair.into_inner().next().unwrap();
+            let prefix = prefix_pair.as_str().to_owned();
+            Ok(SortKeyCondition::BeginsWith(AttrVal::S(prefix)))
+        }
+        _ => {
+            // this must not happen
+            unreachable!("Unexpected sort condition is detected");
+        }
+    }
+}
+
+fn parse_sort_key_number_pair(pair: Pair<Rule>) -> Result<SortKeyCondition, ParseError> {
+    assert_eq!(pair.as_rule(), Rule::sort_key_number);
+
+    // this unwrap is safe because sort_key exactly one children
+    let pair = pair.into_inner().next().unwrap();
+
+    // In the current implementation, only the code path of `number_literal` is used because the fallback behavior is not needed in other patterns.
+    // However, for the sake of the completeness of the implementation, the rest of the codes also is retained.
+    match pair.as_rule() {
+        Rule::number_literal => Ok(SortKeyCondition::Eq(AttrVal::N(pair.as_str().to_owned()))),
+        Rule::sort_eq_num => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Eq(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_le_num => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Le(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_lt_num => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Lt(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_ge_num => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Ge(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_gt_num => {
+            // this unwrap is always safe
+            let literal_pair = pair.into_inner().next().unwrap();
+            Ok(SortKeyCondition::Gt(AttrVal::S(
+                literal_pair.as_str().to_owned(),
+            )))
+        }
+        Rule::sort_between_num => {
+            let mut it = pair.into_inner();
+            // this unwrap is always safe
+            let start_pair = it.next().unwrap();
+            let start = AttrVal::S(start_pair.as_str().to_owned());
+            // this unwrap is always safe
+            let end_pair = it.next().unwrap();
+            let end = AttrVal::S(end_pair.as_str().to_owned());
+            Ok(SortKeyCondition::Between(start, end))
+        }
+        _ => {
+            // this must not happen
+            unreachable!("Unexpected sort condition is detected");
+        }
+    }
+}
+
 fn parse_remove_action_pair(pair: Pair<Rule>) -> RemoveAction {
     assert_eq!(pair.as_rule(), Rule::remove_action);
     let mut remove_actions = Vec::new();
@@ -848,6 +1385,62 @@ impl DyneinParser {
         }
     }
 
+    /// Clear the parser internal state for `ExpressionAttributeNames` and `ExpressionAttributeValues`.
+    ///
+    /// Currently, this function is used for testing purposes only.
+    #[cfg(test)]
+    fn clear(&mut self) {
+        self.names.clear();
+        self.names_inv.clear();
+        self.values.clear();
+    }
+
+    /// Parse sort key condition in non-strict mode.
+    pub fn parse_sort_key_with_fallback(
+        &mut self,
+        exp: &str,
+        sort_attr: &AttributeDefinition,
+    ) -> Result<ExpressionResult, ParseError> {
+        self.parse_sort_key_without_fallback(exp, sort_attr)
+            .or_else(|err| match sort_attr.attribute_type {
+                AttributeType::S => self.parse_and_process_sort_key_for_string(exp, sort_attr),
+                AttributeType::N => self.parse_and_process_sort_key_for_number(exp, sort_attr),
+                _ => Err(err),
+            })
+    }
+
+    /// Parse sort key condition in strict mode.
+    pub fn parse_sort_key_with_suggest(
+        &mut self,
+        exp: &str,
+        sort_attr: &AttributeDefinition,
+    ) -> Result<ExpressionResult, ParseError> {
+        let mut pair = GeneratedParser::parse(Rule::sort_key, exp).map_err(|err| {
+            let fallback_result = self.try_sort_key_parse(exp, sort_attr);
+            match fallback_result {
+                Some(exp) => ParseError::ParsingErrorWithSuggest(ParsingErrorWithSuggestError {
+                    parse_error: Box::new(err),
+                    suggest: format!("{}", exp),
+                }),
+                None => ParseError::ParsingError(Box::new(err)),
+            }
+        })?;
+        let condition = parse_sort_key_condition(pair.next().unwrap())?;
+        self.process_sort_key(exp, sort_attr, condition)
+    }
+
+    /// Parse sort key condition in strict mode.
+    fn parse_sort_key_without_fallback(
+        &mut self,
+        exp: &str,
+        sort_attr: &AttributeDefinition,
+    ) -> Result<ExpressionResult, ParseError> {
+        let mut pair = GeneratedParser::parse(Rule::sort_key, exp)
+            .map_err(|err| ParseError::ParsingError(Box::new(err)))?;
+        let condition = parse_sort_key_condition(pair.next().unwrap())?;
+        self.process_sort_key(exp, sort_attr, condition)
+    }
+
     pub fn parse_dynein_format(
         &self,
         initial_item: Option<HashMap<String, AttributeValue>>,
@@ -897,6 +1490,52 @@ impl DyneinParser {
             }
             Err(err) => Err(ParseError::ParsingError(Box::new(err))),
         }
+    }
+
+    fn try_sort_key_parse(
+        &self,
+        exp: &str,
+        sort_attr: &AttributeDefinition,
+    ) -> Option<SortKeyCondition> {
+        match sort_attr.attribute_type {
+            AttributeType::S => self.try_parse_sort_key_for_string(exp).ok(),
+            AttributeType::N => self.try_parse_sort_key_for_number(exp).ok(),
+            _ => None,
+        }
+    }
+
+    fn try_parse_sort_key_for_string(&self, exp: &str) -> Result<SortKeyCondition, ParseError> {
+        let result = GeneratedParser::parse(Rule::sort_key_str, exp);
+        match result {
+            Ok(mut pair) => Ok(parse_sort_key_str_pair(pair.next().unwrap())?),
+            Err(err) => Err(ParseError::ParsingError(Box::new(err))),
+        }
+    }
+
+    fn parse_and_process_sort_key_for_string(
+        &mut self,
+        exp: &str,
+        sort_attr: &AttributeDefinition,
+    ) -> Result<ExpressionResult, ParseError> {
+        let condition = self.try_parse_sort_key_for_string(exp)?;
+        self.process_sort_key(exp, sort_attr, condition)
+    }
+
+    fn try_parse_sort_key_for_number(&self, exp: &str) -> Result<SortKeyCondition, ParseError> {
+        let result = GeneratedParser::parse(Rule::sort_key_number, exp);
+        match result {
+            Ok(mut pair) => Ok(parse_sort_key_number_pair(pair.next().unwrap())?),
+            Err(err) => Err(ParseError::ParsingError(Box::new(err))),
+        }
+    }
+
+    fn parse_and_process_sort_key_for_number(
+        &mut self,
+        exp: &str,
+        sort_attr: &AttributeDefinition,
+    ) -> Result<ExpressionResult, ParseError> {
+        let condition = self.try_parse_sort_key_for_number(exp)?;
+        self.process_sort_key(exp, sort_attr, condition)
     }
 
     fn get_or_create_attr_name_ref(&mut self, attr_name: String) -> String {
@@ -1011,6 +1650,101 @@ impl DyneinParser {
         }
     }
 
+    fn process_sort_key(
+        &mut self,
+        exp: &str,
+        sort_attr: &AttributeDefinition,
+        condition: SortKeyCondition,
+    ) -> Result<ExpressionResult, ParseError> {
+        let mut expression = String::new();
+        let attr_type = sort_attr.attribute_type;
+        let attr_name = &sort_attr.attribute_name;
+        let mut process_op = |val: AttrVal, op: &str| -> Result<ExpressionResult, ParseError> {
+            if !val.is_type(attr_type) {
+                let fallback_result = self.try_sort_key_parse(exp, sort_attr);
+                let err = match fallback_result {
+                    Some(exp) => {
+                        ParseError::InvalidTypesWithSuggest(InvalidTypesWithSuggestError {
+                            expected_type: attr_type.to_owned(),
+                            actual_type: val.attribute_type(),
+                            suggest: format!("{}", exp),
+                        })
+                    }
+                    None => ParseError::InvalidTypes(InvalidTypesError {
+                        expected_type: attr_type.to_owned(),
+                        actual_type: val.attribute_type(),
+                    }),
+                };
+                Err(err)?;
+            }
+            let path = self.get_or_create_attr_name_ref(attr_name.to_owned());
+            let value = self.process_literal(val)?;
+            expression.push_str(&path);
+            expression.push_str(op);
+            expression.push_str(&value);
+            Ok(ExpressionResult {
+                exp: expression.to_owned(),
+                names: self.names.clone(),
+                values: self.values.clone(),
+            })
+        };
+        match condition {
+            SortKeyCondition::Eq(val) => process_op(val, "="),
+            SortKeyCondition::Le(val) => process_op(val, "<="),
+            SortKeyCondition::Lt(val) => process_op(val, "<"),
+            SortKeyCondition::Ge(val) => process_op(val, ">="),
+            SortKeyCondition::Gt(val) => process_op(val, ">"),
+            SortKeyCondition::Between(start, end) => {
+                if !start.is_type(attr_type) || !end.is_type(attr_type) {
+                    if !start.is_type(attr_type) {
+                        Err(ParseError::InvalidTypes(InvalidTypesError {
+                            expected_type: attr_type.to_owned(),
+                            actual_type: start.attribute_type(),
+                        }))?;
+                    } else {
+                        Err(ParseError::InvalidTypes(InvalidTypesError {
+                            expected_type: attr_type.to_owned(),
+                            actual_type: end.attribute_type(),
+                        }))?;
+                    }
+                }
+                let path = self.get_or_create_attr_name_ref(attr_name.to_owned());
+                let start = self.process_literal(start)?;
+                let end = self.process_literal(end)?;
+                expression.push_str(&path);
+                expression.push_str(" BETWEEN ");
+                expression.push_str(&start);
+                expression.push_str(" AND ");
+                expression.push_str(&end);
+                Ok(ExpressionResult {
+                    exp: expression.to_owned(),
+                    names: self.names.clone(),
+                    values: self.values.clone(),
+                })
+            }
+            SortKeyCondition::BeginsWith(prefix) => {
+                if !prefix.is_type(attr_type) {
+                    Err(ParseError::InvalidTypes(InvalidTypesError {
+                        expected_type: attr_type.to_owned(),
+                        actual_type: prefix.attribute_type(),
+                    }))?;
+                }
+                let path = self.get_or_create_attr_name_ref(attr_name.to_owned());
+                let prefix = self.process_literal(prefix)?;
+                expression.push_str("begins_with(");
+                expression.push_str(&path);
+                expression.push(',');
+                expression.push_str(&prefix);
+                expression.push(')');
+                Ok(ExpressionResult {
+                    exp: expression.to_owned(),
+                    names: self.names.clone(),
+                    values: self.values.clone(),
+                })
+            }
+        }
+    }
+
     fn process_set_action(&mut self, input: SetAction) -> Result<ExpressionResult, ParseError> {
         let mut expression = String::new();
         for set in input {
@@ -1053,6 +1787,131 @@ impl DyneinParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_attr_val_display() {
+        let item = AttrVal::M(HashMap::from([
+            (
+                "\"k\ne\0y\r\"".to_owned(),
+                AttrVal::S("\tstr\x08\x0c🍣\u{009F}bfnrt".to_owned()),
+            ),
+            ("n".to_owned(), AttrVal::N("123".to_owned())),
+            ("null".to_owned(), AttrVal::Null(true)),
+            ("true".to_owned(), AttrVal::Bool(true)),
+            ("false".to_owned(), AttrVal::Bool(false)),
+            (
+                "b".to_owned(),
+                AttrVal::B(Bytes::from_static(b"\xf0\x9f\x8d\xa3\n\0")),
+            ),
+            (
+                "l".to_owned(),
+                AttrVal::L(vec![
+                    AttrVal::N("1".to_owned()),
+                    AttrVal::S("2".to_owned()),
+                    AttrVal::B(Bytes::from_static(b"\x03")),
+                ]),
+            ),
+            ("m0".to_owned(), AttrVal::M(HashMap::new())),
+            (
+                "m1".to_owned(),
+                AttrVal::M(HashMap::from([(
+                    "m2".to_owned(),
+                    AttrVal::M(HashMap::from([(
+                        "m3".to_owned(),
+                        AttrVal::S("nested".to_owned()),
+                    )])),
+                )])),
+            ),
+            (
+                "ss".to_owned(),
+                AttrVal::SS(vec!["1".to_owned(), "2".to_owned()]),
+            ),
+            (
+                "ns".to_owned(),
+                AttrVal::NS(vec!["1".to_owned(), "2".to_owned()]),
+            ),
+            (
+                "bs".to_owned(),
+                AttrVal::BS(vec![
+                    Bytes::from_static(b"\x01"),
+                    Bytes::from_static(b"\x02"),
+                ]),
+            ),
+        ]));
+        let result = format!("{}", item);
+        let chars: Vec<_> = result.chars().collect();
+        assert_eq!(*chars.first().unwrap(), '{');
+        assert_eq!(*chars.last().unwrap(), '}');
+        assert_ne!(chars[chars.len() - 2], ',');
+        assert!(result.contains(r#""\"k\ne\u0000y\r\"":"\tstr\b\f🍣\u009fbfnrt""#));
+        assert!(result.contains(r#""n":123"#));
+        assert!(result.contains(r#""null":null"#));
+        assert!(result.contains(r#""true":true"#));
+        assert!(result.contains(r#""false":false"#));
+        assert!(result.contains(r#""b":b64"8J+NowoA""#));
+        assert!(result.contains(r#""l":[1,"2",b64"Aw=="]"#));
+        assert!(result.contains(r#""m0":{}"#));
+        assert!(result.contains(r#""m1":{"m2":{"m3":"nested"}}"#));
+        assert!(result.contains(r#""ss":<<"1","2">>"#));
+        assert!(result.contains(r#""ns":<<1,2>>"#));
+        assert!(result.contains(r#""bs":<<b64"AQ==",b64"Ag==">>"#));
+    }
+
+    #[test]
+    fn test_sort_key_condition_display() {
+        assert_eq!(
+            format!("{}", SortKeyCondition::Eq(AttrVal::S("str".to_owned()))).as_str(),
+            r#"= "str""#
+        );
+        assert_eq!(
+            format!("{}", SortKeyCondition::Eq(AttrVal::N("12".to_owned()))).as_str(),
+            r#"= 12"#
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                SortKeyCondition::Eq(AttrVal::B(Bytes::from_static(b"str")))
+            )
+            .as_str(),
+            r#"= b64"c3Ry""#
+        );
+        assert_eq!(
+            format!("{}", SortKeyCondition::Le(AttrVal::S("str".to_owned()))).as_str(),
+            r#"<= "str""#
+        );
+        assert_eq!(
+            format!("{}", SortKeyCondition::Lt(AttrVal::N("12".to_owned()))).as_str(),
+            r#"< 12"#
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                SortKeyCondition::Ge(AttrVal::B(Bytes::from_static(b"str")))
+            )
+            .as_str(),
+            r#">= b64"c3Ry""#
+        );
+        assert_eq!(
+            format!("{}", SortKeyCondition::Gt(AttrVal::S("str".to_owned()))).as_str(),
+            r#"> "str""#
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                SortKeyCondition::Between(AttrVal::N("1".to_owned()), AttrVal::N("2".to_owned()))
+            )
+            .as_str(),
+            r#"between 1 and 2"#
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                SortKeyCondition::BeginsWith(AttrVal::S("str".to_owned()))
+            )
+            .as_str(),
+            r#"begins_with "str""#
+        );
+    }
 
     #[test]
     fn test_parse_internal_double_quote_string() {
@@ -1572,6 +2431,356 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_sort_key() {
+        let mut parser = DyneinParser::new();
+
+        // test = for number types
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "= 1",
+                    &AttributeDefinition::new("id", AttributeType::N),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0)),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        n: Some("1".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test == for string types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "=='1'",
+                    &AttributeDefinition::new("id", AttributeType::S),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0)),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        s: Some("1".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test > for string types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "> '1'",
+                    &AttributeDefinition::new("id", AttributeType::S),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}>{}", attr_name_ref(0), attr_val_ref(0)),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        s: Some("1".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test >= for number types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    ">=1",
+                    &AttributeDefinition::new("id", AttributeType::N),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}>={}", attr_name_ref(0), attr_val_ref(0)),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        n: Some("1".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test < for string types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "<\"1 2\"",
+                    &AttributeDefinition::new("id", AttributeType::S),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}<{}", attr_name_ref(0), attr_val_ref(0)),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        s: Some("1 2".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test <= for number types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "<=-1e5",
+                    &AttributeDefinition::new("id", AttributeType::N),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}<={}", attr_name_ref(0), attr_val_ref(0)),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        n: Some("-1e5".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test between for binary types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "BETWEEN b'1' AND b'2'",
+                    &AttributeDefinition::new("id", AttributeType::B),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!(
+                    "{} BETWEEN {} AND {}",
+                    attr_name_ref(0),
+                    attr_val_ref(0),
+                    attr_val_ref(1)
+                ),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([
+                    (
+                        attr_val_ref(0),
+                        AttributeValue {
+                            b: Some(Bytes::from_static(b"1")),
+                            ..Default::default()
+                        }
+                    ),
+                    (
+                        attr_val_ref(1),
+                        AttributeValue {
+                            b: Some(Bytes::from_static(b"2")),
+                            ..Default::default()
+                        }
+                    )
+                ]),
+            }
+        );
+
+        // test begins_with for string types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "begins_with 'id1234#e1234'",
+                    &AttributeDefinition::new("id", AttributeType::S),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("begins_with({},{})", attr_name_ref(0), attr_val_ref(0),),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        s: Some("id1234#e1234".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test non-strict input for string types
+        let op_in = vec!["= 1", "==1", "> 1", ">=1", "<1.2", "<=-1e5"];
+        let expected_op = vec!["=", "=", ">", ">=", "<", "<="];
+        let expected_val = vec!["1", "1", "1", "1", "1.2", "-1e5"];
+        for i in 0..op_in.len() {
+            parser.clear();
+            assert_eq!(
+                parser
+                    .parse_sort_key_with_fallback(
+                        op_in[i],
+                        &AttributeDefinition::new("id", AttributeType::S),
+                    )
+                    .unwrap(),
+                ExpressionResult {
+                    exp: format!("{}{}{}", attr_name_ref(0), expected_op[i], attr_val_ref(0)),
+                    names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                    values: HashMap::from([(
+                        attr_val_ref(0),
+                        AttributeValue {
+                            s: Some(expected_val[i].to_owned()),
+                            ..Default::default()
+                        }
+                    )]),
+                }
+            );
+            parser.clear();
+            assert_eq!(
+                parser.parse_sort_key_without_fallback(
+                    op_in[i],
+                    &AttributeDefinition::new("id", AttributeType::S),
+                ),
+                Err(ParseError::InvalidTypesWithSuggest(
+                    InvalidTypesWithSuggestError {
+                        expected_type: AttributeType::S,
+                        actual_type: AttributeType::N,
+                        suggest: format!("{} \"{}\"", expected_op[i], expected_val[i]),
+                    }
+                ))
+            );
+        }
+
+        // test invalid type input
+        parser.clear();
+        assert_eq!(
+            parser.parse_sort_key_without_fallback(
+                r#"= "1*3""#,
+                &AttributeDefinition::new("id", AttributeType::N),
+            ),
+            Err(ParseError::InvalidTypes(InvalidTypesError {
+                expected_type: AttributeType::N,
+                actual_type: AttributeType::S,
+            }))
+        );
+
+        // test between in non-strict for string types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "BETWEEN 1 AND 2",
+                    &AttributeDefinition::new("id", AttributeType::S),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!(
+                    "{} BETWEEN {} AND {}",
+                    attr_name_ref(0),
+                    attr_val_ref(0),
+                    attr_val_ref(1)
+                ),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([
+                    (
+                        attr_val_ref(0),
+                        AttributeValue {
+                            s: Some("1".to_owned()),
+                            ..Default::default()
+                        }
+                    ),
+                    (
+                        attr_val_ref(1),
+                        AttributeValue {
+                            s: Some("2".to_owned()),
+                            ..Default::default()
+                        }
+                    )
+                ]),
+            }
+        );
+
+        // test begins_with in non-strict for string types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "begins_with id12#i-12@i-12/i-12",
+                    &AttributeDefinition::new("id", AttributeType::S),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("begins_with({},{})", attr_name_ref(0), attr_val_ref(0),),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        s: Some("id12#i-12@i-12/i-12".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test bare for string types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "123",
+                    &AttributeDefinition::new("id", AttributeType::S),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0),),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        s: Some("123".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+
+        // test bare for number types
+        parser.clear();
+        assert_eq!(
+            parser
+                .parse_sort_key_with_fallback(
+                    "123",
+                    &AttributeDefinition::new("id", AttributeType::N),
+                )
+                .unwrap(),
+            ExpressionResult {
+                exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0),),
+                names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
+                values: HashMap::from([(
+                    attr_val_ref(0),
+                    AttributeValue {
+                        n: Some("123".to_owned()),
+                        ..Default::default()
+                    }
+                )]),
+            }
+        );
+    }
+
+    #[test]
     fn test_parse_dynein_format() {
         let parser = DyneinParser::new();
         assert_eq!(
@@ -1589,7 +2798,7 @@ mod tests {
                            },
                            "k4": b"\x20",
                            "k5": <<b'This', b"bin">>
-                         }"#
+                         }"#,
                 )
                 .unwrap(),
             HashMap::from([
