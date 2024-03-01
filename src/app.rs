@@ -174,7 +174,15 @@ pub struct Config {
     pub using_region: Option<String>,
     pub using_table: Option<String>,
     pub using_port: Option<u32>,
+    #[serde(default)]
+    pub query: QueryConfig,
     // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct QueryConfig {
+    #[serde(default)]
+    pub strict_mode: bool,
 }
 
 /// Cache is saved at `~/.dynein/cache.yml`
@@ -198,6 +206,7 @@ pub struct Context {
     pub overwritten_table_name: Option<String>, // --table option
     pub overwritten_port: Option<u32>,      // --port option
     pub output: Option<String>,
+    pub should_strict_for_query: Option<bool>,
 }
 
 /*
@@ -206,6 +215,22 @@ pub struct Context {
  Overwritten information is retrieved with `effective_*` functions as 1st priority.
 */
 impl Context {
+    pub fn new(
+        region: Option<String>,
+        port: Option<u32>,
+        table: Option<String>,
+    ) -> Result<Context, DyneinConfigError> {
+        Ok(Context {
+            config: Some(load_or_touch_config_file(true)?),
+            cache: Some(load_or_touch_cache_file(true)?),
+            overwritten_region: region_from_str(region, port),
+            overwritten_table_name: table,
+            overwritten_port: port,
+            output: None,
+            should_strict_for_query: None,
+        })
+    }
+
     pub fn effective_region(&self) -> Region {
         // if region is overwritten by --region comamnd, use it.
         if let Some(ow_region) = &self.overwritten_region {
@@ -295,6 +320,11 @@ impl Context {
     pub fn with_table(mut self, table: &str) -> Self {
         self.overwritten_table_name = Some(table.to_owned());
         self
+    }
+
+    pub fn should_strict_for_query(&self) -> bool {
+        self.should_strict_for_query
+            .unwrap_or_else(|| self.config.as_ref().map_or(false, |c| c.query.strict_mode))
     }
 }
 
@@ -721,6 +751,7 @@ mod tests {
             overwritten_table_name: None,
             overwritten_port: None,
             output: None,
+            should_strict_for_query: None,
         };
         assert_eq!(cx1.effective_region(), Region::default());
         // cx1.effective_table_name(); ... exit(1)
@@ -730,12 +761,14 @@ mod tests {
                 using_region: Some(String::from("ap-northeast-1")),
                 using_table: Some(String::from("cfgtbl")),
                 using_port: Some(8000),
+                query: QueryConfig { strict_mode: false },
             }),
             cache: None,
             overwritten_region: None,
             overwritten_table_name: None,
             overwritten_port: None,
             output: None,
+            should_strict_for_query: None,
         };
         assert_eq!(cx2.effective_region(), Region::from_str("ap-northeast-1")?);
         assert_eq!(cx2.effective_table_name(), String::from("cfgtbl"));
