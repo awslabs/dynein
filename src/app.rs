@@ -15,10 +15,12 @@
  */
 
 use ::serde::{Deserialize, Serialize};
+use backon::ExponentialBuilder;
 use log::{debug, error, info};
 use rusoto_dynamodb::{AttributeDefinition, KeySchemaElement, TableDescription};
 use rusoto_signature::Region;
 use serde_yaml::Error as SerdeYAMLError;
+use std::time::Duration;
 use std::{
     collections::HashMap,
     env, error,
@@ -175,6 +177,50 @@ pub struct Config {
     pub using_table: Option<String>,
     pub using_port: Option<u32>,
     // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
+    pub retry: Option<RetryConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct RetryConfig {
+    pub default: RetrySetting,
+    pub batch_write_item: Option<RetrySetting>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RetrySetting {
+    pub initial_backoff: Option<Duration>,
+    pub max_backoff: Option<Duration>,
+    pub max_attempts: Option<u32>,
+}
+
+impl Default for RetrySetting {
+    fn default() -> Self {
+        Self {
+            initial_backoff: None,
+            max_backoff: None,
+            max_attempts: Some(10),
+        }
+    }
+}
+
+impl From<RetrySetting> for ExponentialBuilder {
+    fn from(value: RetrySetting) -> Self {
+        let mut builder = Self::default()
+            .with_jitter()
+            .with_factor(2.0)
+            .with_min_delay(Duration::from_secs(1));
+
+        if let Some(max_attempts) = value.max_attempts {
+            builder = builder.with_max_times(max_attempts as usize);
+        }
+        if let Some(max_backoff) = value.max_backoff {
+            builder = builder.with_max_delay(max_backoff);
+        }
+        if let Some(initial_backoff) = value.initial_backoff {
+            builder = builder.with_min_delay(initial_backoff);
+        }
+        builder
+    }
 }
 
 /// Cache is saved at `~/.dynein/cache.yml`
@@ -730,6 +776,7 @@ mod tests {
                 using_region: Some(String::from("ap-northeast-1")),
                 using_table: Some(String::from("cfgtbl")),
                 using_port: Some(8000),
+                retry: Some(RetryConfig::default()),
             }),
             cache: None,
             overwritten_region: None,
@@ -763,5 +810,31 @@ mod tests {
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
 
         Ok(())
+    }
+
+    #[test]
+    fn test_retry_setting() {
+        let config1 = RetrySetting::default();
+        let actual = ExponentialBuilder::from(config1);
+        let expected = ExponentialBuilder::default()
+            .with_min_delay(Duration::from_secs(1))
+            .with_jitter()
+            .with_factor(2.0)
+            .with_max_times(10);
+        assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
+
+        let config2 = RetrySetting {
+            initial_backoff: Some(Duration::from_secs(1)),
+            max_backoff: Some(Duration::from_secs(100)),
+            max_attempts: Some(20),
+        };
+        let actual = ExponentialBuilder::from(config2);
+        let expected = ExponentialBuilder::default()
+            .with_jitter()
+            .with_factor(2.0)
+            .with_min_delay(Duration::from_secs(1))
+            .with_max_delay(Duration::from_secs(100))
+            .with_max_times(20);
+        assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
     }
 }

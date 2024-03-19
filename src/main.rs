@@ -262,6 +262,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         overwritten_port: c.port,
         output: None,
     };
+
     debug!("Initial command context: {:?}", &context);
 
     if let Some(child) = c.child {
