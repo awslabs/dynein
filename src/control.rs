@@ -16,7 +16,7 @@
 
 // This module interact with DynamoDB Control Plane APIs
 use ::serde::{Deserialize, Serialize};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::DateTime;
 use futures::future::join_all;
 use log::{debug, error};
 use rusoto_dynamodb::{
@@ -788,8 +788,8 @@ fn fetch_arn_from_backup_name(
 }
 
 fn epoch_to_rfc3339(epoch: f64) -> String {
-    let utc_datetime = NaiveDateTime::from_timestamp_opt(epoch as i64, 0).unwrap();
-    DateTime::<Utc>::from_utc(utc_datetime, Utc).to_rfc3339()
+    let utc_datetime = DateTime::from_timestamp(epoch as i64, 0).unwrap();
+    utc_datetime.to_rfc3339()
 }
 
 /// Takes "Mode" enum and return exact string value required by DynamoDB API.
