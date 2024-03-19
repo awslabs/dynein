@@ -177,39 +177,47 @@ pub struct Config {
     pub using_table: Option<String>,
     pub using_port: Option<u32>,
     // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
-    #[serde(default)]
-    pub retry_batch_write_item: RetryConfig,
+    pub retry: Option<RetryConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RetryConfig {
-    pub enabled: bool,
-    #[serde(default)]
-    pub jitter: bool,
-    pub factor: Option<f32>,
-    pub min_delay: Option<u64>,
-    pub max_delay: Option<u64>,
-    pub max_times: Option<usize>,
+    pub default: RetrySetting,
+    pub batch_write_item: Option<RetrySetting>,
 }
 
-impl From<RetryConfig> for ExponentialBuilder {
-    fn from(value: RetryConfig) -> Self {
-        let mut builder = Self::default().with_max_times(10);
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RetrySetting {
+    pub initial_backoff: Option<Duration>,
+    pub max_backoff: Option<Duration>,
+    pub max_attempts: Option<u32>,
+}
 
-        if value.jitter {
-            builder = builder.with_jitter();
+impl Default for RetrySetting {
+    fn default() -> Self {
+        Self {
+            initial_backoff: None,
+            max_backoff: None,
+            max_attempts: Some(10),
         }
-        if let Some(factor) = value.factor {
-            builder = builder.with_factor(factor);
+    }
+}
+
+impl From<RetrySetting> for ExponentialBuilder {
+    fn from(value: RetrySetting) -> Self {
+        let mut builder = Self::default()
+            .with_jitter()
+            .with_factor(2.0)
+            .with_min_delay(Duration::from_secs(1));
+
+        if let Some(max_attempts) = value.max_attempts {
+            builder = builder.with_max_times(max_attempts as usize);
         }
-        if let Some(max_times) = value.max_times {
-            builder = builder.with_max_times(max_times);
+        if let Some(max_backoff) = value.max_backoff {
+            builder = builder.with_max_delay(max_backoff);
         }
-        if let Some(max_delay) = value.max_delay {
-            builder = builder.with_max_delay(Duration::from_secs(max_delay));
-        }
-        if let Some(min_delay) = value.min_delay {
-            builder = builder.with_min_delay(Duration::from_secs(min_delay));
+        if let Some(initial_backoff) = value.initial_backoff {
+            builder = builder.with_min_delay(initial_backoff);
         }
         builder
     }
@@ -768,7 +776,7 @@ mod tests {
                 using_region: Some(String::from("ap-northeast-1")),
                 using_table: Some(String::from("cfgtbl")),
                 using_port: Some(8000),
-                retry_batch_write_item: RetryConfig::default(),
+                retry: Some(RetryConfig::default()),
             }),
             cache: None,
             overwritten_region: None,
@@ -805,25 +813,26 @@ mod tests {
     }
 
     #[test]
-    fn test_retry_config() {
-        let config1 = RetryConfig::default();
+    fn test_retry_setting() {
+        let config1 = RetrySetting::default();
         let actual = ExponentialBuilder::from(config1);
-        let expected = ExponentialBuilder::default().with_max_times(10);
+        let expected = ExponentialBuilder::default()
+            .with_min_delay(Duration::from_secs(1))
+            .with_jitter()
+            .with_factor(2.0)
+            .with_max_times(10);
         assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
 
-        let config2 = RetryConfig {
-            enabled: true,
-            jitter: true,
-            factor: Some(2.0),
-            min_delay: Some(20),
-            max_delay: Some(100),
-            max_times: Some(20),
+        let config2 = RetrySetting {
+            initial_backoff: Some(Duration::from_secs(1)),
+            max_backoff: Some(Duration::from_secs(100)),
+            max_attempts: Some(20),
         };
         let actual = ExponentialBuilder::from(config2);
         let expected = ExponentialBuilder::default()
             .with_jitter()
             .with_factor(2.0)
-            .with_min_delay(Duration::from_secs(20))
+            .with_min_delay(Duration::from_secs(1))
             .with_max_delay(Duration::from_secs(100))
             .with_max_times(20);
         assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
