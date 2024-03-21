@@ -29,15 +29,16 @@ jobs:
         - name: windows
           os: windows-2022
           target: x86_64-pc-windows-msvc
-
+    # We need `contents: write` to create a release as described in the `softprops/action-gh-release`.
+    # https://github.com/softprops/action-gh-release?tab=readme-ov-file#permissions
+    permissions:
+      contents: write
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
+    - uses: actions/checkout@v4
+    - name: Install rust toolchain
+      uses: dtolnay/rust-toolchain@aec8960fc037f3ba5dd7773fd5b938a0ab22c50f
       with:
-        default: true
-        override: true # override toolchain from "rust-toolchain" file
-        target: ${{ matrix.target }}
-
+        targets: ${{ matrix.target }}
     # cargo build on each OS generates a binary named "dy" under ./target/release/ directory.
     - run: cargo build --verbose --release
 
@@ -63,12 +64,12 @@ jobs:
           echo "matrix.os: ${{ matrix.os }} is not handled."
         fi
 
-    - name: Display current files (linux, linux-arn, and macos)
-      if: matrix.name == 'linux' || matrix.name == 'linux-arn' || matrix.name == 'macos'
+    - name: Display current files (linux, linux-arm, and macos)
+      if: matrix.name == 'linux' || matrix.name == 'linux-arm' || matrix.name == 'macos'
       run: ls -lrt && ls -lrt ./target/ && ls -lrt ./target/release/
 
     - name: Create a release with the binary file
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564 # Pin the commit hash of v2.0.4
       # this uploading step to the release asseets works only when the target ref has tagged starts with "v" https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
       if: startsWith( github.ref, 'refs/tags/v' )
       env:
