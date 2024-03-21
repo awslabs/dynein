@@ -16,7 +16,7 @@
 
 use crate::cmd;
 use log::debug;
-use std::io::{stdout, BufRead, Stdin, StdinLock, Write};
+use std::io::{stdout, BufRead, IsTerminal, Stdin, StdinLock, Write};
 use std::{error::Error, io};
 
 /* =================================================
@@ -52,7 +52,7 @@ impl<'a> ShellReader<'a> {
     }
 
     pub fn read_line(&mut self) -> Result<ShellInput, Box<dyn Error>> {
-        if atty::is(atty::Stream::Stdin) {
+        if io::stdin().is_terminal() {
             print!("> ");
             stdout().flush().expect("failed to flush output");
         }
