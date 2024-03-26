@@ -266,13 +266,15 @@ pub async fn batch_write_item(
         )));
     }
 
-    let mut write_requests = Vec::<WriteRequest>::new();
-    let parser = DyneinParser::new();
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let mut bwrite_items = HashMap::<String, Vec<WriteRequest>>::new();
 
-    match puts {
-        None => (),
-        Some(items) => {
+    // Only use write_requests, parser and ts if `--puts` or `--dels` option is provided.
+    if puts.is_some() || dels.is_some() {
+        let mut write_requests = Vec::<WriteRequest>::new();
+        let parser = DyneinParser::new();
+        let ts: app::TableSchema = app::table_schema(&cx).await;
+
+        if let Some(items) = puts {
             for item in items.iter() {
                 let attrs = parser.parse_dynein_format(None, item)?;
                 validate_item_has_keys(&attrs, &ts)?;
@@ -282,11 +284,8 @@ pub async fn batch_write_item(
                 });
             }
         }
-    }
 
-    match dels {
-        None => (),
-        Some(keys) => {
+        if let Some(keys) = dels {
             for key in keys.iter() {
                 let attrs = parser.parse_dynein_format(None, key)?;
                 validate_item_has_keys(&attrs, &ts)?;
@@ -296,33 +295,27 @@ pub async fn batch_write_item(
                 });
             }
         }
+
+        bwrite_items.insert(ts.name, write_requests);
     }
 
-    let mut items = HashMap::<String, Vec<WriteRequest>>::new();
-    if !write_requests.is_empty() {
-        items.insert(ts.name, write_requests);
-    }
+    if let Some(file_path) = input_file {
+        let content = fs::read_to_string(file_path)?;
+        debug!("string content: {}", content);
+        let items_from_json = build_batch_request_items_from_json(content)?;
+        debug!("built items for batch from json: {:?}", items_from_json);
 
-    match input_file {
-        None => (),
-        Some(file_path) => {
-            let content = fs::read_to_string(file_path)?;
-            debug!("string content: {}", content);
-            let items_from_json = build_batch_request_items_from_json(content)?;
-            debug!("built items for batch from json: {:?}", items_from_json);
-
-            // merge file items passed by `--input` option.
-            for (tbl, mut ops) in items_from_json {
-                items
-                    .entry(tbl)
-                    .and_modify(|e| e.append(&mut ops))
-                    .or_insert(ops);
-            }
+        // merge file items passed by `--input` option.
+        for (tbl, mut ops) in items_from_json {
+            bwrite_items
+                .entry(tbl)
+                .and_modify(|e| e.append(&mut ops))
+                .or_insert(ops);
         }
     }
 
-    debug!("built items for batch: {:?}", items);
-    batch_write_item_api(cx, items).await?;
+    debug!("built items for batch: {:?}", bwrite_items);
+    batch_write_item_api(cx, bwrite_items).await?;
     Ok(())
 }
 
