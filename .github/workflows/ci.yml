@@ -26,30 +26,24 @@ jobs:
         - 8000:8000
         - 8001:8000
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        components: rustfmt, clippy
-      # Pinned to the commit hash of v2.2.1
-    - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
+    - uses: actions/checkout@v4
+    - name: Install rust toolchain
+      run: |
+        rustup set profile minimal
+        rustup component add rustfmt clippy
+    - uses: Swatinem/rust-cache@640a22190e7a783d4c409684cea558f081f92012
+      # This is the most recent commit as of 2024-03-22.
+      # Also, it uses Node.js 20.
       with:
         shared-key: build-and-test
-    - uses: actions-rs/cargo@v1
-      with:
-        command: fmt
-        args: --all -- --check
-    - uses: actions-rs/clippy-check@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        args: -- -D warnings
-    - uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --no-fail-fast --all-features
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release --all-features
+    - name: Run cargo fmt
+      run: cargo fmt --all -- --check
+    - name: Run clippy check
+      run: cargo clippy -- -D warnings
+    - name: Run tests
+      run: cargo test --no-fail-fast --all-features
+    - name: Build with release flag
+      run: cargo build --release --all-features
   build_and_test_on_windows:
     name: Test and build on Windows
     runs-on: windows-2022
@@ -61,20 +55,18 @@ jobs:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        components: rustfmt, clippy
-        # Pinned to the commit hash of v2.2.1
-    - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f
+    - uses: actions/checkout@v4
+    - name: Install rust toolchain
+      run: |
+        rustup set profile minimal
+        rustup component add rustfmt clippy
+    - uses: Swatinem/rust-cache@640a22190e7a783d4c409684cea558f081f92012
+        # This is the most recent commit as of 2024-03-22.
+        # Also, it uses Node.js 20.
       with:
         shared-key: build-and-test-on-windows
-    - uses: actions-rs/cargo@v1
-      with:
-          # Currently, we only conduct snapshot tests because GitHub Actions does not support containers in Windows.
-        command: test
-        args: cli_tests
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release --all-features
+    - name: Run tests for CLI
+      # Currently, we only conduct snapshot tests because GitHub Actions does not support containers in Windows.
+      run: cargo test cli_tests
+    - name: Build with release flag
+      run: cargo build --release --all-features
