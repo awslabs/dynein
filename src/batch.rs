@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+use crate::parser::DyneinParser;
 use base64::{engine::general_purpose, Engine as _};
 use bytes::Bytes;
 use log::{debug, error};
@@ -37,6 +38,8 @@ pub enum DyneinBatchError {
     LoadData(IOError),
     PraseJSON(serde_json::Error),
     BatchWriteError(RusotoError<BatchWriteItemError>),
+    InvalidInput(String),
+    ParseError(crate::parser::ParseError),
 }
 impl fmt::Display for DyneinBatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -44,6 +47,8 @@ impl fmt::Display for DyneinBatchError {
             DyneinBatchError::LoadData(ref e) => e.fmt(f),
             DyneinBatchError::PraseJSON(ref e) => e.fmt(f),
             DyneinBatchError::BatchWriteError(ref e) => e.fmt(f),
+            DyneinBatchError::InvalidInput(ref msg) => write!(f, "{}", msg),
+            DyneinBatchError::ParseError(ref e) => e.fmt(f),
         }
     }
 }
@@ -53,6 +58,8 @@ impl error::Error for DyneinBatchError {
             DyneinBatchError::LoadData(ref e) => Some(e),
             DyneinBatchError::PraseJSON(ref e) => Some(e),
             DyneinBatchError::BatchWriteError(ref e) => Some(e),
+            DyneinBatchError::InvalidInput(_) => None,
+            DyneinBatchError::ParseError(_) => None,
         }
     }
 }
@@ -72,6 +79,12 @@ impl From<RusotoError<BatchWriteItemError>> for DyneinBatchError {
     }
 }
 
+impl From<crate::parser::ParseError> for DyneinBatchError {
+    fn from(e: crate::parser::ParseError) -> Self {
+        Self::ParseError(e)
+    }
+}
+
 /* =================================================
 Public functions
 ================================================= */
@@ -87,7 +100,7 @@ Public functions
 ///             ... it should be same as "item" parameter used in PutItem.
 ///         - delete_request (Option<DeleteRequest>), where DeleteRequest { key: HashMap<String, AttributeValue> }
 ///             ... the only thing DeleteRequest should do is specify delete target via key (i.e. pk(+sk)).
-pub fn build_batch_request_items(
+pub fn build_batch_request_items_from_json(
     raw_json_content: String,
 ) -> Result<HashMap<String, Vec<WriteRequest>>, serde_json::Error> {
     let mut results = HashMap::<String, Vec<WriteRequest>>::new();
@@ -238,15 +251,71 @@ pub fn batch_write_untill_processed(
 }
 
 /// This function is intended to be called from main.rs, as a destination of bwrite command.
+/// It executes batch write operations based on the provided `puts`, `dels`, and `input_file` arguments.
+/// At least one argument `puts`, `dels` or `input_file` is required, and all arguments can be specified simultaneously.
 pub async fn batch_write_item(
     cx: app::Context,
-    input_file: String,
+    puts: Option<Vec<String>>,
+    dels: Option<Vec<String>>,
+    input_file: Option<String>,
 ) -> Result<(), DyneinBatchError> {
-    let content = fs::read_to_string(input_file)?;
-    debug!("string content: {}", content);
-    let items = build_batch_request_items(content)?;
-    debug!("built items for batch: {:?}", items);
-    batch_write_item_api(cx, items).await?;
+    // validate the input arguments
+    if puts.is_none() && dels.is_none() && input_file.is_none() {
+        return Err(DyneinBatchError::InvalidInput(String::from(
+            "must provide at least one argument for 'bwrite' command",
+        )));
+    }
+
+    let mut bwrite_items = HashMap::<String, Vec<WriteRequest>>::new();
+
+    // Only use write_requests, parser and ts if `--puts` or `--dels` option is provided.
+    if puts.is_some() || dels.is_some() {
+        let mut write_requests = Vec::<WriteRequest>::new();
+        let parser = DyneinParser::new();
+        let ts: app::TableSchema = app::table_schema(&cx).await;
+
+        if let Some(items) = puts {
+            for item in items.iter() {
+                let attrs = parser.parse_dynein_format(None, item)?;
+                validate_item_has_keys(&attrs, &ts)?;
+                write_requests.push(WriteRequest {
+                    put_request: Some(PutRequest { item: attrs }),
+                    delete_request: None,
+                });
+            }
+        }
+
+        if let Some(keys) = dels {
+            for key in keys.iter() {
+                let attrs = parser.parse_dynein_format(None, key)?;
+                validate_item_has_keys(&attrs, &ts)?;
+                write_requests.push(WriteRequest {
+                    put_request: None,
+                    delete_request: Some(DeleteRequest { key: attrs }),
+                });
+            }
+        }
+
+        bwrite_items.insert(ts.name, write_requests);
+    }
+
+    if let Some(file_path) = input_file {
+        let content = fs::read_to_string(file_path)?;
+        debug!("string content: {}", content);
+        let items_from_json = build_batch_request_items_from_json(content)?;
+        debug!("built items for batch from json: {:?}", items_from_json);
+
+        // merge file items passed by `--input` option.
+        for (tbl, mut ops) in items_from_json {
+            bwrite_items
+                .entry(tbl)
+                .and_modify(|e| e.append(&mut ops))
+                .or_insert(ops);
+        }
+    }
+
+    debug!("built items for batch: {:?}", bwrite_items);
+    batch_write_item_api(cx, bwrite_items).await?;
     Ok(())
 }
 
@@ -499,5 +568,70 @@ fn json_binary_val_to_bytes(v: &JsonValue) -> Bytes {
         general_purpose::STANDARD
             .decode(v.as_str().expect("binary inputs should be string value"))
             .expect("binary inputs should be base64 with padding encoded"),
+    )
+}
+
+// Check if the item has a partition key and sort key.
+fn validate_item_has_keys(
+    attrs: &HashMap<String, AttributeValue>,
+    ts: &app::TableSchema,
+) -> Result<(), DyneinBatchError> {
+    if !attrs.contains_key(&ts.pk.name) {
+        return Err(DyneinBatchError::InvalidInput(format!(
+            "must provide the partition key attribute {}",
+            ts.pk.name
+        )));
+    }
+    validate_key_type(&ts.pk.name, &ts.pk.kind, attrs)?;
+
+    if let Some(sk) = &ts.sk {
+        if !attrs.contains_key(&sk.name) {
+            return Err(DyneinBatchError::InvalidInput(format!(
+                "must provide the sort key attribute {}",
+                sk.name
+            )));
+        }
+        validate_key_type(&sk.name, &sk.kind, attrs)?;
+    }
+
+    Ok(())
+}
+
+fn validate_key_type(
+    key_name: &str,
+    expected_key_type: &app::KeyType,
+    attrs: &HashMap<String, AttributeValue>,
+) -> Result<(), DyneinBatchError> {
+    match expected_key_type {
+        app::KeyType::S => {
+            if attrs[key_name].s.is_none() {
+                return Err(DyneinBatchError::InvalidInput(
+                    generate_type_mismatch_error_message(key_name, "String"),
+                ));
+            }
+        }
+        app::KeyType::N => {
+            if attrs[key_name].n.is_none() {
+                return Err(DyneinBatchError::InvalidInput(
+                    generate_type_mismatch_error_message(key_name, "Number"),
+                ));
+            }
+        }
+        app::KeyType::B => {
+            if attrs[key_name].b.is_none() {
+                return Err(DyneinBatchError::InvalidInput(
+                    generate_type_mismatch_error_message(key_name, "Binary"),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn generate_type_mismatch_error_message(attr_name: &str, expected_type: &str) -> String {
+    format!(
+        "type mismatch for the key {}, expected: {}",
+        attr_name, expected_type
     )
 }

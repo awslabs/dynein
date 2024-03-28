@@ -991,6 +991,38 @@ $ dy get 42
 No item found.
 ```
 
+#### `dy bwrite`
+`dy bwrite` internally calls [BatchWriteItem API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html) and is used for putting and deleting multiple items.
+
+You can specify the `--input` option when providing operations from a JSON file that follows the Request Syntax of BatchWriteItem API.
+```bash
+$ dy bwrite --input request.json
+```
+
+You can also use `--put` or `--del` options to achieve corresponding operations.
+These options take the [dynein format](./docs/format.md), a JSON-style expression.
+To put or delete items, you must provide at least a primary key to identify each item uniquely.
+
+```bash
+$ dy bwrite --put '{"pk": "1", "this_is_set": <<"i","j","k">>}' --put '{"pk": "2", "this_is_set": <<"x","y","z">>}'
+$ dy scan
+pk  attributes
+1   {"this_is_set":["i","j","k"]}
+2   {"this_is_set":["x","y","z"]}
+```
+
+The --put, --del, and --input options can be used simultaneously.
+
+```bash
+$ dy bwrite --del '{"pk": "1"}' --del '{"pk": "2"}' --put '{"pk": "3", "this_is_set": <<"a","b","c">>}'
+$ dy scan
+pk  attributes
+3   {"this_is_set":["a","b","c"]}
+```
+
+```bash
+$ dy bwrite --del '{"pk": "1"}' --del '{"pk": "2"}' --put '{"pk": "3", "this_is_set": <<"a","b","c">>}'  --input request.json
+```
 
 ## Working with Indexes
 
