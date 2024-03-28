@@ -543,8 +543,8 @@ year  title                  attributes
 1960  The Time Machine       {"info":{"actors":["Alan Young","Rod Taylor","Yvet...
 ```
 
-Other examples for the `--sort-key` option of `dy query` are: `--sort-key "= 42"`, `--sort-key "> 42"`, or `--sort-key "between 10 and 42"`. For more details please visit [a public document "Working with Queries"](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html) and [DynamoDB Query API reference](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html).
-
+Other examples for the `--sort-key` option of `dy query` are: `--sort-key "= 42"`, `--sort-key "> 42"`, or `--sort-key "between 10 and 42"`.
+You can find a more detailed explanation in the dedicated [`dy query` command document](./docs/query.md).
 
 ### Write
 
