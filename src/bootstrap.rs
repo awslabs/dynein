@@ -271,7 +271,7 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
         let mut content = String::new();
         decompressor.read_to_string(&mut content)?;
         // Step 4. load data into tables
-        let request_items = batch::build_batch_request_items(content.to_string())?;
+        let request_items = batch::build_batch_request_items_from_json(content.to_string())?;
         batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     }
     println!(

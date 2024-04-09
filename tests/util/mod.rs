@@ -24,6 +24,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use regex::bytes::Regex;
 use rusoto_core::Region;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
+use serde_json::Value;
 use std::io::{self, Write}; // Used when check results by printing to stdout
 use std::path::Path;
 use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -321,6 +322,39 @@ pub fn assert_eq_json(cmd: &mut Command, expected: &str) {
         output.parse::<serde_json::Value>().unwrap(),
         expected.parse::<serde_json::Value>().unwrap(),
     )
+}
+
+/// Similar to assert_eq_json, but this function ignores both array order and map key order.
+/// For instance, it considers `{"a": [2, 1], "b": "value"}` as equal to `{"b": "value", "a": [1, 2]}`.
+pub fn assert_eq_json_ignore_order(cmd: &mut Command, expected: &str) {
+    cmd.assert().success();
+    let stdout = cmd.output().unwrap().stdout;
+    let output = String::from_utf8(stdout).unwrap();
+
+    let mut output_json = output.parse::<serde_json::Value>().unwrap();
+    let mut expected_json = expected.parse::<serde_json::Value>().unwrap();
+
+    sort_json_array(&mut output_json);
+    sort_json_array(&mut expected_json);
+
+    assert_eq!(output_json, expected_json);
+}
+
+fn sort_json_array(value: &mut Value) {
+    match value {
+        Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                sort_json_array(v);
+            }
+            arr.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        }
+        Value::Object(obj) => {
+            for v in obj.values_mut() {
+                sort_json_array(v);
+            }
+        }
+        _ => {}
+    }
 }
 
 pub fn assert_eq_yaml(cmd: &mut Command, expected: &str) {
