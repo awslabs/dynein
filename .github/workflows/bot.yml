@@ -3,32 +3,44 @@ on:
     types: [created]
 
 name: Bot
+permissions: {}
 
+# This workflow only runs for pull request comments
 jobs:
   pr_pre_comment:
-    # This job only runs for pull request comments
     name: Comment before taking snapshots
     if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
-    - uses: actions/github-script@v6
+    - uses: actions/github-script@v7
       with:
         script: |
           github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: "Start taking snapshots for this pull request.\n" +
+            body: "Start taking snapshots for this pull request. Please note that this process requires manual approval from a maintainer so that you may need to wait hours. Please be patient.\n" +
                   `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
           });
-  pr_snapshot:
-    # This job only runs for pull request comments
-    name: Generate a snapshot
+  pr_snapshot_approval:
+    name: Wait approval for bot execution
     needs: [pr_pre_comment]
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 1
+    environment: bot
+    steps:
+    - run: echo "Approved by a maintainer"
+  pr_snapshot:
+    name: Generate snapshots
+    needs: [pr_snapshot_approval]
+    timeout-minutes: 15
     if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
     strategy:
-      # Do not run in parallel because we may create a new commit
-      max-parallel: 1
       matrix:
         name: [windows, linux]
         include:
@@ -37,11 +49,17 @@ jobs:
         - name: linux
           os: ubuntu-latest
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    outputs:
+      linux: ${{ steps.gen_patch.outputs.linux }}
+      windows: ${{ steps.gen_patch.outputs.windows }}
     env:
       # Set TRYCMD=overwrite to update snapshot
       TRYCMD: overwrite
     steps:
-    - uses: actions/github-script@v6
+    - name: Determine a target repository and a commit hash from the pull request
+      uses: actions/github-script@v7
       id: target-branch
       with:
         result-encoding: json
@@ -54,24 +72,28 @@ jobs:
           console.log("Target repo: " + pull_request.data.head.repo.full_name);
           console.log("Target ref: " + pull_request.data.head.ref);
           return { "repo": pull_request.data.head.repo.full_name, "ref": pull_request.data.head.ref };
-    - uses: actions/checkout@v4
+    - name: Checkout the target repository
+      uses: actions/checkout@v4
       with:
         repository: ${{ fromJSON(steps.target-branch.outputs.result).repo }}
         ref: ${{ fromJSON(steps.target-branch.outputs.result).ref }}
-    - uses: actions-rs/toolchain@v1
-      with:
-        components: rustfmt, clippy
-    - uses: Swatinem/rust-cache@640a22190e7a783d4c409684cea558f081f92012
+    - name: Install rust toolchain
+      run: |
+        rustup set profile minimal
+        rustup install stable
+        rustup component add rustfmt clippy
+    - name: Load cargo project cache
+      uses: Swatinem/rust-cache@640a22190e7a783d4c409684cea558f081f92012
       # This is the most recent commit as of 2024-03-22.
       # Also, it uses Node.js 20.
       with:
         shared-key: pr-snapshot-commented-${{ matrix.name }}
-    - uses: actions-rs/cargo@v1
-        # Generate new snapshots
-      with:
-        command: test
-        args: cli_tests
-    - uses: actions/github-script@v6
+    - name: Generate a new snapshot
+      run: |
+        cargo test cli_tests
+    - id: gen_patch
+      name: Generate patches
+      uses: actions/github-script@v7
       with:
         script: |
           // Create a diff and comment it on the pull request.
@@ -105,8 +127,6 @@ jobs:
           }
 
           if (stdOutput !== '') {
-            console.log("There are differences. Creating a comment...");
-
             const body = `You can apply a snapshot for ${{ matrix.name }} using \`git apply <diff-file>\`. The patch file is the following.
 
           <details>
@@ -116,6 +136,30 @@ jobs:
           ${stdOutput}
           \`\`\`
           </details>`;
+            core.setOutput('${{ matrix.name }}', body);
+          }
+  pr_post_snapshot:
+    name: Comment snapshots on the pull request
+    needs: [pr_snapshot]
+    timeout-minutes: 1
+    strategy:
+      matrix:
+        name: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    env:
+      linux: ${{needs.pr_snapshot.outputs.linux}}
+      windows: ${{needs.pr_snapshot.outputs.windows}}
+    steps:
+    - name: Comment the generated patch to the pull request
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const body = process.env.${{ matrix.name }};
+          if (body !== '') {
+            console.log("There are differences. Creating a comment...");
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -126,13 +170,15 @@ jobs:
             console.log("There are no differences. Skipping...");
           }
   pr_post_comment:
-    # This job only runs for pull request comments
     name: Comment after taking snapshots
-    needs: [pr_snapshot]
-    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/snapshot' }}
+    needs: [pr_post_snapshot]
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    timeout-minutes: 1
     steps:
-    - uses: actions/github-script@v6
+    - uses: actions/github-script@v7
       with:
         script: |
           github.rest.issues.createComment({
