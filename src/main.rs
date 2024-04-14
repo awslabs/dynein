@@ -121,9 +121,14 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             consistent_read,
             keys_only,
             descending,
+            strict,
+            non_strict,
             output,
         } => {
             context.output = output;
+            if strict || non_strict {
+                context.should_strict_for_query = Some(strict || !non_strict)
+            }
             data::query(
                 context.clone(),
                 QueryParams {
@@ -256,14 +261,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // when --region <region-name e.g. ap-northeast-1>, use the region. when --region local, use DynamoDB local.
     // --region/--table option can be passed as a top-level or subcommand-level (i.e. global).
-    let mut context = app::Context {
-        config: Some(app::load_or_touch_config_file(true)?),
-        cache: Some(app::load_or_touch_cache_file(true)?),
-        overwritten_region: app::region_from_str(c.region, c.port),
-        overwritten_table_name: c.table,
-        overwritten_port: c.port,
-        output: None,
-    };
+    let mut context = app::Context::new(c.region, c.port, c.table)?;
     debug!("Initial command context: {:?}", &context);
 
     if let Some(child) = c.child {

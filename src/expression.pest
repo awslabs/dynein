@@ -23,6 +23,49 @@ WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
 // See: https://github.com/pest-parser/pest/issues/304
 eoi = _{ !ANY }
 
+// `sort_key` rule is used to parse a condition of a sort key in a query command.
+// Supported operators and a function are listed on the following docs.
+// https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.KeyConditionExpressions.html
+sort_key = { SOI ~ (sort_eq | sort_le | sort_lt | sort_ge | sort_gt | sort_between | sort_begins_with) ~ eoi }
+sort_eq = { "==" ~ sort_key_literal | "=" ~ sort_key_literal }
+sort_le = { "<=" ~ sort_key_literal }
+sort_lt = { "<" ~ sort_key_literal }
+sort_ge = { ">=" ~ sort_key_literal }
+sort_gt = { ">" ~ sort_key_literal }
+sort_between = {
+  ^"between" ~ sort_key_literal ~ ^"and" ~ sort_key_literal |
+  ^"between" ~ sort_key_literal ~ sort_key_literal
+}
+sort_begins_with = { ^"begins_with" ~ sort_key_literal }
+
+// `sort_key_str` rule matches a sort key of string types in non-strict mode
+sort_key_str = { SOI ~ (sort_eq_str | sort_le_str | sort_lt_str | sort_ge_str | sort_gt_str | sort_between_str | sort_begins_with_str | bare_str) ~ eoi }
+sort_eq_str = { "==" ~ bare_str | "=" ~ bare_str }
+sort_le_str = { "<=" ~ bare_str }
+sort_lt_str = { "<" ~ bare_str }
+sort_ge_str = { ">=" ~ bare_str }
+sort_gt_str = { ">" ~ bare_str }
+sort_between_str = {
+  ^"between" ~ bare_str ~ ^"and" ~ bare_str |
+  ^"between" ~ bare_str ~ bare_str
+}
+sort_begins_with_str = { ^"begins_with" ~ bare_str }
+bare_str = @{ bare_str_charset_first ~ bare_str_charset* }
+bare_str_charset_first = _{ !("\0" | "\r" | "\n" | "\t" | "\\" | "\"" | "'" | " " | "<" | ">" | "=") ~ ANY}
+bare_str_charset = _{ !("\0" | "\r" | "\n" | "\t" | "\\" | "\"" | "'" | " ") ~ ANY }
+
+// `sort_key_num` rule matches a sort key of number types in non-strict mode
+sort_key_number = { SOI ~ (sort_eq_num | sort_le_num | sort_lt_num | sort_ge_num | sort_gt_num | sort_between_num | number_literal) ~ eoi }
+sort_eq_num = { "=" ~ number_literal | "==" ~ number_literal }
+sort_le_num = { "<=" ~ number_literal }
+sort_lt_num = { "<" ~ number_literal }
+sort_ge_num = { ">=" ~ number_literal }
+sort_gt_num = { ">" ~ number_literal }
+sort_between_num = {
+  ^"between" ~ number_literal ~ ^"and" ~ number_literal |
+  ^"between" ~ number_literal ~ number_literal
+}
+
 // You can find the grammar for actions of UpdateItem in the following link.
 // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.UpdateExpressions.html
 set_action = { SOI ~ path ~ "=" ~ value ~ ("," ~ path ~ "=" ~ value)* ~ eoi }
@@ -69,6 +112,9 @@ if_not_exists_function = { ^"if_not_exists" ~ "(" ~ path ~ "," ~ value ~ ")" }
 literal = _{
   boolean_literal | null_literal | b_literal | list_literal | map_literal  | string_literal | number_literal |
   set_literal
+}
+sort_key_literal = _{
+    b_literal | string_literal | number_literal
 }
 
 // Boolean literals

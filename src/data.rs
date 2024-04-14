@@ -23,7 +23,8 @@ use std::{
     vec::Vec,
 };
 
-use crate::parser::DyneinParser;
+use crate::app::{Key, KeyType};
+use crate::parser::{AttributeDefinition, AttributeType, DyneinParser, ParseError};
 use log::{debug, error};
 use rusoto_dynamodb::{
     AttributeValue, DeleteItemInput, DynamoDb, DynamoDbClient, GetItemInput, PutItemInput,
@@ -68,20 +69,45 @@ enum UpdateActionType {
 pub enum DyneinQueryParamsError {
     NoSuchIndex(String /* index name */, String /* table name */),
     NoSortKeyDefined,
-    InvalidSortKeyOption,
+    InvalidSortKeyOption(ParseError),
+}
+
+impl From<ParseError> for DyneinQueryParamsError {
+    fn from(err: ParseError) -> Self {
+        DyneinQueryParamsError::InvalidSortKeyOption(err)
+    }
 }
 
 impl fmt::Display for DyneinQueryParamsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
             DyneinQueryParamsError::NoSuchIndex(idx, t) => {
-                write!(f, "No index named '{}' found on the target table '{}'. Please execute 'dy desc' command to see indexes the table has.", idx, t)
+                write!(
+                    f,
+                    "No index named '{}' found on the target table '{}'. \
+                    Please execute 'dy desc' command to see indexes the table has.",
+                    idx, t
+                )
             }
             DyneinQueryParamsError::NoSortKeyDefined => {
-                write!(f, "You've passed --sort-key (-s) option, however the target table (or index) doesn't have sort key. Please execute 'dy desc' command to see key schema.")
+                write!(
+                    f,
+                    "You've passed --sort-key (-s) option, \
+                    however the target table (or index) doesn't have sort key. \
+                    Please execute 'dy desc' command to see key schema."
+                )
             }
-            DyneinQueryParamsError::InvalidSortKeyOption => {
-                write!(f, "--sort-key syntax is invalid. This option accepts one of the following styles: '= 123', '> 123', '>= 123', '< 123', '<= 123', 'between 10 and 99', or 'begins_with myValue'.")
+            DyneinQueryParamsError::InvalidSortKeyOption(err) => {
+                write!(
+                    f,
+                    "{}\n--sort-key syntax is invalid. \
+                    This option accepts one of the following styles: \
+                    '= 123', '> 123', '>= 123', '< 123', '<= 123', \
+                    'between 10 and 99', or 'begins_with \"prefix\"'. \
+                    For more information, please visit \
+                    https://github.com/awslabs/dynein/blob/main/docs/query.md.",
+                    err
+                )
             }
         }
     }
@@ -192,6 +218,7 @@ pub async fn query(cx: app::Context, params: QueryParams) {
         &params.pval,
         &params.sort_key_expression,
         &params.index,
+        cx.should_strict_for_query(),
     ) {
         Ok(qp) => qp,
         Err(e) => {
@@ -757,11 +784,18 @@ fn strip_item(
         .collect()
 }
 
+impl From<Key> for AttributeDefinition {
+    fn from(value: Key) -> Self {
+        AttributeDefinition::new(value.name, value.kind)
+    }
+}
+
 fn generate_query_expressions(
     ts: &app::TableSchema,
     pval: &str,
     sort_key_expression: &Option<String>,
     index: &Option<String>,
+    strict: bool,
 ) -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
     let expression: String = String::from("#DYNEIN_PKNAME = :DYNEIN_PKVAL");
     let mut names = HashMap::<String, String>::new();
@@ -841,7 +875,18 @@ fn generate_query_expressions(
                 ske,
                 names,
                 vals,
+                strict,
             )
+        }
+    }
+}
+
+impl From<KeyType> for AttributeType {
+    fn from(value: KeyType) -> Self {
+        match value {
+            KeyType::S => AttributeType::S,
+            KeyType::N => AttributeType::N,
+            KeyType::B => AttributeType::B,
         }
     }
 }
@@ -854,10 +899,11 @@ fn append_sort_key_expression(
     sort_key_expression: &str,
     mut names: HashMap<String, String>,
     mut vals: HashMap<String, AttributeValue>,
+    strict: bool,
 ) -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
     // Check if the target table/index key schema has sort key. If there's no sort key definition, return with Err immediately.
     let (sk_name, sk_type) = match sort_key {
-        Some(sk) => (sk.clone().name, sk.kind.to_string()),
+        Some(sk) => (sk.clone().name, sk.kind),
         None => return Err(DyneinQueryParamsError::NoSortKeyDefined),
     };
 
@@ -869,122 +915,24 @@ fn append_sort_key_expression(
         &built
     );
 
-    // iterate over splitted tokens and build expression and mappings.
-    let mut iter = sort_key_expression.split_whitespace();
-    // Query API https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html#DDB-Query-request-KeyConditionExpression
-    match iter.next() {
-        // sortKeyName = :sortkeyval - true if the sort key value is equal to :sortkeyval.
-        Some("=") | Some("==") => {
-            let target_val = iter.next().unwrap();
-            debug!(
-                "Equal sign is detected in sort key expression for the value: '{}'",
-                &target_val
-            );
-            built.push_str("#DYNEIN_SKNAME = :DYNEIN_SKVAL");
-            names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(
-                String::from(":DYNEIN_SKVAL"),
-                build_attrval_scalar(&sk_type, &String::from(target_val)),
-            );
-        }
-        // sortKeyName <= :sortkeyval - true if the sort key value is less than or equal to :sortkeyval.
-        Some("<=") => {
-            let target_val = iter.next().unwrap();
-            debug!(
-                "Less than equal sign is detected in sort key expression for the value: '{}'",
-                &target_val
-            );
-            built.push_str("#DYNEIN_SKNAME <= :DYNEIN_SKVAL");
-            names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(
-                String::from(":DYNEIN_SKVAL"),
-                build_attrval_scalar(&sk_type, &String::from(target_val)),
-            );
-        }
-        // sortKeyName < :sortkeyval - true if the sort key value is less than :sortkeyval.
-        Some("<") => {
-            let target_val = iter.next().unwrap();
-            debug!(
-                "Less than sign is detected in sort key expression for the value: '{}'",
-                &target_val
-            );
-            built.push_str("#DYNEIN_SKNAME < :DYNEIN_SKVAL");
-            names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(
-                String::from(":DYNEIN_SKVAL"),
-                build_attrval_scalar(&sk_type, &String::from(target_val)),
-            );
-        }
-        // sortKeyName >= :sortkeyval - true if the sort key value is greater than or equal to :sortkeyval.
-        Some(">=") => {
-            let target_val = iter.next().unwrap();
-            debug!(
-                "Greater than equal sign is detected in sort key expression for the value: '{}'",
-                &target_val
-            );
-            built.push_str("#DYNEIN_SKNAME >= :DYNEIN_SKVAL");
-            names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(
-                String::from(":DYNEIN_SKVAL"),
-                build_attrval_scalar(&sk_type, &String::from(target_val)),
-            );
-        }
-        // sortKeyName > :sortkeyval - true if the sort key value is greater than :sortkeyval.
-        Some(">") => {
-            let target_val = iter.next().unwrap();
-            debug!(
-                "Greater than sign is detected in sort key expression for the value: '{}'",
-                &target_val
-            );
-            built.push_str("#DYNEIN_SKNAME > :DYNEIN_SKVAL");
-            names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(
-                String::from(":DYNEIN_SKVAL"),
-                build_attrval_scalar(&sk_type, &String::from(target_val)),
-            );
-        }
-        // begins_with ( sortKeyName, :sortkeyval ) - true if the sort key value begins with a particular operand.
-        // You cannot use this function with a sort key that is of type Number.
-        Some("begins_with") | Some("BEGINS_WITH") => {
-            let target_val = iter.next().unwrap();
-            debug!(
-                "`begins_with` is detected in sort key expression for the value: '{}'",
-                &target_val
-            );
-            built.push_str("begins_with(#DYNEIN_SKNAME, :DYNEIN_SKVAL)"); // the function name `begins_with` is case-sensitive.
-            names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(
-                String::from(":DYNEIN_SKVAL"),
-                build_attrval_scalar(&sk_type, &String::from(target_val)),
-            );
-        }
-        // sortKeyName BETWEEN :sortkeyval1 AND :sortkeyval2 - true if the sort key value is greater than or equal to :sortkeyval1, and less than or equal to :sortkeyval2.
-        Some("between") | Some("BETWEEN") => {
-            debug!("`between` is detected in sort key expression.");
-            let from = iter.next().unwrap();
-            match iter.next() {
-                Some("and") | Some("AND") => (),
-                _ => {
-                    println!("ERROR: between syntax error. e.g. 'BETWEEN 10 AND 99'.");
-                    std::process::exit(1)
-                }
-            }
-            let to = iter.next().unwrap();
-            debug!("Parsed from/to values: between '{}' and '{}'.", &from, &to);
+    let mut parser = DyneinParser::new();
+    let result = if strict {
+        parser.parse_sort_key_with_suggest(
+            sort_key_expression,
+            &AttributeDefinition::new(sk_name, sk_type),
+        )
+    } else {
+        parser.parse_sort_key_with_fallback(
+            sort_key_expression,
+            &AttributeDefinition::new(sk_name, sk_type),
+        )
+    }
+    .map_err(DyneinQueryParamsError::InvalidSortKeyOption)?;
 
-            built.push_str("#DYNEIN_SKNAME BETWEEN :DYNEIN_SKVAL_FROM AND :DYNEIN_SKVAL_TO");
-            names.insert(String::from("#DYNEIN_SKNAME"), sk_name);
-            vals.insert(
-                String::from(":DYNEIN_SKVAL_FROM"),
-                build_attrval_scalar(&sk_type, &String::from(from)),
-            );
-            vals.insert(
-                String::from(":DYNEIN_SKVAL_TO"),
-                build_attrval_scalar(&sk_type, &String::from(to)),
-            );
-        }
-        _ => return Err(DyneinQueryParamsError::InvalidSortKeyOption),
-    };
+    built.push_str(&result.get_expression());
+    names.extend(result.get_names());
+    vals.extend(result.get_values());
+
     debug!(
         "Finished to build KeyConditionExpression. Currently built: '{}'",
         &built

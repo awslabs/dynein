@@ -64,6 +64,8 @@ tables: ~
 using_region: ~
 using_table: ~
 using_port: ~
+query:
+  strict_mode: false
 
 ",
     );
@@ -100,6 +102,8 @@ tables:
 using_region: local
 using_table: {table_name}
 using_port: 8000
+query:
+  strict_mode: false
 
 "
     ));
