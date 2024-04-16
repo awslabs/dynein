@@ -31,10 +31,13 @@ async fn test_apply() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-#[should_panic(expected = "not yet implemented")]
-async fn test_apply_with_dev() {
+async fn test_apply_with_dev() -> Result<(), Box<dyn std::error::Error>> {
     let tm = util::setup().await.unwrap();
     let mut c = tm.command().unwrap();
     let cmd = c.args(&["--region", "local", "admin", "apply", "--dev"]);
-    cmd.unwrap();
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "cfn.yaml or cfn.yml or cfn.json is not exist",
+    ));
+    assert_eq!(cmd.status().unwrap().code(), Some(1));
+    Ok(())
 }
