@@ -34,8 +34,8 @@ dynein - DynamoDB CLI
         - [`dy export`](#dy-export)
         - [`dy import`](#dy-import)
     - [Using DynamoDB Local with `--region local` option](#using-dynamodb-local-with---region-local-option)
+- [Contribution](#contribution)
 - [Misc](#misc)
-    - [Development](#development)
     - [Asides](#asides)
     - [Troubleshooting](#troubleshooting)
     - [Ideas for future works](#ideas-for-future-works)
@@ -1274,52 +1274,12 @@ $ dy scan
 ```
 
 
+# Contribution
+We welcome community contributions and pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for our guidelines
+on how to submit your code.
+
+
 # Misc
-
-## Development
-For development, we use `rustfmt` and `clippy` to maintain the quality of our source code.
-Before starting, please ensure both components are installed;
-
-```shell
-rustup component add rustfmt clippy
-```
-
-Additionally, we use `pre-commit` hooks to execute automated linting and basic checks.
-Please set it up before creating a commit;
-
-```shell
-brew install pre-commit # (or appropriate for your platform: https://pre-commit.com/)
-pre-commit install
-```
-
-We use [trycmd](https://crates.io/crates/trycmd) to conduct snapshot testing for CLI.
-If the snapshot is needed to be updated, run command;
-
-MacOS and Linux
-```shell
-TRYCMD=overwrite cargo test --test cli_tests
-```
-
-Windows (PowerShell)
-```powershell
-$Env:TRYCMD='overwrite'
-cargo test --test cli_tests
-[Environment]::SetEnvironmentVariable('TRYCMD',$null)
-```
-
-Please note that we use different snapshots for the Windows environment.
-
-### Bot
-If you want to update snapshots of commands, you can use the bot command `/snapshot` in your pull request.
-Please note that you must type a command exactly as written.
-
-The bot creates diff files for both Windows and Linux. You can use generated diff to patch your commit.
-
-For example, if you have developed in a Linux environment and modified the command option,
-you must also update the snapshot for the Windows environment.
-In this case, you can create a pull request for draft mode and execute `/snapshot` to create a diff file for Windows.
-Generated diff can be copied into a file and applied by `git diff <file-name>` command.
-
 ## Asides
 
 dynein is named after [a motor protein](https://en.wikipedia.org/wiki/Dynein).
