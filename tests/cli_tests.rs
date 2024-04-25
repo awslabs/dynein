@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-use trycmd;
-
 #[test]
 fn cli_tests() {
     if cfg!(windows) {

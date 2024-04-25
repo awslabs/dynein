@@ -23,7 +23,7 @@ use predicates::prelude::*; // Used for writing assertions
 async fn test_get_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
     let tm = util::setup().await?;
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -45,7 +45,7 @@ async fn test_get_non_existent_item() -> Result<(), Box<dyn std::error::Error>> 
     let table_name = tm.create_temporary_table("pk", None).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "--table", &table_name, "get", "42"]);
+    let cmd = c.args(["--region", "local", "--table", &table_name, "get", "42"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("No item found."));
@@ -58,7 +58,7 @@ async fn test_get_item() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = prepare_table_with_item(&mut tm).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "--table", &table_name, "get", "42"]);
+    let cmd = c.args(["--region", "local", "--table", &table_name, "get", "42"]);
     util::assert_eq_json(
         cmd,
         r#"{
@@ -76,7 +76,7 @@ async fn test_get_item_output_json() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = prepare_table_with_item(&mut tm).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -103,7 +103,7 @@ async fn test_get_item_output_yaml() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = prepare_table_with_item(&mut tm).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -130,7 +130,7 @@ async fn test_get_item_output_raw() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = prepare_table_with_item(&mut tm).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",

@@ -573,7 +573,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
         ((["Table", "Status", "CreatedAt", "BackupName (size)"].join("\t")) + "\n").as_bytes(),
     )?;
     for backup in backups {
-        let line = vec![
+        let line = [
             backup.table_name.expect("table name should exist"),
             backup.backup_status.expect("status should exist"),
             epoch_to_rfc3339(

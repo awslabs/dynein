@@ -34,7 +34,7 @@ async fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&["--region", "local", "--table", &table_name, "query", "abc"]);
+    let query_cmd = c.args(["--region", "local", "--table", &table_name, "query", "abc"]);
     query_cmd
         .assert()
         .success()
@@ -60,7 +60,7 @@ async fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -94,7 +94,7 @@ async fn test_query_limit() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -128,7 +128,7 @@ async fn test_query_with_sort_key() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -166,7 +166,7 @@ async fn test_query_with_sort_key_order() -> Result<(), Box<dyn std::error::Erro
 
     for _ in 1..10 {
         let mut c = tm.command()?;
-        let query_cmd = c.args(&[
+        let query_cmd = c.args([
             "--region",
             "local",
             "--table",
@@ -200,7 +200,7 @@ async fn test_query_with_sort_key_le() -> Result<(), Box<dyn std::error::Error>>
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -239,7 +239,7 @@ async fn test_query_using_between_string() -> Result<(), Box<dyn std::error::Err
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -279,7 +279,7 @@ async fn test_query_using_between_number() -> Result<(), Box<dyn std::error::Err
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -318,7 +318,7 @@ async fn test_query_using_begins_with() -> Result<(), Box<dyn std::error::Error>
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -351,7 +351,7 @@ async fn test_query_invalid_input() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -380,7 +380,7 @@ async fn test_query_with_strict_mode_with_suggestion() -> Result<(), Box<dyn std
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -413,7 +413,7 @@ async fn test_query_with_strict_mode_without_suggestion() -> Result<(), Box<dyn 
         .await?;
 
     let mut c = tm.command()?;
-    let query_cmd = c.args(&[
+    let query_cmd = c.args([
         "--region",
         "local",
         "--table",

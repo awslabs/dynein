@@ -400,7 +400,7 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
     }
 
     // Filter out primary keys. i.e. select attributes that aren't required by the table's keyschema.
-    let primary_keys = vec![
+    let primary_keys = [
         Some(ts.pk.name.to_owned()),
         ts.sk.to_owned().map(|x| x.name),
     ];

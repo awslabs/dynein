@@ -23,7 +23,7 @@ use predicates::prelude::*; // Used for writing assertions
 async fn test_desc_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
     let tm = util::setup().await?;
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -45,7 +45,7 @@ async fn test_desc_table_from_options() -> Result<(), Box<dyn std::error::Error>
     let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "--table", &table_name, "desc"]);
+    let cmd = c.args(["--region", "local", "--table", &table_name, "desc"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
@@ -76,7 +76,7 @@ async fn test_desc_table_from_args() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "desc", &table_name]);
+    let cmd = c.args(["--region", "local", "desc", &table_name]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
@@ -108,7 +108,7 @@ async fn test_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> {
     let table_name2 = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "desc", "--all-tables"]);
+    let cmd = c.args(["--region", "local", "desc", "--all-tables"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
