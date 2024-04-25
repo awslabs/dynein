@@ -85,6 +85,14 @@ impl From<crate::parser::ParseError> for DyneinBatchError {
     }
 }
 
+impl From<dialoguer::Error> for DyneinBatchError {
+    fn from(e: dialoguer::Error) -> Self {
+        match e {
+            dialoguer::Error::IO(e) => Self::LoadData(e),
+        }
+    }
+}
+
 /* =================================================
 Public functions
 ================================================= */

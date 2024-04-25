@@ -55,13 +55,13 @@ schema:
   pk: pk \\(S\\)
   sk: sk \\(N\\)
 mode: OnDemand
-capacity: ~
-gsi: ~
-lsi: ~
-stream: ~
+capacity: null
+gsi: null
+lsi: null
+stream: null
 count: 0
 size_bytes: 0
-created_at: \".*\"",
+created_at: .*",
             table_name
         ))
         .unwrap(),
@@ -86,13 +86,13 @@ schema:
   pk: pk \\(S\\)
   sk: sk \\(N\\)
 mode: OnDemand
-capacity: ~
-gsi: ~
-lsi: ~
-stream: ~
+capacity: null
+gsi: null
+lsi: null
+stream: null
 count: 0
 size_bytes: 0
-created_at: \".*\"",
+created_at: .*",
             table_name
         ))
         .unwrap(),
@@ -116,15 +116,15 @@ region: local
 status: ACTIVE
 schema:
   pk: pk \\(S\\)
-  sk: ~
+  sk: null
 mode: OnDemand
-capacity: ~
-gsi: ~
-lsi: ~
-stream: ~
+capacity: null
+gsi: null
+lsi: null
+stream: null
 count: 0
 size_bytes: 0
-created_at: \".*\"",
+created_at: .*",
             table_name1
         ))
         .unwrap()
@@ -137,13 +137,13 @@ schema:
   pk: pk \\(S\\)
   sk: sk \\(N\\)
 mode: OnDemand
-capacity: ~
-gsi: ~
-lsi: ~
-stream: ~
+capacity: null
+gsi: null
+lsi: null
+stream: null
 count: 0
 size_bytes: 0
-created_at: \".*\"",
+created_at: .*",
                 table_name2
             ))
             .unwrap(),

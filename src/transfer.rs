@@ -29,11 +29,28 @@ use log::{debug, error};
 use serde_json::{de::StrRead, Deserializer, StreamDeserializer, Value as JsonValue};
 
 use rusoto_dynamodb::{AttributeValue, ScanOutput, WriteRequest};
+use thiserror::Error;
 
 use super::app;
 use super::batch;
 use super::control;
 use super::data;
+
+#[derive(Error, Debug)]
+pub enum DyneinExportError {
+    #[error("io error")]
+    IO(#[from] std::io::Error),
+    #[error("serde error")]
+    SerdeError(#[from] serde_json::Error),
+}
+
+impl From<dialoguer::Error> for DyneinExportError {
+    fn from(e: dialoguer::Error) -> Self {
+        match e {
+            dialoguer::Error::IO(e) => DyneinExportError::IO(e),
+        }
+    }
+}
 
 #[derive(Debug)]
 struct SuggestedAttribute {
@@ -125,7 +142,7 @@ pub async fn export(
     keys_only: bool,
     output_file: String,
     format: Option<String>,
-) -> Result<(), IOError> {
+) -> Result<(), DyneinExportError> {
     // TODO: Parallel scan to make it faster https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.ParallelScan
     // TODO: Show rough progress bar (sum(scan_output.scanned_item)/item_size_of_the_table(6hr)) to track progress.
     let ts: app::TableSchema = app::table_schema(&cx).await;
@@ -350,7 +367,7 @@ Private functions
 async fn overwrite_attributes_or_exit(
     cx: &app::Context,
     ts: &app::TableSchema,
-) -> Result<Option<String>, IOError> {
+) -> Result<Option<String>, dialoguer::Error> {
     println!("As neither --keys-only nor --attributes options are given, fetching an item to understand attributes to export...");
     let suggested_attributes: Vec<SuggestedAttribute> = suggest_attributes(cx, ts).await;
 
