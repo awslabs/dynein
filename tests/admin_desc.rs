@@ -25,7 +25,7 @@ async fn test_admin_desc_table_from_options() -> Result<(), Box<dyn std::error::
     let table_name = tm.create_temporary_table("pk", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "admin", "--table", &table_name, "desc"]);
+    let cmd = c.args(["--region", "local", "admin", "--table", &table_name, "desc"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
@@ -55,7 +55,7 @@ async fn test_admin_desc_table_from_args() -> Result<(), Box<dyn std::error::Err
     let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "admin", "desc", &table_name]);
+    let cmd = c.args(["--region", "local", "admin", "desc", &table_name]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}
@@ -86,7 +86,7 @@ async fn test_admin_desc_all_tables() -> Result<(), Box<dyn std::error::Error>> 
     let table_name2 = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "admin", "desc", "--all-tables"]);
+    let cmd = c.args(["--region", "local", "admin", "desc", "--all-tables"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(format!(
             "name: {}

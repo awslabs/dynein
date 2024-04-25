@@ -23,7 +23,7 @@ use predicates::prelude::*; // Used for writing assertions
 async fn test_apply() -> Result<(), Box<dyn std::error::Error>> {
     let tm = util::setup().await?;
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "admin", "apply"]);
+    let cmd = c.args(["--region", "local", "admin", "apply"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("not yet implemented"));
@@ -35,6 +35,6 @@ async fn test_apply() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_apply_with_dev() {
     let tm = util::setup().await.unwrap();
     let mut c = tm.command().unwrap();
-    let cmd = c.args(&["--region", "local", "admin", "apply", "--dev"]);
+    let cmd = c.args(["--region", "local", "admin", "apply", "--dev"]);
     cmd.unwrap();
 }

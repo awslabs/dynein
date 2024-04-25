@@ -23,7 +23,7 @@ async fn test_config_dump() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup_with_lock().await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["config", "clear"]);
+    let cmd = c.args(["config", "clear"]);
     cmd.assert().success();
 
     let table_name = tm.create_temporary_table("pk", None).await?;
@@ -37,7 +37,7 @@ async fn test_config_clear() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup_with_lock().await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["config", "clear"]);
+    let cmd = c.args(["config", "clear"]);
     cmd.assert().success();
 
     let table_name = tm.create_temporary_table("pk", None).await?;
@@ -50,12 +50,12 @@ async fn test_config_clear() -> Result<(), Box<dyn std::error::Error>> {
     util::check_dynein_files_existence(&config_dir, true);
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["config", "clear"]);
+    let cmd = c.args(["config", "clear"]);
     cmd.assert().success();
     util::check_dynein_files_existence(&config_dir, false);
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["config", "dump"]);
+    let cmd = c.args(["config", "dump"]);
     cmd.assert().success().stdout(
         "---
 tables: ~
@@ -78,13 +78,13 @@ async fn assert_config_use_dump(
     table_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "use", &table_name]);
+    let cmd = c.args(["--region", "local", "use", &table_name]);
     cmd.assert().success().stdout(format!(
         "Now you're using the table '{table_name}' (local).\n"
     ));
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["config", "dump"]);
+    let cmd = c.args(["config", "dump"]);
     cmd.assert().success().stdout(format!(
         "---
 tables:

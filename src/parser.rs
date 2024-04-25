@@ -2624,9 +2624,9 @@ mod tests {
         );
 
         // test non-strict input for string types
-        let op_in = vec!["= 1", "==1", "> 1", ">=1", "<1.2", "<=-1e5"];
-        let expected_op = vec!["=", "=", ">", ">=", "<", "<="];
-        let expected_val = vec!["1", "1", "1", "1", "1.2", "-1e5"];
+        let op_in = ["= 1", "==1", "> 1", ">=1", "<1.2", "<=-1e5"];
+        let expected_op = ["=", "=", ">", ">=", "<", "<="];
+        let expected_val = ["1", "1", "1", "1", "1.2", "-1e5"];
         for i in 0..op_in.len() {
             parser.clear();
             assert_eq!(

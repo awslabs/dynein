@@ -25,7 +25,7 @@ async fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = "table--test_create_table";
 
     let mut c = tm.command()?;
-    let create_cmd = c.args(&[
+    let create_cmd = c.args([
         "--region", "local", "admin", "create", "table", table_name, "--keys", "pk",
     ]);
     create_cmd
@@ -38,7 +38,7 @@ async fn test_create_table() -> Result<(), Box<dyn std::error::Error>> {
 
     // $ dy admin desc <table_name>
     let mut c = tm.command()?;
-    let desc_cmd = c.args(&["--region", "local", "desc", table_name]);
+    let desc_cmd = c.args(["--region", "local", "desc", table_name]);
     desc_cmd
         .assert()
         .success()
@@ -58,7 +58,7 @@ async fn test_create_table_with_region_local_and_port_number_options(
     let tm = util::setup_with_port(port).await?;
 
     let mut c = tm.command()?;
-    let create_cmd = c.args(&[
+    let create_cmd = c.args([
         "--region",
         "local",
         "--port",
@@ -80,7 +80,7 @@ async fn test_create_table_with_region_local_and_port_number_options(
 
     // $ dy admin desc <table_name>
     let mut c = tm.command()?;
-    let desc_cmd = c.args(&[
+    let desc_cmd = c.args([
         "--region",
         "local",
         "--port",

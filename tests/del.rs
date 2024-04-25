@@ -23,7 +23,7 @@ use predicates::prelude::*; // Used for writing assertions
 async fn test_del_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
     let tm = util::setup().await?;
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -45,7 +45,7 @@ async fn test_del_non_existent_item() -> Result<(), Box<dyn std::error::Error>> 
     let table_name = tm.create_temporary_table("pk", None).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "--table", &table_name, "del", "42"]);
+    let cmd = c.args(["--region", "local", "--table", &table_name, "del", "42"]);
     cmd.assert().success().stdout(format!(
         "Successfully deleted an item from the table '{}'.\n",
         table_name
@@ -68,14 +68,14 @@ async fn test_del_existent_item() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "--table", &table_name, "del", "a"]);
+    let cmd = c.args(["--region", "local", "--table", &table_name, "del", "a"]);
     cmd.assert().success().stdout(format!(
         "Successfully deleted an item from the table '{}'.\n",
         table_name
     ));
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
+    let scan_cmd = c.args(["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd
         .assert()
         .success()
@@ -100,7 +100,7 @@ async fn test_del_existent_item_with_sk() -> Result<(), Box<dyn std::error::Erro
         .await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -115,7 +115,7 @@ async fn test_del_existent_item_with_sk() -> Result<(), Box<dyn std::error::Erro
     ));
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&["--region", "local", "--table", &table_name, "scan"]);
+    let scan_cmd = c.args(["--region", "local", "--table", &table_name, "scan"]);
     scan_cmd.assert().success().stdout(predicate::str::diff(
         "pk   sk  attributes\nabc  1\nabc  3\n",
     ));

@@ -118,7 +118,7 @@ impl<'a> TestManager<'a> {
     {
         for table in tables {
             let mut c = self.command()?;
-            let cmd = c.args(&[
+            let cmd = c.args([
                 "--region",
                 "local",
                 "--port",
@@ -177,7 +177,7 @@ pub async fn setup_with_lock() -> Result<TestManager<'static>, Box<dyn std::erro
 fn check_dynamodb_local_running(port: u16) -> bool {
     let mut docker_for_check = Command::new("docker");
 
-    let check_cmd = docker_for_check.args(&[
+    let check_cmd = docker_for_check.args([
         "ps",
         "--format",
         "{{.Ports}}",
@@ -227,7 +227,7 @@ async fn setup_container(port: i32) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut docker_for_run = Command::new("docker");
-    let docker_run = docker_for_run.args(&[
+    let docker_run = docker_for_run.args([
         "run",
         "-p",
         &format!("{}:8000", port),
@@ -285,11 +285,7 @@ impl TemporaryItem {
         sval: Option<&'static str>,
         item: Option<&'static str>,
     ) -> TemporaryItem {
-        TemporaryItem {
-            pval: pval,
-            sval: sval,
-            item: item,
-        }
+        TemporaryItem { pval, sval, item }
     }
 
     pub fn keys(&self) -> Vec<&'static str> {
@@ -346,7 +342,7 @@ fn sort_json_array(value: &mut Value) {
             for v in arr.iter_mut() {
                 sort_json_array(v);
             }
-            arr.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+            arr.sort_by_key(|a| a.to_string());
         }
         Value::Object(obj) => {
             for v in obj.values_mut() {

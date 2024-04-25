@@ -22,7 +22,7 @@ async fn test_list_table_with_no_table() -> Result<(), Box<dyn std::error::Error
     let tm = util::setup_with_lock().await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "list"]);
+    let cmd = c.args(["--region", "local", "list"]);
     cmd.assert().success().stdout(
         predicate::str::is_match(
             "DynamoDB tables in region: local
@@ -41,15 +41,15 @@ async fn test_list_table_with_multiple_tables() -> Result<(), Box<dyn std::error
     let table_name2 = tm.create_temporary_table("pk", None).await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "use", &table_name]);
+    let cmd = c.args(["--region", "local", "use", &table_name]);
     cmd.assert().success();
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "list"]);
+    let cmd = c.args(["--region", "local", "list"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("DynamoDB tables in region: local"))
         .stdout(predicate::str::contains(format!("* {table_name}")))
-        .stdout(predicate::str::contains(&table_name2));
+        .stdout(predicate::str::contains(table_name2));
     Ok(())
 }

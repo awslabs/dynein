@@ -36,7 +36,7 @@ async fn test_batch_write_json_put() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "bwrite",
@@ -46,7 +46,7 @@ async fn test_batch_write_json_put() -> Result<(), Box<dyn std::error::Error>> {
     .output()?;
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&[
+    let scan_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -99,7 +99,7 @@ async fn test_batch_write_json_delete() -> Result<(), Box<dyn std::error::Error>
     );
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "bwrite",
@@ -109,7 +109,7 @@ async fn test_batch_write_json_delete() -> Result<(), Box<dyn std::error::Error>
     .output()?;
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&[
+    let scan_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -121,7 +121,7 @@ async fn test_batch_write_json_delete() -> Result<(), Box<dyn std::error::Error>
     scan_cmd.assert().success().stdout("[]\n");
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&[
+    let scan_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -158,7 +158,7 @@ async fn test_batch_write_json_put_delete() -> Result<(), Box<dyn std::error::Er
     );
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "bwrite",
@@ -168,7 +168,7 @@ async fn test_batch_write_json_put_delete() -> Result<(), Box<dyn std::error::Er
     .output()?;
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&[
+    let scan_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -220,7 +220,7 @@ async fn test_batch_write_json_put_delete_multiple_tables() -> Result<(), Box<dy
     );
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "bwrite",
@@ -231,7 +231,7 @@ async fn test_batch_write_json_put_delete_multiple_tables() -> Result<(), Box<dy
 
     for table in [&table_name, &table_name2] {
         let mut c = tm.command()?;
-        let scan_cmd = c.args(&["--region", "local", "--table", table, "scan", "-o", "json"]);
+        let scan_cmd = c.args(["--region", "local", "--table", table, "scan", "-o", "json"]);
         scan_cmd.assert().success().stdout(
             predicate::str::is_match(r#""pk": "ni""#)?
                 .and(predicate::str::is_match(r#""pk": "san""#)?),
@@ -247,7 +247,7 @@ async fn test_batch_write_put() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = tm.create_temporary_table("pk", None).await?;
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "--table",
@@ -264,7 +264,7 @@ async fn test_batch_write_put() -> Result<(), Box<dyn std::error::Error>> {
     .output()?;
 
     let mut c = tm.command()?;
-    let get_cmd = c.args(&[
+    let get_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -310,7 +310,7 @@ async fn test_batch_write_put_sk() -> Result<(), Box<dyn std::error::Error>> {
     let table_name = tm.create_temporary_table("pk", Some("sk")).await?;
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "--table",
@@ -322,7 +322,7 @@ async fn test_batch_write_put_sk() -> Result<(), Box<dyn std::error::Error>> {
     .output()?;
 
     let mut c = tm.command()?;
-    let get_cmd = c.args(&[
+    let get_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -356,7 +356,7 @@ async fn test_batch_write_del() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "--table",
@@ -368,7 +368,7 @@ async fn test_batch_write_del() -> Result<(), Box<dyn std::error::Error>> {
     .output()?;
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&[
+    let scan_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -398,7 +398,7 @@ async fn test_batch_write_del_sk() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "--table",
@@ -410,7 +410,7 @@ async fn test_batch_write_del_sk() -> Result<(), Box<dyn std::error::Error>> {
     .output()?;
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&[
+    let scan_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -445,7 +445,7 @@ async fn test_batch_write_all_options() -> Result<(), Box<dyn std::error::Error>
         &tmpdir,
     );
     let mut c = tm.command()?;
-    c.args(&[
+    c.args([
         "--region",
         "local",
         "--table",
@@ -461,7 +461,7 @@ async fn test_batch_write_all_options() -> Result<(), Box<dyn std::error::Error>
     .output()?;
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args(&[
+    let scan_cmd = c.args([
         "--region",
         "local",
         "--table",
@@ -474,14 +474,8 @@ async fn test_batch_write_all_options() -> Result<(), Box<dyn std::error::Error>
     let output_str = String::from_utf8(output)?;
 
     // Check if the first item has been deleted
-    assert_eq!(
-        false,
-        predicate::str::is_match(r#""pk": "11""#)?.eval(&output_str)
-    );
-    assert_eq!(
-        false,
-        predicate::str::is_match(r#""pk": "ichi""#)?.eval(&output_str)
-    );
+    assert!(!predicate::str::is_match(r#""pk": "11""#)?.eval(&output_str));
+    assert!(!predicate::str::is_match(r#""pk": "ichi""#)?.eval(&output_str));
     // Check if the json item put exists
     assert!(predicate::str::is_match(r#""pk": "12""#)?.eval(&output_str));
     // Check if the command inputs exists

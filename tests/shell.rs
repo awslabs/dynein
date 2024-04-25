@@ -30,7 +30,7 @@ async fn test_shell_mode() -> Result<(), Box<dyn std::error::Error>> {
 
     // $ dy admin create table <table_name> --keys pk
     let mut c = tm.command()?;
-    let shell_session = c.args(&["--region", "local", "--shell"]);
+    let shell_session = c.args(["--region", "local", "--shell"]);
     let mut tmpfile = Builder::new().tempfile()?.into_file();
     writeln!(tmpfile, "admin create table {} --keys pk", table_name)?;
     writeln!(tmpfile, "use {}", table_name)?;

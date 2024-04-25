@@ -24,7 +24,7 @@ async fn test_bootstrap() -> Result<(), Box<dyn std::error::Error>> {
     let tm = util::setup().await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "bootstrap"]);
+    let cmd = c.args(["--region", "local", "bootstrap"]);
     cmd.assert().success().stdout(predicate::str::contains(
         "Now all tables have sample data. Try following commands to play with dynein. Enjoy!",
     ));
@@ -119,13 +119,13 @@ async fn test_bootstrap_movie() -> Result<(), Box<dyn std::error::Error>> {
     let tm = util::setup().await?;
 
     let mut c = tm.command()?;
-    let cmd = c.args(&["--region", "local", "bootstrap", "--sample", "movie"]);
+    let cmd = c.args(["--region", "local", "bootstrap", "--sample", "movie"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("All tables are in ACTIVE."));
 
     let mut c = tm.command()?;
-    let cmd = c.args(&[
+    let cmd = c.args([
         "--region",
         "local",
         "--table",
