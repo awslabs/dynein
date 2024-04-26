@@ -70,3 +70,17 @@ jobs:
       run: cargo test cli_tests
     - name: Build with release flag
       run: cargo build --release --all-features
+  audit-latest:
+    name: Audit latest dependencies
+    runs-on: ubuntu-latest
+    env:
+      CARGO_AUDIT_BASE_FLAGS: --quiet -D warnings -D unmaintained -D unsound -D yanked
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install rust toolchain
+      run: rustup set profile minimal
+    - name: Install cargo audit
+      run: cargo install cargo-audit
+    - name: Run audit command
+      run: cargo audit ${{ env.CARGO_AUDIT_BASE_FLAGS }}
