@@ -84,3 +84,22 @@ jobs:
       run: cargo install cargo-audit
     - name: Run audit command
       run: cargo audit ${{ env.CARGO_AUDIT_BASE_FLAGS }}
+  credentials-scan:
+    name: Credentials scan
+    runs-on: ubuntu-latest
+    steps:
+    - name: PR commits + 1
+      # Adding +1 to fetch a base commit
+      run: echo "fetch_depth=$(( ${{ github.event.pull_request.commits }} + 1 ))" >> $GITHUB_ENV
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # Checkout pull request HEAD commit instead of merge commit
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: ${{ env.fetch_depth }}
+    - name: Secret Scanning
+      # v3.74.0
+      uses: trufflesecurity/trufflehog@ea4d9d2d32f45e77893ecb6338d7c6bd7cddb3ec
+      with:
+        extra_args: --no-verification
+        version: 3.74.0@sha256:7557cb2527b0c80dd5d7350b6bcd1f3a7c4baeeb158e67d6b0ee5d2b0942f151
