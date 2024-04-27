@@ -10,13 +10,16 @@ USAGE:
     dy[EXE] [FLAGS] [OPTIONS] [SUBCOMMAND]
 
 FLAGS:
-    -h, --help       
+    -h, --help                       
             Prints help information
 
-        --shell      
+        --shell                      
             
 
-    -V, --version    
+        --third-party-attribution    
+            This option displays detailed information about third-party libraries, frameworks, and other components
+            incorporated into dynein, as well as the full license texts under which they are distributed
+    -V, --version                    
             Prints version information
 
 
@@ -62,9 +65,12 @@ USAGE:
     dy[EXE] [FLAGS] [OPTIONS] [SUBCOMMAND]
 
 FLAGS:
-    -h, --help       Prints help information
-        --shell      
-    -V, --version    Prints version information
+    -h, --help                       Prints help information
+        --shell                      
+        --third-party-attribution    This option displays detailed information about third-party libraries, frameworks,
+                                     and other components incorporated into dynein, as well as the full license texts
+                                     under which they are distributed
+    -V, --version                    Prints version information
 
 OPTIONS:
     -p, --port <port>        Specify the port number. This option has an effect only when `--region local` is used

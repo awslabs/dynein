@@ -50,6 +50,11 @@ pub struct Dynein {
 
     #[structopt(long, required_if("child", "None"), conflicts_with("child"))]
     pub shell: bool,
+
+    /// This option displays detailed information about third-party libraries, frameworks, and other components incorporated into dynein,    
+    /// as well as the full license texts under which they are distributed.
+    #[structopt(long, required_if("child", "None"), conflicts_with("child"))]
+    pub third_party_attribution: bool,
 }
 
 // NOTE: need to be placed in the same module as Dynein struct

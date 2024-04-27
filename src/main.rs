@@ -15,10 +15,14 @@
  */
 
 use crate::data::QueryParams;
+use brotli::Decompressor;
+use std::io::{stdout, Cursor};
+
 use log::debug;
 use std::error::Error;
 
 extern crate pest;
+
 #[macro_use]
 extern crate pest_derive;
 
@@ -290,6 +294,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+    } else if c.third_party_attribution {
+        // Load 3rd party attribution file
+        let compressed_data = include_bytes!("./resources/attribution/ThirdPartyAttribution.br");
+        let cursor = Cursor::new(compressed_data);
+        let mut decompressor = Decompressor::new(cursor, 4096);
+
+        let mut stdout = stdout().lock();
+        std::io::copy(&mut decompressor, &mut stdout)?;
     } else {
         // Neiter subcommand nor --shell specified
         use structopt::StructOpt;
