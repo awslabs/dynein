@@ -606,8 +606,6 @@ dependencies = [
  "termcolor",
  "tokio",
  "trycmd",
- "version_check",
- "yaml-rust",
  "zip",
 ]
 
