@@ -1,0 +1,76 @@
+name: Daily security audit
+on:
+  schedule:
+    # This workflow is scheduled 08:43 JST everyday
+  - cron: 43 23 * * *
+
+env:
+  # We treat all findings as error to notify its status for maintainers.
+  # If we need to temporarily suppress the error, we use `--ignore` option with justification.
+  CARGO_AUDIT_BASE_FLAGS: --quiet -D warnings -D unmaintained -D unsound -D yanked
+
+  # RUSTSEC-2022-0071
+  # We are working to migrate from Rusoto to AWS SDK for Rust.
+  # To emphasize other issues and because of not affecting the customer immediately, we disable this error.
+  # See: https://github.com/awslabs/dynein/pull/126
+  #
+  # RUSTSEC-2021-0139
+  # We are working to migrate from structopt to clap 4 to delete `ansi_term` dependency.
+  # To emphasize other issues and because of not affecting the customer immediately, we disable this error.
+  # See: https://github.com/awslabs/dynein/pull/127
+  #
+  # RUSTSEC-2021-0145
+  # We are working to migrate from structopt to clap 4 to delete `atty` dependency.
+  # To emphasize other issues and because of not affecting the customer immediately, we disable this error.
+  # See: https://github.com/awslabs/dynein/pull/127
+  CARGO_AUDIT_IGNORE_FLAGS: --ignore RUSTSEC-2022-0071 --ignore RUSTSEC-2021-0139 --ignore RUSTSEC-2021-0145
+
+permissions: {}
+
+jobs:
+  audit-latest:
+    name: Audit latest dependencies
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install rust toolchain
+      run: rustup set profile minimal
+    - name: Install cargo audit
+      run: cargo install cargo-audit
+    - name: Run audit command
+      id: run-audit
+      uses: actions/github-script@v7
+      with:
+        result-encoding: json
+        script: |
+          // Execute a cargo audit
+          let output = '';
+
+          const options = {
+            ignoreReturnCode: true,
+          };
+          options.listeners = {
+            stdout: (data) => {
+              output += data.toString();
+            },
+            stderr: (data) => {
+              output += data.toString();
+            }
+          };
+
+          const code = await exec.exec("cargo audit ${{ env.CARGO_AUDIT_BASE_FLAGS }} ${{ env.CARGO_AUDIT_IGNORE_FLAGS }}", null, options);
+
+          if (code !== 0) {
+            core.setFailed("There are errors from cargo audit.");
+            return { "text":output };
+          } else {
+            return null;
+          }
+    - name: Notify to Slack
+      if: ${{ failure() }}
+      uses: slackapi/slack-github-action@70cd7be8e40a46e8b0eced40b0de447bdb42f68e   # This commit hash means v1.26.0
+      with:
+        payload: ${{ steps.run-audit.outputs.result }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
