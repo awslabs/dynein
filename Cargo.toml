@@ -31,37 +31,38 @@ path = "src/main.rs"
 
 [dependencies]
 chrono           = "0.4"
-dialoguer        = "0.10.4"
-dirs             = "4.0.0"
-env_logger       = "0.9.0"
-futures          = "0.3.19"
-log              = "0.4.11"
-regex            = "1.4.2"
-reqwest          = "0.11.8"
+dialoguer        = "0.11.0"
+dirs             = "5.0.1"
+env_logger       = "0.11.3"
+futures          = "0.3.30"
+log              = "0.4.21"
+regex            = "1.10.4"
+reqwest          = "0.12.4"
 rusoto_signature = "0.48.0"
 rusoto_core      = "0.48.0"
 rusoto_dynamodb  = "0.48.0"
 rusoto_ec2       = "0.48.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json       = "1.0"
-serde_yaml       = "0.8"
-structopt        = "0.3.20"
-tabwriter        = "1.2"
-tempfile         = "3.3.0"
-termcolor        = "1.1.2"
-zip              = "0.6.4"
-tokio = { version = "1.15.0", features = ["full"] }
-pest = "2.6.0"
-pest_derive = "2.6.0"
-bytes = "1.4.0"
-itertools = "0.10.5"
-console = "0.15.7"
-brotli = "3.3.4"
-base64 = "0.21.5"
+serde_yaml       = "0.9.34"
+structopt        = "0.3.26"
+tabwriter        = "1.4"
+tempfile         = "3.10.1"
+termcolor        = "1.4.1"
+zip              = "1.1.2"
+tokio = { version = "1.37.0", features = ["full"] }
+pest = "2.7.9"
+pest_derive = "2.7.7"
+bytes = "1.6.0"
+itertools = "0.12.1"
+console = "0.15.8"
+brotli = "5.0.0"
+base64 = "0.22.0"
+thiserror = "1.0.59"
 
 [dev-dependencies]
-assert_cmd = "2.0.2" # contains helpers make executing the main binary on integration tests easier.
-predicates = "2.0.3" # to introduce advanced assertions
-once_cell = "1.9.0" # to setup docker container syncrhonously
-trycmd = "0.14.16" # snapshot testing for CLI
+assert_cmd = "2.0.14" # contains helpers make executing the main binary on integration tests easier.
+predicates = "3.1.0" # to introduce advanced assertions
+once_cell = "1.19.0" # to setup docker container syncrhonously
+trycmd = "0.15.1" # snapshot testing for CLI
 rand = "0.8.5"

@@ -57,13 +57,11 @@ async fn test_config_clear() -> Result<(), Box<dyn std::error::Error>> {
     let mut c = tm.command()?;
     let cmd = c.args(["config", "dump"]);
     cmd.assert().success().stdout(
-        "---
-tables: ~
+        "tables: null
 
----
-using_region: ~
-using_table: ~
-using_port: ~
+using_region: null
+using_table: null
+using_port: null
 query:
   strict_mode: false
 
@@ -86,19 +84,17 @@ async fn assert_config_use_dump(
     let mut c = tm.command()?;
     let cmd = c.args(["config", "dump"]);
     cmd.assert().success().stdout(format!(
-        "---
-tables:
+        "tables:
   local/{table_name}:
     region: local
     name: {table_name}
     pk:
       name: pk
       kind: S
-    sk: ~
-    indexes: ~
+    sk: null
+    indexes: null
     mode: OnDemand
 
----
 using_region: local
 using_table: {table_name}
 using_port: 8000
