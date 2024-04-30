@@ -44,10 +44,9 @@ async fn test_config_clear() -> Result<(), Box<dyn std::error::Error>> {
     // In order to check existence of config before clear
     assert_config_use_dump(&tm, table_name).await?;
 
-    let home = dirs::home_dir().unwrap();
-    let base = home.to_str().unwrap();
-    let config_dir = format!("{base}/.dynein");
-    util::check_dynein_files_existence(&config_dir, true);
+    let config_dir = tm.default_config_dir();
+    let config_dir = config_dir.to_str().unwrap();
+    util::check_dynein_files_existence(config_dir, true);
 
     let mut c = tm.command()?;
     let cmd = c.args(["config", "clear"]);

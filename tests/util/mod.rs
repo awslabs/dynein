@@ -26,7 +26,7 @@ use rusoto_core::Region;
 use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use serde_json::Value;
 use std::io::{self, Write}; // Used when check results by printing to stdout
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -38,13 +38,63 @@ static SETUP_DOCKER_RUN_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 pub struct TestManager<'a> {
     port: i32,
     temporary_tables: Vec<String>,
+    config_dirs: Vec<PathBuf>,
+    default_config_dir: PathBuf,
     _read_lock: Option<RwLockReadGuard<'a, ()>>,
     _write_lock: Option<RwLockWriteGuard<'a, ()>>,
 }
 
 impl<'a> TestManager<'a> {
+    fn create_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let dir_name: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
+        println!("create config folder: {}", dir_name);
+
+        let mut conf_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+        conf_dir.push(dir_name);
+
+        // Create .dynein directory
+        let mut dir = conf_dir.clone();
+        dir.push(".dynein");
+        std::fs::create_dir_all(&dir)?;
+
+        Ok(conf_dir)
+    }
+
+    pub fn default_config_dir(&self) -> PathBuf {
+        let mut path = self.default_config_dir.to_path_buf();
+        path.push(".dynein");
+        path
+    }
+
     pub fn command(&self) -> Result<Command, Box<dyn std::error::Error>> {
-        Ok(Command::cargo_bin("dy")?)
+        let mut c = Command::cargo_bin("dy")?;
+        c.env("DYNEIN_CONFIG_DIR", &self.default_config_dir);
+        Ok(c)
+    }
+
+    pub fn command_with_envs<S>(&mut self, config: S) -> Result<Command, Box<dyn std::error::Error>>
+    where
+        S: AsRef<[u8]>,
+    {
+        let conf_dir = Self::create_config_dir()?;
+
+        let mut conf_path = conf_dir.clone();
+        conf_path.push(".dynein");
+        conf_path.push("config.yml");
+        std::fs::write(conf_path, config)?;
+
+        self.config_dirs.push(conf_dir.to_owned());
+
+        let cmd = self.command().map(|mut x| {
+            x.env("DYNEIN_CONFIG_DIR", conf_dir);
+            x
+        });
+
+        cmd
     }
 
     /// Create temporary table which is deleted when the struct is dropped.
@@ -137,12 +187,30 @@ impl<'a> TestManager<'a> {
 
         Ok(())
     }
+
+    pub fn cleanup_config<I, P>(&self, config_dirs: I) -> Result<(), Box<dyn std::error::Error>>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        for dir in config_dirs {
+            std::fs::remove_dir_all(dir)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> Drop for TestManager<'a> {
     fn drop(&mut self) {
         println!("delete temporary tables: {:?}", self.temporary_tables);
         let _ = self.cleanup(&self.temporary_tables);
+        println!(
+            "delete config directories: {:?} and {:?}",
+            self.config_dirs, self.default_config_dir
+        );
+        let _ = self.cleanup_config([&self.default_config_dir]);
+        let _ = self.cleanup_config(self.config_dirs.iter());
     }
 }
 
@@ -159,6 +227,8 @@ pub async fn setup_with_port(
     Ok(TestManager {
         port,
         temporary_tables: vec![],
+        config_dirs: vec![],
+        default_config_dir: TestManager::create_config_dir()?,
         _read_lock: Some(lock),
         _write_lock: None,
     })
@@ -171,6 +241,8 @@ pub async fn setup_with_lock() -> Result<TestManager<'static>, Box<dyn std::erro
     Ok(TestManager {
         port: 8000,
         temporary_tables: vec![],
+        config_dirs: vec![],
+        default_config_dir: TestManager::create_config_dir()?,
         _read_lock: None,
         _write_lock: Some(lock),
     })
@@ -302,8 +374,14 @@ impl TemporaryItem {
 }
 
 pub fn check_dynein_files_existence(dir: &str, exist: bool) {
-    assert_eq!(Path::new(&format!("{}/config.yml", dir)).exists(), exist);
-    assert_eq!(Path::new(&format!("{}/cache.yml", dir)).exists(), exist);
+    // assert_eq!(Path::new(&format!("{}/config.yml", dir)).exists(), exist);
+    let mut config = PathBuf::from(dir);
+    config.push("config.yml");
+    assert_eq!(config.exists(), exist);
+    // assert_eq!(Path::new(&format!("{}/cache.yml", dir)).exists(), exist);
+    let mut cache = PathBuf::from(dir);
+    cache.push("cache.yml");
+    assert_eq!(cache.exists(), exist);
 }
 
 pub async fn cleanup_config(dummy_dir: &str) -> io::Result<()> {
