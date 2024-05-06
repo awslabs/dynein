@@ -63,10 +63,18 @@ jobs:
         else
           echo "matrix.os: ${{ matrix.os }} is not handled."
         fi
+    - name: Generate SHA256 checksum for windows
+      if: matrix.name == 'windows'
+      run: |
+        Get-FileHash -Path dynein-${{ matrix.name }}.zip -Algorithm SHA256 | ForEach-Object { "{0}  {1}" -f $_.Hash.ToLower(), (($_.path | Resolve-Path -Relative) -replace '^\.\\' , '') } > dynein-${{ matrix.name }}.zip.sha256
 
     - name: Display current files (linux, linux-arm, and macos)
       if: matrix.name == 'linux' || matrix.name == 'linux-arm' || matrix.name == 'macos'
       run: ls -lrt && ls -lrt ./target/ && ls -lrt ./target/release/
+
+    - name: Display current files (windows)
+      if: matrix.name == 'windows'
+      run: Get-ChildItem | Sort-Object LastWriteTime ; Get-ChildItem ./target/ | Sort-Object LastWriteTime ; Get-ChildItem ./target/release/ | Sort-Object LastWriteTime
 
     - name: Create a release with the binary file
       uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564 # Pin the commit hash of v2.0.4
