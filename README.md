@@ -77,7 +77,14 @@ $ mv dy /usr/local/bin/
 $ dy --help
 ```
 
-Currently, the above binary is automatically built on intel mac as [the GitHub Action doesn't support Apple M1 (ARM) environment yet](https://github.com/actions/virtual-environments/issues/2187).
+### macOS (ARM 64)
+
+```
+$ curl -O -L https://github.com/awslabs/dynein/releases/latest/download/dynein-macos-arm.tar.gz
+$ tar xzvf dynein-macos-arm.tar.gz
+$ mv dy /usr/local/bin/
+$ dy --help
+```
 
 ### Linux (x86-64)
 

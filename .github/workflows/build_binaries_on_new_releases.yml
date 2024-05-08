@@ -14,8 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # NOTE: Apple M1 (ARM) environment in GitHub action is not yet supported: https://github.com/actions/virtual-environments/issues/2187
-        name: [linux, linux-arm, macos, windows]
+        name: [linux, linux-arm, macos, macos-arm, windows]
         include:
         - name: linux
           os: ubuntu-latest
@@ -24,8 +23,11 @@ jobs:
           os: ubuntu-latest
           target: arm-unknown-linux-gnueabihf
         - name: macos
-          os: macos-latest
+          os: macos-13
           target: x86_64-apple-darwin
+        - name: macos-arm
+          os: macos-14
+          target: aarch64-apple-darwin
         - name: windows
           os: windows-2022
           target: x86_64-pc-windows-msvc
@@ -43,7 +45,7 @@ jobs:
     - run: cargo build --verbose --release
 
     - name: Strip the binary to reduce its size (linux and macos)
-      if: matrix.name == 'linux' || matrix.name == 'macos'
+      if: matrix.name == 'linux' || matrix.name == 'macos' || matrix.name == 'macos-arm'
       run: strip ./target/release/dy
     - name: Archive the binary for publishing on release assets
       shell: bash
@@ -56,7 +58,7 @@ jobs:
     - name: Generate SHA256 checksum
       if: matrix.name != 'windows'
       run: |
-        if [ "${{ matrix.os }}" = "macos-latest" ]; then
+        if [ "${{ matrix.os }}" = "macos-13" ] || [ "${{ matrix.os }}" = "macos-14" ]; then
           shasum -a 256 dynein-${{ matrix.name }}.tar.gz > dynein-${{ matrix.name }}.tar.gz.sha256
         elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
           sha256sum dynein-${{ matrix.name }}.tar.gz > dynein-${{ matrix.name }}.tar.gz.sha256
@@ -68,8 +70,8 @@ jobs:
       run: |
         Get-FileHash -Path dynein-${{ matrix.name }}.zip -Algorithm SHA256 | ForEach-Object { "{0}  {1}" -f $_.Hash.ToLower(), (($_.path | Resolve-Path -Relative) -replace '^\.\\' , '') } > dynein-${{ matrix.name }}.zip.sha256
 
-    - name: Display current files (linux, linux-arm, and macos)
-      if: matrix.name == 'linux' || matrix.name == 'linux-arm' || matrix.name == 'macos'
+    - name: Display current files (linux, linux-arm, macos, and macos-arm)
+      if: matrix.name == 'linux' || matrix.name == 'linux-arm' || matrix.name == 'macos' || matrix.name == 'macos-arm'
       run: ls -lrt && ls -lrt ./target/ && ls -lrt ./target/release/
 
     - name: Display current files (windows)
