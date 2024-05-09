@@ -64,6 +64,7 @@ using_table: null
 using_port: null
 query:
   strict_mode: false
+retry: null
 
 ",
     );
@@ -100,6 +101,7 @@ using_table: {table_name}
 using_port: 8000
 query:
   strict_mode: false
+retry: null
 
 "
     ));

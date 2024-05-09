@@ -15,10 +15,13 @@
  */
 
 use ::serde::{Deserialize, Serialize};
+use backon::ExponentialBuilder;
 use log::{debug, error, info};
 use rusoto_dynamodb::{AttributeDefinition, KeySchemaElement, TableDescription};
 use rusoto_signature::Region;
 use serde_yaml::Error as SerdeYAMLError;
+use std::convert::{TryFrom, TryInto};
+use std::time::Duration;
 use std::{
     collections::HashMap,
     env, error,
@@ -29,6 +32,7 @@ use std::{
     str::FromStr,
 };
 use tempfile::NamedTempFile;
+use thiserror::Error;
 
 use super::control;
 
@@ -177,6 +181,81 @@ pub struct Config {
     #[serde(default)]
     pub query: QueryConfig,
     // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
+    pub retry: Option<RetryConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct RetryConfig {
+    pub default: RetrySetting,
+    pub batch_write_item: Option<RetrySetting>,
+}
+
+impl TryFrom<RetryConfig> for Retry {
+    type Error = RetryConfigError;
+
+    fn try_from(value: RetryConfig) -> Result<Self, Self::Error> {
+        let default = value.default.try_into()?;
+        let batch_write_item = match value.batch_write_item {
+            Some(v) => Some(v.try_into()?),
+            None => None,
+        };
+        Ok(Self {
+            default,
+            batch_write_item,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RetrySetting {
+    pub initial_backoff: Option<Duration>,
+    pub max_backoff: Option<Duration>,
+    pub max_attempts: Option<u32>,
+}
+
+impl Default for RetrySetting {
+    fn default() -> Self {
+        Self {
+            initial_backoff: None,
+            max_backoff: None,
+            max_attempts: Some(10),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum RetryConfigError {
+    #[error("max_attempts should be greater than zero")]
+    MaxAttempts,
+    #[error("max_backoff should be greater than zero")]
+    MaxBackoff,
+}
+impl TryFrom<RetrySetting> for ExponentialBuilder {
+    type Error = RetryConfigError;
+
+    fn try_from(value: RetrySetting) -> Result<Self, Self::Error> {
+        let mut builder = Self::default()
+            .with_jitter()
+            .with_factor(2.0)
+            .with_min_delay(Duration::from_secs(1));
+
+        if let Some(max_attempts) = value.max_attempts {
+            if max_attempts == 0 {
+                return Err(RetryConfigError::MaxAttempts);
+            }
+            builder = builder.with_max_times(max_attempts as usize - 1);
+        }
+        if let Some(max_backoff) = value.max_backoff {
+            if max_backoff.is_zero() {
+                return Err(RetryConfigError::MaxBackoff);
+            }
+            builder = builder.with_max_delay(max_backoff);
+        }
+        if let Some(initial_backoff) = value.initial_backoff {
+            builder = builder.with_min_delay(initial_backoff);
+        }
+        Ok(builder)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -199,6 +278,12 @@ pub struct Cache {
 }
 
 #[derive(Debug, Clone)]
+pub struct Retry {
+    pub default: ExponentialBuilder,
+    pub batch_write_item: Option<ExponentialBuilder>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Context {
     pub config: Option<Config>,
     pub cache: Option<Cache>,
@@ -207,6 +292,7 @@ pub struct Context {
     pub overwritten_port: Option<u32>,      // --port option
     pub output: Option<String>,
     pub should_strict_for_query: Option<bool>,
+    pub retry: Option<Retry>,
 }
 
 /*
@@ -220,14 +306,22 @@ impl Context {
         port: Option<u32>,
         table: Option<String>,
     ) -> Result<Context, DyneinConfigError> {
+        let config = load_or_touch_config_file(true)?;
+        let retry = match &config.retry {
+            Some(retry) => Some(Retry::try_from(retry.clone()).map_err(|e| {
+                DyneinConfigError::Content(DyneinConfigContentError::RetryConfig(e))
+            })?),
+            None => None,
+        };
         Ok(Context {
-            config: Some(load_or_touch_config_file(true)?),
+            config: Some(config),
             cache: Some(load_or_touch_cache_file(true)?),
             overwritten_region: region_from_str(region, port),
             overwritten_table_name: table,
             overwritten_port: port,
             output: None,
             should_strict_for_query: None,
+            retry,
         })
     }
 
@@ -328,12 +422,19 @@ impl Context {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum DyneinConfigContentError {
+    #[error("retry config error ")]
+    RetryConfig(#[from] RetryConfigError),
+}
+
 // FYI: https://doc.rust-lang.org/rust-by-example/error/multiple_error_types/wrap_error.html
 #[derive(Debug)]
 pub enum DyneinConfigError {
     IO(IOError),
     Yaml(SerdeYAMLError),
     HomeDir,
+    Content(DyneinConfigContentError),
 }
 
 impl fmt::Display for DyneinConfigError {
@@ -342,6 +443,7 @@ impl fmt::Display for DyneinConfigError {
             DyneinConfigError::IO(ref e) => e.fmt(f),
             DyneinConfigError::Yaml(ref e) => e.fmt(f),
             DyneinConfigError::HomeDir => write!(f, "failed to find Home directory"),
+            DyneinConfigError::Content(ref e) => e.fmt(f),
         }
     }
 }
@@ -354,6 +456,7 @@ impl error::Error for DyneinConfigError {
             DyneinConfigError::IO(ref e) => Some(e),
             DyneinConfigError::Yaml(ref e) => Some(e),
             DyneinConfigError::HomeDir => None,
+            DyneinConfigError::Content(ref e) => Some(e),
         }
     }
 }
@@ -739,6 +842,7 @@ Unit Tests
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
     use std::error::Error;
     use std::str::FromStr; // to utilize Region::from_str // for unit tests
 
@@ -752,6 +856,7 @@ mod tests {
             overwritten_port: None,
             output: None,
             should_strict_for_query: None,
+            retry: None,
         };
         assert_eq!(cx1.effective_region(), Region::default());
         // cx1.effective_table_name(); ... exit(1)
@@ -762,6 +867,7 @@ mod tests {
                 using_table: Some(String::from("cfgtbl")),
                 using_port: Some(8000),
                 query: QueryConfig { strict_mode: false },
+                retry: Some(RetryConfig::default()),
             }),
             cache: None,
             overwritten_region: None,
@@ -769,6 +875,7 @@ mod tests {
             overwritten_port: None,
             output: None,
             should_strict_for_query: None,
+            retry: Some(RetryConfig::default().try_into()?),
         };
         assert_eq!(cx2.effective_region(), Region::from_str("ap-northeast-1")?);
         assert_eq!(cx2.effective_table_name(), String::from("cfgtbl"));
@@ -796,5 +903,52 @@ mod tests {
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
 
         Ok(())
+    }
+
+    #[test]
+    fn test_retry_setting_success() {
+        let config1 = RetrySetting::default();
+        let actual = ExponentialBuilder::try_from(config1).unwrap();
+        let expected = ExponentialBuilder::default()
+            .with_min_delay(Duration::from_secs(1))
+            .with_jitter()
+            .with_factor(2.0)
+            .with_max_times(9);
+        assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
+
+        let config2 = RetrySetting {
+            initial_backoff: Some(Duration::from_secs(1)),
+            max_backoff: Some(Duration::from_secs(100)),
+            max_attempts: Some(20),
+        };
+        let actual = ExponentialBuilder::try_from(config2).unwrap();
+        let expected = ExponentialBuilder::default()
+            .with_jitter()
+            .with_factor(2.0)
+            .with_min_delay(Duration::from_secs(1))
+            .with_max_delay(Duration::from_secs(100))
+            .with_max_times(19);
+        assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
+    }
+
+    #[test]
+    fn test_retry_setting_error() {
+        let config = RetrySetting {
+            max_attempts: Some(0),
+            ..Default::default()
+        };
+        match ExponentialBuilder::try_from(config).unwrap_err() {
+            RetryConfigError::MaxAttempts => {}
+            _ => unreachable!("unexpected error"),
+        }
+
+        let config = RetrySetting {
+            max_backoff: Some(Duration::new(0, 0)),
+            ..Default::default()
+        };
+        match ExponentialBuilder::try_from(config).unwrap_err() {
+            RetryConfigError::MaxBackoff => {}
+            _ => unreachable!("unexpected error"),
+        }
     }
 }
