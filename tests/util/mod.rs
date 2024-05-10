@@ -88,12 +88,15 @@ impl<'a> TestManager<'a> {
     }
 
     /// Create temporary table with items via `create_temporary_table`.
-    pub async fn create_temporary_table_with_items(
+    pub async fn create_temporary_table_with_items<ItemIter>(
         &mut self,
         pk: &'static str,
         sk: Option<&'static str>,
-        items: Vec<TemporaryItem>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+        items: ItemIter,
+    ) -> Result<String, Box<dyn std::error::Error>>
+    where
+        ItemIter: IntoIterator<Item = TemporaryItem>,
+    {
         let table_name = self.create_temporary_table(pk, sk).await?;
 
         for ti in items {
