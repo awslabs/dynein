@@ -113,7 +113,7 @@ async fn test_get_item_output_yaml() -> Result<(), Box<dyn std::error::Error>> {
         "-o",
         "yaml",
     ]);
-    util::assert_eq_yaml(
+    util::assert_eq_cmd_yaml(
         cmd,
         r#"---
 flag: true

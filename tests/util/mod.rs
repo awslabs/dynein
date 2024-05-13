@@ -438,13 +438,17 @@ fn sort_json_array(value: &mut Value) {
     }
 }
 
-pub fn assert_eq_yaml(cmd: &mut Command, expected: &str) {
+pub fn assert_eq_cmd_yaml(cmd: &mut Command, expected: &str) {
     cmd.assert().success();
     let stdout = cmd.output().unwrap().stdout;
     let output = String::from_utf8(stdout).unwrap();
 
+    assert_eq_yaml(output, expected)
+}
+
+pub fn assert_eq_yaml<AsStrA: AsRef<str>, AsStrE: AsRef<str>>(actual: AsStrA, expected: AsStrE) {
     assert_eq!(
-        serde_yaml::from_str::<serde_yaml::Value>(&output).unwrap(),
-        serde_yaml::from_str::<serde_yaml::Value>(expected).unwrap(),
+        serde_yaml::from_str::<serde_yaml::Value>(actual.as_ref()).unwrap(),
+        serde_yaml::from_str::<serde_yaml::Value>(expected.as_ref()).unwrap(),
     )
 }
