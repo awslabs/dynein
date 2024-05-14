@@ -59,7 +59,7 @@ async fn test_get_item() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut c = tm.command()?;
     let cmd = c.args(["--region", "local", "--table", &table_name, "get", "42"]);
-    util::assert_eq_json(
+    util::assert_eq_cmd_json(
         cmd,
         r#"{
           "flag": true,
@@ -86,7 +86,7 @@ async fn test_get_item_output_json() -> Result<(), Box<dyn std::error::Error>> {
         "-o",
         "json",
     ]);
-    util::assert_eq_json(
+    util::assert_eq_cmd_json(
         cmd,
         r#"{
           "flag": true,
@@ -140,7 +140,7 @@ async fn test_get_item_output_raw() -> Result<(), Box<dyn std::error::Error>> {
         "-o",
         "raw",
     ]);
-    util::assert_eq_json(
+    util::assert_eq_cmd_json(
         cmd,
         r#"{
           "flag": {

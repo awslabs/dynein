@@ -108,7 +108,7 @@ async fn test_bootstrap() -> Result<(), Box<dyn std::error::Error>> {
     for (args, expected_json) in test_cases {
         let mut c = tm.command()?;
         let cmd = c.args(&args);
-        util::assert_eq_json(cmd, expected_json);
+        util::assert_eq_cmd_json(cmd, expected_json);
     }
 
     tm.cleanup(vec!["Forum", "ProductCatalog", "Reply", "Thread"])
@@ -134,7 +134,7 @@ async fn test_bootstrap_movie() -> Result<(), Box<dyn std::error::Error>> {
         "1933",
         "King Kong",
     ]);
-    util::assert_eq_json(
+    util::assert_eq_cmd_json(
         cmd,
         r#"
     {
