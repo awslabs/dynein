@@ -140,6 +140,15 @@ dy put 20 -i "$(cat input.json)"
 
 When you use `b'<binary-data>'` style, binary data cannot span multiple lines.
 
+Furthermore, you can use base64 literal, such as `b64'<base64-encoded-string>'` or `b64"<base64-encoded-string>"`.
+You may omit the `=` paddings at the end; however, you cannot insert any linebreaks or spaces within both single and double-quoted base64 encoded strings.
+
+```bash
+dy put 21 -i "{'bin':b64'$(echo -n "Hello" | base64)'}"
+dy put 22 -i "{'bin':b64'$(dd if=/dev/urandom bs=8 count=1 2>/dev/null | base64)'}"
+dy put 23 -i '{"bin":b64"AA"}'
+```
+
 ### List
 You can store an ordered collection of values using list type. Lists are enclosed in square brackets: `[ ... ]`.
 A list is similar to a JSON array. There are no restrictions on the data types that can be stored in a list element, and the elements in a list element do not have to be of the same type.
@@ -207,5 +216,5 @@ dy put 36 -i '{"string-set": <<"0", "-1", "One", "Two">>}'
 In the following example, put an item containing a binary set.
 
 ```bash
-dy put 37 -i '{"binary-set": <<b"\x00", b"0x01", b"0x02">>}'
+dy put 37 -i '{"binary-set": <<b"\x00", b"0x01", b"0x02", b64"Aw==">>}'
 ```
