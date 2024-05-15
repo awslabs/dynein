@@ -110,11 +110,11 @@ if_not_exists_function = { ^"if_not_exists" ~ "(" ~ path ~ "," ~ value ~ ")" }
 
 // Literals
 literal = _{
-  boolean_literal | null_literal | b_literal | list_literal | map_literal  | string_literal | number_literal |
+  boolean_literal | null_literal | general_binary_literal | list_literal | map_literal  | string_literal | number_literal |
   set_literal
 }
 sort_key_literal = _{
-    b_literal | string_literal | number_literal
+    general_binary_literal | string_literal | number_literal
 }
 
 // Boolean literals
@@ -151,6 +151,13 @@ string_continue = _{ "\\" ~ &"\n" }
 ascii_for_string = _{ !(isolated_cr | "\"" | "\\") ~ '\x00'..'\x7F' }
 isolated_cr = _{ "\r" ~ &"\n" }
 
+b64_literal = @{ "b64" ~ (b64_singe_quote_string | b64_double_quote_string) }
+b64_singe_quote_string = _{ "'" ~ base64_string ~ "'" }
+b64_double_quote_string = _{ "\"" ~ base64_string ~ "\"" }
+base64_string = _{ (ASCII_ALPHANUMERIC | "+" | "/" )* ~ "="{,2} }
+
+general_binary_literal = _{ b64_literal | b_literal }
+
 // List literal
 list_literal = { "[" ~ literal? ~ ("," ~ literal)* ~ "]" }
 
@@ -165,4 +172,4 @@ set_literal = _{ "<<" ~ (string_set_literal | binary_set_literal | number_set_li
 string_set_literal = { string_set_element ~ ("," ~ string_set_element)* }
 string_set_element = _{ (double_quote_literal | single_quote_literal) }
 number_set_literal = { number_literal ~ ("," ~ number_literal)*  }
-binary_set_literal = { b_literal ~ ("," ~ b_literal)* }
+binary_set_literal = { general_binary_literal ~ ("," ~ general_binary_literal)* }
