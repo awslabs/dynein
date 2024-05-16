@@ -79,7 +79,7 @@ where
 
 // structopt derive supports enum(subcommands), or struct (single commands).
 // structopt support clap methods e.g. required_if/conflicts_with https://docs.rs/clap/2.32.0/clap/struct.Arg.html
-#[derive(StructOpt, Debug, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Sub {
     /* =================================================
     Control Plane commands
@@ -417,7 +417,7 @@ pub enum Sub {
     },
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, PartialEq)]
 pub enum AdminSub {
     /// List tables in the region. [API: ListTables]
     #[structopt(aliases = &["ls"])]
@@ -491,7 +491,7 @@ pub enum AdminSub {
     */
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, PartialEq)]
 pub enum CreateSub {
     /// Create new DynamoDB table with given primary key(s). [API: CreateTable]
     #[structopt()]
@@ -518,7 +518,7 @@ pub enum CreateSub {
     },
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, PartialEq)]
 pub enum UpdateSub {
     /// Update a DynamoDB table.
     #[structopt()]
@@ -546,7 +546,7 @@ pub enum UpdateSub {
     },
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, PartialEq)]
 pub enum DeleteSub {
     /// Delete a DynamoDB table.
     #[structopt()]
@@ -563,7 +563,7 @@ pub enum DeleteSub {
     // }
 }
 
-#[derive(StructOpt, Debug, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ConfigSub {
     /// Show all configuration in config (config.yml) and cache (cache.yml) files.
     #[structopt(aliases = &["show", "current-context"])]
@@ -573,4 +573,31 @@ pub enum ConfigSub {
     /// Reset all dynein configuration in the `~/.dynein/` directory. This command initializes dynein related files only and won't remove your data stored in DynamoDB tables.
     #[structopt()]
     Clear,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_args, Sub};
+
+    #[test]
+    fn test_parse_args() {
+        let input = vec!["query", "--sort-key", "= 12", r#"pk\is'escaped"#];
+        let result = parse_args(input).unwrap();
+        assert_eq!(
+            result,
+            Sub::Query {
+                pval: r#"pk\is'escaped"#.to_owned(),
+                sort_key_expression: Some("= 12".to_owned()),
+                consistent_read: false,
+                index: None,
+                limit: None,
+                attributes: None,
+                keys_only: false,
+                descending: false,
+                output: None,
+                strict: false,
+                non_strict: false,
+            }
+        );
+    }
 }
