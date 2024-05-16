@@ -207,6 +207,16 @@ impl<'a> TestManager<'a> {
     {
         self.temporary_tables.retain(|s| s != table_name.as_ref());
     }
+
+    /// Add table names for clean up.
+    pub fn add_tables_to_delete<I, S>(&mut self, tables: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.temporary_tables
+            .extend(tables.into_iter().map(|x| x.into()));
+    }
 }
 
 impl<'a> Drop for TestManager<'a> {
