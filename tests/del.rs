@@ -56,30 +56,33 @@ async fn test_del_non_existent_item() -> Result<(), Box<dyn std::error::Error>> 
 #[tokio::test]
 async fn test_del_existent_item() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = tm
-        .create_temporary_table_with_items(
-            "pk",
-            None,
-            vec![
-                util::TemporaryItem::new("a", None, None),
-                util::TemporaryItem::new("b", None, None),
-            ],
-        )
-        .await?;
 
-    let mut c = tm.command()?;
-    let cmd = c.args(["--region", "local", "--table", &table_name, "del", "a"]);
-    cmd.assert().success().stdout(format!(
-        "Successfully deleted an item from the table '{}'.\n",
-        table_name
-    ));
+    for action in ["d", "del", "delete"] {
+        let table_name = tm
+            .create_temporary_table_with_items(
+                "pk",
+                None,
+                vec![
+                    util::TemporaryItem::new("a", None, None),
+                    util::TemporaryItem::new("b", None, None),
+                ],
+            )
+            .await?;
 
-    let mut c = tm.command()?;
-    let scan_cmd = c.args(["--region", "local", "--table", &table_name, "scan"]);
-    scan_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::diff("pk  attributes\nb\n"));
+        let mut c = tm.command()?;
+        let cmd = c.args(["--region", "local", "--table", &table_name, action, "a"]);
+        cmd.assert().success().stdout(format!(
+            "Successfully deleted an item from the table '{}'.\n",
+            table_name
+        ));
+
+        let mut c = tm.command()?;
+        let scan_cmd = c.args(["--region", "local", "--table", &table_name, "scan"]);
+        scan_cmd
+            .assert()
+            .success()
+            .stdout(predicate::str::diff("pk  attributes\nb\n"));
+    }
 
     Ok(())
 }

@@ -52,13 +52,15 @@ created_at: .*",
 #[tokio::test]
 async fn test_admin_desc_table_from_args() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
-    let mut c = tm.command()?;
-    let cmd = c.args(["--region", "local", "admin", "desc", &table_name]);
-    cmd.assert().success().stdout(
-        predicate::str::is_match(format!(
-            "name: {}
+    for action in ["desc", "show", "describe", "info"] {
+        let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
+
+        let mut c = tm.command()?;
+        let cmd = c.args(["--region", "local", "admin", action, &table_name]);
+        cmd.assert().success().stdout(
+            predicate::str::is_match(format!(
+                "name: {}
 region: local
 status: ACTIVE
 schema:
@@ -72,10 +74,12 @@ stream: null
 count: 0
 size_bytes: 0
 created_at: .*",
-            table_name
-        ))
-        .unwrap(),
-    );
+                table_name
+            ))
+            .unwrap(),
+        );
+    }
+
     Ok(())
 }
 

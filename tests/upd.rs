@@ -23,76 +23,79 @@ pub mod util;
 #[tokio::test]
 async fn test_upd() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let tbl = tm.create_temporary_table("pk", None).await?;
-    tm.command()?
-        .args([
-            "--region",
-            "local",
-            "--table",
-            &tbl,
-            "upd",
-            "pk1",
-            "--set",
-            "attr1=123",
-        ])
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("pk1")
-                .and(predicate::str::contains("attr1"))
-                .and(predicate::str::contains("123")),
-        );
 
-    let mut cmd = tm.command()?;
-    cmd.args(["--region", "local", "--table", &tbl, "get", "pk1"]);
-    assert_eq_cmd_json(&mut cmd, r#"{"pk":"pk1","attr1":123}"#);
+    for action in ["upd", "update", "u"] {
+        let tbl = tm.create_temporary_table("pk", None).await?;
+        tm.command()?
+            .args([
+                "--region",
+                "local",
+                "--table",
+                &tbl,
+                action,
+                "pk1",
+                "--set",
+                "attr1=123",
+            ])
+            .assert()
+            .success()
+            .stdout(
+                predicate::str::contains("pk1")
+                    .and(predicate::str::contains("attr1"))
+                    .and(predicate::str::contains("123")),
+            );
 
-    tm.command()?
-        .args([
-            "--region",
-            "local",
-            "--table",
-            &tbl,
-            "upd",
-            "pk1",
-            "--set",
-            "attr2='str'",
-        ])
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("pk1")
-                .and(predicate::str::contains("attr1"))
-                .and(predicate::str::contains("attr2"))
-                .and(predicate::str::contains("str")),
-        );
+        let mut cmd = tm.command()?;
+        cmd.args(["--region", "local", "--table", &tbl, "get", "pk1"]);
+        assert_eq_cmd_json(&mut cmd, r#"{"pk":"pk1","attr1":123}"#);
 
-    let mut cmd = tm.command()?;
-    cmd.args(["--region", "local", "--table", &tbl, "get", "pk1"]);
-    assert_eq_cmd_json(&mut cmd, r#"{"pk":"pk1","attr1":123,"attr2":"str"}"#);
+        tm.command()?
+            .args([
+                "--region",
+                "local",
+                "--table",
+                &tbl,
+                action,
+                "pk1",
+                "--set",
+                "attr2='str'",
+            ])
+            .assert()
+            .success()
+            .stdout(
+                predicate::str::contains("pk1")
+                    .and(predicate::str::contains("attr1"))
+                    .and(predicate::str::contains("attr2"))
+                    .and(predicate::str::contains("str")),
+            );
 
-    tm.command()?
-        .args([
-            "--region",
-            "local",
-            "--table",
-            &tbl,
-            "upd",
-            "pk1",
-            "--remove",
-            "attr1,attr2",
-        ])
-        .assert()
-        .success()
-        .stdout(
-            predicate::str::contains("pk1")
-                .and(predicate::str::contains("attr1").not())
-                .and(predicate::str::contains("attr2").not()),
-        );
+        let mut cmd = tm.command()?;
+        cmd.args(["--region", "local", "--table", &tbl, "get", "pk1"]);
+        assert_eq_cmd_json(&mut cmd, r#"{"pk":"pk1","attr1":123,"attr2":"str"}"#);
 
-    let mut cmd = tm.command()?;
-    cmd.args(["--region", "local", "--table", &tbl, "get", "pk1"]);
-    assert_eq_cmd_json(&mut cmd, r#"{"pk":"pk1"}"#);
+        tm.command()?
+            .args([
+                "--region",
+                "local",
+                "--table",
+                &tbl,
+                action,
+                "pk1",
+                "--remove",
+                "attr1,attr2",
+            ])
+            .assert()
+            .success()
+            .stdout(
+                predicate::str::contains("pk1")
+                    .and(predicate::str::contains("attr1").not())
+                    .and(predicate::str::contains("attr2").not()),
+            );
+
+        let mut cmd = tm.command()?;
+        cmd.args(["--region", "local", "--table", &tbl, "get", "pk1"]);
+        assert_eq_cmd_json(&mut cmd, r#"{"pk":"pk1"}"#);
+    }
 
     Ok(())
 }

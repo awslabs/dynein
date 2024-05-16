@@ -59,18 +59,20 @@ async fn test_scan_blank_table() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = tm.create_temporary_table("pk", None).await?;
 
-    let mut c = tm.command()?;
-    c.args(["--region", "local", "--table", &table_name, "put", "abc"])
-        .output()?;
+    for action in ["scan", "s"] {
+        let table_name = tm.create_temporary_table("pk", None).await?;
+        let mut c = tm.command()?;
+        c.args(["--region", "local", "--table", &table_name, "put", "abc"])
+            .output()?;
 
-    let mut c = tm.command()?;
-    let scan_cmd = c.args(["--region", "local", "--table", &table_name, "scan"]);
-    scan_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("pk  attributes\nabc"));
+        let mut c = tm.command()?;
+        let scan_cmd = c.args(["--region", "local", "--table", &table_name, action]);
+        scan_cmd
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("pk  attributes\nabc"));
+    }
 
     Ok(())
 }

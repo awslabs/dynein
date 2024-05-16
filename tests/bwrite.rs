@@ -26,40 +26,43 @@ use tempfile::Builder;
 #[tokio::test]
 async fn test_batch_write_json_put() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = tm.create_temporary_table("pk", None).await?;
 
-    let tmpdir = Builder::new().tempdir()?;
-    let batch_input_file_path = create_test_json_file(
-        "tests/resources/test_batch_write_put.json",
-        vec![&table_name],
-        &tmpdir,
-    );
+    for action in ["bwrite", "batch-write-item", "bw"] {
+        let table_name = tm.create_temporary_table("pk", None).await?;
 
-    let mut c = tm.command()?;
-    c.args([
-        "--region",
-        "local",
-        "bwrite",
-        "--input",
-        &batch_input_file_path,
-    ])
-    .output()?;
+        let tmpdir = Builder::new().tempdir()?;
+        let batch_input_file_path = create_test_json_file(
+            "tests/resources/test_batch_write_put.json",
+            vec![&table_name],
+            &tmpdir,
+        );
 
-    let mut c = tm.command()?;
-    let scan_cmd = c.args([
-        "--region",
-        "local",
-        "--table",
-        &table_name,
-        "scan",
-        "-o",
-        "raw",
-    ]);
+        let mut c = tm.command()?;
+        c.args([
+            "--region",
+            "local",
+            action,
+            "--input",
+            &batch_input_file_path,
+        ])
+        .output()?;
 
-    let expected_json =
-        std::fs::read_to_string("tests/resources/test_batch_write_put_output.json")?;
+        let mut c = tm.command()?;
+        let scan_cmd = c.args([
+            "--region",
+            "local",
+            "--table",
+            &table_name,
+            "scan",
+            "-o",
+            "raw",
+        ]);
 
-    util::assert_eq_json_ignore_order(scan_cmd, expected_json.as_str());
+        let expected_json =
+            std::fs::read_to_string("tests/resources/test_batch_write_put_output.json")?;
+
+        util::assert_eq_json_ignore_order(scan_cmd, expected_json.as_str());
+    }
 
     Ok(())
 }

@@ -53,3 +53,21 @@ async fn test_list_table_with_multiple_tables() -> Result<(), Box<dyn std::error
         .stdout(predicate::str::contains(table_name2));
     Ok(())
 }
+
+#[tokio::test]
+async fn test_list_table_ls_alias() -> Result<(), Box<dyn std::error::Error>> {
+    let mut tm = util::setup_with_lock().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
+
+    let mut c = tm.command()?;
+    let cmd = c.args(["--region", "local", "use", &table_name]);
+    cmd.assert().success();
+
+    let mut c = tm.command()?;
+    let cmd = c.args(["--region", "local", "ls"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("DynamoDB tables in region: local"))
+        .stdout(predicate::str::contains(format!("* {table_name}")));
+    Ok(())
+}

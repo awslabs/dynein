@@ -55,17 +55,19 @@ async fn test_get_non_existent_item() -> Result<(), Box<dyn std::error::Error>> 
 #[tokio::test]
 async fn test_get_item() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = prepare_table_with_item(&mut tm).await?;
 
-    let mut c = tm.command()?;
-    let cmd = c.args(["--region", "local", "--table", &table_name, "get", "42"]);
-    util::assert_eq_cmd_json(
-        cmd,
-        r#"{
+    for action in ["get", "g"] {
+        let table_name = prepare_table_with_item(&mut tm).await?;
+        let mut c = tm.command()?;
+        let cmd = c.args(["--region", "local", "--table", &table_name, action, "42"]);
+        util::assert_eq_cmd_json(
+            cmd,
+            r#"{
           "flag": true,
           "pk": "42"
         }"#,
-    );
+        );
+    }
 
     Ok(())
 }
