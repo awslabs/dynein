@@ -45,7 +45,8 @@ async fn test_batch_write_json_put() -> Result<(), Box<dyn std::error::Error>> {
             "--input",
             &batch_input_file_path,
         ])
-        .output()?;
+        .assert()
+        .success();
 
         let mut c = tm.command()?;
         let scan_cmd = c.args([
@@ -109,7 +110,8 @@ async fn test_batch_write_json_delete() -> Result<(), Box<dyn std::error::Error>
         "--input",
         &batch_input_file_path,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     let mut c = tm.command()?;
     let scan_cmd = c.args([
@@ -168,7 +170,8 @@ async fn test_batch_write_json_put_delete() -> Result<(), Box<dyn std::error::Er
         "--input",
         &batch_input_file_path,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     let mut c = tm.command()?;
     let scan_cmd = c.args([
@@ -230,7 +233,8 @@ async fn test_batch_write_json_put_delete_multiple_tables() -> Result<(), Box<dy
         "--input",
         &batch_input_file_path,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     for table in [&table_name, &table_name2] {
         let mut c = tm.command()?;
@@ -264,7 +268,8 @@ async fn test_batch_write_put() -> Result<(), Box<dyn std::error::Error>> {
         "binary-field": b"\x00",
         "binary-set-field": <<b"\x01", b"\x02">>}"#,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     let mut c = tm.command()?;
     let get_cmd = c.args([
@@ -322,7 +327,8 @@ async fn test_batch_write_put_sk() -> Result<(), Box<dyn std::error::Error>> {
         "--put",
         r#"{"pk": "11", "sk": "111"}"#,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     let mut c = tm.command()?;
     let get_cmd = c.args([
@@ -368,7 +374,8 @@ async fn test_batch_write_del() -> Result<(), Box<dyn std::error::Error>> {
         "--del",
         r#"{"pk": "11"}"#,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     let mut c = tm.command()?;
     let scan_cmd = c.args([
@@ -410,7 +417,8 @@ async fn test_batch_write_del_sk() -> Result<(), Box<dyn std::error::Error>> {
         "--del",
         r#"{"pk": "11", "sk": "111"}"#,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     let mut c = tm.command()?;
     let scan_cmd = c.args([
@@ -461,19 +469,23 @@ async fn test_batch_write_all_options() -> Result<(), Box<dyn std::error::Error>
         "--put",
         r#"{"pk": "12", "null-field": null}"#,
     ])
-    .output()?;
+    .assert()
+    .success();
 
     let mut c = tm.command()?;
-    let scan_cmd = c.args([
-        "--region",
-        "local",
-        "--table",
-        &table_name,
-        "scan",
-        "-o",
-        "json",
-    ]);
-    let output = scan_cmd.output()?.stdout;
+    let scan_cmd = c
+        .args([
+            "--region",
+            "local",
+            "--table",
+            &table_name,
+            "scan",
+            "-o",
+            "json",
+        ])
+        .assert()
+        .success();
+    let output = scan_cmd.get_output().stdout.to_owned();
     let output_str = String::from_utf8(output)?;
 
     // Check if the first item has been deleted
