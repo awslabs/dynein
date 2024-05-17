@@ -6,7 +6,7 @@ Put or Delete multiple items at one time, up to 25 requests. [API: BatchWriteIte
 
 https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
 
-Usage: dy bwrite [OPTIONS] --input <INPUT>
+Usage: dy bwrite [OPTIONS]
 
 Options:
       --put <PUTS>
@@ -38,7 +38,7 @@ Put or Delete multiple items at one time, up to 25 requests. [API: BatchWriteIte
 
 https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html
 
-Usage: dy bwrite [OPTIONS] --input <INPUT>
+Usage: dy bwrite [OPTIONS]
 
 Options:
       --put <PUTS>

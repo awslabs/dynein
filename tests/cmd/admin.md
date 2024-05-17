@@ -85,13 +85,13 @@ Options:
 $ dy admin create index --help
 Create new GSI (global secondary index) for a table with given primary key(s). [API: UpdateTable]
 
-Usage: dy admin create index [OPTIONS] --keys <KEYS> <INDEX_NAME>
+Usage: dy admin create index [OPTIONS] --keys <KEYS>... <INDEX_NAME>
 
 Arguments:
   <INDEX_NAME>  index name to create
 
 Options:
-  -k, --keys <KEYS>      (requried) Primary key(s) of the index. Key name followed by comma and data type (S/N/B).
+  -k, --keys <KEYS>...   (requried) Primary key(s) of the index. Key name followed by comma and data type (S/N/B).
                          e.g. for Partition key only table: `--keys myPk,S`, and for Partition and Sort key table `--keys myPk,S mySk,N`
   -r, --region <REGION>  The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
                          You can use --region option in both top-level and subcommand-level.
@@ -103,13 +103,13 @@ Options:
 $ dy admin create table --help
 Create new DynamoDB table with given primary key(s). [API: CreateTable]
 
-Usage: dy admin create table [OPTIONS] --keys <KEYS> <NEW_TABLE_NAME>
+Usage: dy admin create table [OPTIONS] --keys <KEYS>... <NEW_TABLE_NAME>
 
 Arguments:
   <NEW_TABLE_NAME>  table name to create
 
 Options:
-  -k, --keys <KEYS>      (requried) Primary key(s) of the table. Key name followed by comma and data type (S/N/B).
+  -k, --keys <KEYS>...   (requried) Primary key(s) of the table. Key name followed by comma and data type (S/N/B).
                          e.g. for Partition key only table: `--keys myPk,S`, and for Partition and Sort key table `--keys myPk,S mySk,N`
   -r, --region <REGION>  The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
                          You can use --region option in both top-level and subcommand-level.
