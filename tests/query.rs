@@ -24,25 +24,28 @@ use tokio::time::sleep; // Used for writing assertions
 #[tokio::test]
 async fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = tm
-        .create_temporary_table_with_items(
-            "pk",
-            Some("sk,N"),
-            vec![
-                util::TemporaryItem::new("abc", Some("1"), None),
-                util::TemporaryItem::new("abc", Some("2"), None),
-            ],
-        )
-        .await?;
 
-    let mut c = tm.command()?;
-    let query_cmd = c.args(["--region", "local", "--table", &table_name, "query", "abc"]);
-    query_cmd
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(
-            "pk   sk  attributes\nabc  1\nabc  2",
-        ));
+    for action in ["query", "q"] {
+        let table_name = tm
+            .create_temporary_table_with_items(
+                "pk",
+                Some("sk,N"),
+                vec![
+                    util::TemporaryItem::new("abc", Some("1"), None),
+                    util::TemporaryItem::new("abc", Some("2"), None),
+                ],
+            )
+            .await?;
+
+        let mut c = tm.command()?;
+        let query_cmd = c.args(["--region", "local", "--table", &table_name, action, "abc"]);
+        query_cmd
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(
+                "pk   sk  attributes\nabc  1\nabc  2",
+            ));
+    }
 
     Ok(())
 }

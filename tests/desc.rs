@@ -42,13 +42,14 @@ async fn test_desc_non_existent_table() -> Result<(), Box<dyn std::error::Error>
 #[tokio::test]
 async fn test_desc_table_from_options() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
-    let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
 
-    let mut c = tm.command()?;
-    let cmd = c.args(["--region", "local", "--table", &table_name, "desc"]);
-    cmd.assert().success().stdout(
-        predicate::str::is_match(format!(
-            "name: {}
+    for action in ["show", "desc", "describe", "info"] {
+        let table_name = tm.create_temporary_table("pk,S", Some("sk,N")).await?;
+        let mut c = tm.command()?;
+        let cmd = c.args(["--region", "local", "--table", &table_name, action]);
+        cmd.assert().success().stdout(
+            predicate::str::is_match(format!(
+                "name: {}
 region: local
 status: ACTIVE
 schema:
@@ -62,10 +63,11 @@ stream: null
 count: 0
 size_bytes: 0
 created_at: .*",
-            table_name
-        ))
-        .unwrap(),
-    );
+                table_name
+            ))
+            .unwrap(),
+        );
+    }
 
     Ok(())
 }
