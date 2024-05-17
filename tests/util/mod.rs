@@ -199,6 +199,14 @@ impl<'a> TestManager<'a> {
 
         Ok(())
     }
+
+    /// Remove a temporary table from the list of temporary tables.
+    pub fn remove_temporary_table<S>(&mut self, table_name: S)
+    where
+        S: AsRef<str>,
+    {
+        self.temporary_tables.retain(|s| s != table_name.as_ref());
+    }
 }
 
 impl<'a> Drop for TestManager<'a> {
