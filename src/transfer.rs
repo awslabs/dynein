@@ -33,8 +33,8 @@ use thiserror::Error;
 
 use super::app;
 use super::batch;
-use super::control;
 use super::data;
+use super::util;
 
 #[derive(Error, Debug)]
 pub enum DyneinExportError {
@@ -148,7 +148,7 @@ pub async fn export(
     let ts: app::TableSchema = app::table_schema(&cx).await;
     let format_str: Option<&str> = format.as_deref();
 
-    if ts.mode == control::Mode::Provisioned {
+    if ts.mode == util::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
         if !Confirm::new().with_prompt(msg).interact()? {
             app::bye(0, "Operation has been cancelled.");
@@ -294,7 +294,7 @@ pub async fn import(
     let format_str: Option<&str> = format.as_deref();
 
     let ts: app::TableSchema = app::table_schema(&cx).await;
-    if ts.mode == control::Mode::Provisioned {
+    if ts.mode == util::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
         if !Confirm::new().with_prompt(msg).interact()? {
             println!("Operation has been cancelled.");

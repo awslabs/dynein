@@ -36,6 +36,7 @@ mod key;
 mod parser;
 mod shell;
 mod transfer;
+mod util;
 
 /* =================================================
    helper functions

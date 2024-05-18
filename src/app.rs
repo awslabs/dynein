@@ -38,6 +38,7 @@ use thiserror::Error;
 
 use super::control;
 use super::key;
+use super::util;
 
 /* =================================================
 struct / enum / const
@@ -61,7 +62,7 @@ pub struct TableSchema {
     pub pk: key::Key,
     pub sk: Option<key::Key>,
     pub indexes: Option<Vec<IndexSchema>>,
-    pub mode: control::Mode,
+    pub mode: util::Mode,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -558,7 +559,7 @@ pub fn insert_to_table_cache(
             pk: key::typed_key("HASH", &desc).expect("pk should exist"),
             sk: key::typed_key("RANGE", &desc),
             indexes: index_schemas(&desc),
-            mode: control::extract_mode(&desc.billing_mode_summary),
+            mode: util::extract_mode(&desc.billing_mode_summary),
         },
     );
     cache.tables = Some(table_schema_hashmap);
@@ -601,7 +602,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
                 pk: key::typed_key("HASH", &desc).expect("pk should exist"),
                 sk: key::typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
-                mode: control::extract_mode(&desc.billing_mode_summary),
+                mode: util::extract_mode(&desc.billing_mode_summary),
             }
         }
         None => {

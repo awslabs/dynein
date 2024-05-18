@@ -15,21 +15,17 @@
  */
 
 // This module interact with DynamoDB Control Plane APIs
-use ::serde::{Deserialize, Serialize};
 use aws_sdk_dynamodb::{
     types::{BackupStatus as SdkBackupStatus, BackupSummary as SdkBackupSummary},
     Client as DynamoDbSdkClient,
 };
 use aws_sdk_ec2::Client as Ec2SdkClient;
-use chrono::DateTime;
 use futures::future::join_all;
 use log::{debug, error};
 use rusoto_dynamodb::{
-    AttributeDefinition, BillingModeSummary, CreateGlobalSecondaryIndexAction, CreateTableInput,
-    DescribeTableInput, DynamoDb, DynamoDbClient, GlobalSecondaryIndexDescription,
-    GlobalSecondaryIndexUpdate, KeySchemaElement, LocalSecondaryIndexDescription, Projection,
-    ProvisionedThroughput, ProvisionedThroughputDescription, RestoreTableFromBackupInput,
-    StreamSpecification, TableDescription, UpdateTableInput,
+    BillingModeSummary, CreateGlobalSecondaryIndexAction, CreateTableInput, DescribeTableInput,
+    DynamoDb, DynamoDbClient, GlobalSecondaryIndexUpdate, Projection, ProvisionedThroughput,
+    RestoreTableFromBackupInput, TableDescription, UpdateTableInput,
 };
 use rusoto_signature::Region;
 use std::{
@@ -41,61 +37,7 @@ use dialoguer::{theme::ColorfulTheme, Confirm, Select};
 use tabwriter::TabWriter;
 
 use super::app;
-use super::key;
-
-/* =================================================
-struct / enum / const
-================================================= */
-
-// TableDescription doesn't implement Serialize
-// https://docs.rs/rusoto_dynamodb/0.42.0/rusoto_dynamodb/struct.TableDescription.html
-#[derive(Serialize, Deserialize, Debug)]
-struct PrintDescribeTable {
-    name: String,
-    region: String,
-    status: String,
-    schema: PrintPrimaryKeys,
-
-    mode: Mode,
-    capacity: Option<PrintCapacityUnits>,
-
-    gsi: Option<Vec<PrintSecondaryIndex>>,
-    lsi: Option<Vec<PrintSecondaryIndex>>,
-
-    stream: Option<String>,
-
-    count: i64,
-    size_bytes: i64,
-    created_at: String,
-}
-
-const PROVISIONED_API_SPEC: &str = "PROVISIONED";
-const ONDEMAND_API_SPEC: &str = "PAY_PER_REQUEST";
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub enum Mode {
-    Provisioned,
-    OnDemand,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct PrintPrimaryKeys {
-    pk: String,
-    sk: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct PrintCapacityUnits {
-    wcu: i64,
-    rcu: i64,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct PrintSecondaryIndex {
-    name: String,
-    schema: PrintPrimaryKeys,
-    capacity: Option<PrintCapacityUnits>,
-}
+use super::util;
 
 /* =================================================
 Public functions
@@ -173,7 +115,7 @@ pub async fn describe_all_tables(cx: app::Context) {
 }
 
 /// Executed when you call `$ dy desc (table)`. Retrieve TableDescription via describe_table_api function,
-/// then print them in convenient way using print_table_description function (default/yaml).
+/// then print them in convenient way using util::print_table_description function (default/yaml).
 pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<String>) {
     debug!("context: {:#?}", &cx);
     debug!("positional arg table name: {:?}", &target_table_to_desc);
@@ -205,7 +147,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
     };
 
     match new_context.clone().output.as_deref() {
-        None | Some("yaml") => print_table_description(new_context.effective_region(), desc),
+        None | Some("yaml") => util::print_table_description(new_context.effective_region(), desc),
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => {
             println!("ERROR: unsupported output type.");
@@ -234,37 +176,6 @@ pub async fn describe_table_api(region: &Region, table_name: String) -> TableDes
     }
 }
 
-/// Receives region (just to show in one line for reference) and TableDescription,
-/// print them in readable YAML format. NOTE: '~' representes 'null' or 'no value' in YAML syntax.
-pub fn print_table_description(region: Region, desc: TableDescription) {
-    let attr_defs = desc.clone().attribute_definitions.unwrap();
-    let mode = extract_mode(&desc.billing_mode_summary);
-
-    let print_table: PrintDescribeTable = PrintDescribeTable {
-        name: String::from(&desc.clone().table_name.unwrap()),
-        region: String::from(region.name()),
-        status: String::from(&desc.clone().table_status.unwrap()),
-        schema: PrintPrimaryKeys {
-            pk: key::typed_key("HASH", &desc)
-                .expect("pk should exist")
-                .display(),
-            sk: key::typed_key("RANGE", &desc).map(|k| k.display()),
-        },
-
-        mode: mode.clone(),
-        capacity: extract_capacity(&mode, &desc.provisioned_throughput),
-
-        gsi: extract_secondary_indexes(&mode, &attr_defs, desc.global_secondary_indexes),
-        lsi: extract_secondary_indexes(&mode, &attr_defs, desc.local_secondary_indexes),
-        stream: extract_stream(desc.latest_stream_arn, desc.stream_specification),
-
-        size_bytes: desc.table_size_bytes.unwrap(),
-        count: desc.item_count.unwrap(),
-        created_at: epoch_to_rfc3339(desc.creation_date_time.unwrap()),
-    };
-    println!("{}", serde_yaml::to_string(&print_table).unwrap());
-}
-
 /// This function is designed to be called from dynein command, mapped in main.rs.
 /// Note that it simply ignores --table option if specified. Newly created table name should be given by the 1st argument "name".
 pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String>) {
@@ -274,7 +185,7 @@ pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String
     };
 
     match create_table_api(cx.clone(), name, given_keys).await {
-        Ok(desc) => print_table_description(cx.effective_region(), desc),
+        Ok(desc) => util::print_table_description(cx.effective_region(), desc),
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -293,12 +204,12 @@ pub async fn create_table_api(
         &name, &given_keys
     );
 
-    let (key_schema, attribute_definitions) = generate_essential_key_definitions(&given_keys);
+    let (key_schema, attribute_definitions) = util::generate_essential_key_definitions(&given_keys);
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let req: CreateTableInput = CreateTableInput {
         table_name: name,
-        billing_mode: Some(String::from(ONDEMAND_API_SPEC)),
+        billing_mode: Some(String::from(util::ONDEMAND_API_SPEC)),
         key_schema,            // Vec<KeySchemaElement>
         attribute_definitions, // Vec<AttributeDefinition>
         ..Default::default()
@@ -322,7 +233,7 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
         &cx.effective_table_name()
     );
 
-    let (key_schema, attribute_definitions) = generate_essential_key_definitions(&given_keys);
+    let (key_schema, attribute_definitions) = util::generate_essential_key_definitions(&given_keys);
 
     let ddb = DynamoDbClient::new(cx.effective_region());
     let create_gsi_action = CreateGlobalSecondaryIndexAction {
@@ -354,7 +265,7 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
-            print_table_description(cx.effective_region(), res.table_description.unwrap());
+            util::print_table_description(cx.effective_region(), res.table_description.unwrap());
         }
     }
 }
@@ -371,11 +282,11 @@ pub async fn update_table(
         describe_table_api(&cx.effective_region(), table_name_to_update.clone()).await;
 
     // Map given string into "Mode" enum. Note that in cmd.rs clap already limits acceptable values.
-    let switching_to_mode: Option<Mode> = match mode_string {
+    let switching_to_mode: Option<util::Mode> = match mode_string {
         None => None,
         Some(ms) => match ms.as_str() {
-            "provisioned" => Some(Mode::Provisioned),
-            "ondemand"    => Some(Mode::OnDemand),
+            "provisioned" => Some(util::Mode::Provisioned),
+            "ondemand"    => Some(util::Mode::OnDemand),
             _ => panic!("You shouldn't see this message as --mode can takes only 'provisioned' or 'ondemand'."),
         },
     };
@@ -386,7 +297,7 @@ pub async fn update_table(
         None => {
             match extract_mode(&desc.clone().billing_mode_summary) {
                 // When currently OnDemand mode and you're not going to change the it, set None for CU.
-                Mode::OnDemand => {
+                util::Mode::OnDemand => {
                     if wcu.is_some() || rcu.is_some() {
                         println!("Ignoring --rcu/--wcu options as the table mode is OnDemand.");
                     };
@@ -394,7 +305,7 @@ pub async fn update_table(
                 }
                 // When currently Provisioned mode and you're not going to change the it,
                 // pass given rcu/wcu, and use current values if missing. Provisioned table should have valid capacity units so unwrap() here.
-                Mode::Provisioned => Some(ProvisionedThroughput {
+                util::Mode::Provisioned => Some(ProvisionedThroughput {
                     read_capacity_units: rcu.unwrap_or_else(|| {
                         desc.clone()
                             .provisioned_throughput
@@ -415,14 +326,14 @@ pub async fn update_table(
         // When the user trying to switch mode.
         Some(target_mode) => match target_mode {
             // when switching Provisioned->OnDemand mode, ProvisionedThroughput can be None.
-            Mode::OnDemand => {
+            util::Mode::OnDemand => {
                 if wcu.is_some() || rcu.is_some() {
                     println!("Ignoring --rcu/--wcu options as --mode ondemand.");
                 };
                 None
             }
             // when switching OnDemand->Provisioned mode, set given wcu/rcu, fill with "5" as a default if not given.
-            Mode::Provisioned => Some(ProvisionedThroughput {
+            util::Mode::Provisioned => Some(ProvisionedThroughput {
                 read_capacity_units: rcu.unwrap_or(5),
                 write_capacity_units: wcu.unwrap_or(5),
             }),
@@ -442,7 +353,7 @@ pub async fn update_table(
     )
     .await
     {
-        Ok(desc) => print_table_description(cx.effective_region(), desc),
+        Ok(desc) => util::print_table_description(cx.effective_region(), desc),
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -465,7 +376,7 @@ pub async fn update_table(
 async fn update_table_api(
     cx: app::Context,
     table_name_to_update: String,
-    switching_to_mode: Option<Mode>,
+    switching_to_mode: Option<util::Mode>,
     provisioned_throughput: Option<ProvisionedThroughput>,
 ) -> Result<TableDescription, rusoto_core::RusotoError<rusoto_dynamodb::UpdateTableError>> {
     debug!("Trying to update the table '{}'.", &table_name_to_update);
@@ -474,7 +385,7 @@ async fn update_table_api(
 
     let req: UpdateTableInput = UpdateTableInput {
         table_name: table_name_to_update,
-        billing_mode: switching_to_mode.map(mode_to_billing_mode_api_spec),
+        billing_mode: switching_to_mode.map(util::mode_to_billing_mode_api_spec),
         provisioned_throughput,
         // NOTE: In this function we set `global_secondary_index_updates` to None. GSI update is handled in different commands (e.g. dy admin create index xxx --keys)
         global_secondary_index_updates: None, /* intentional */
@@ -579,7 +490,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
                 .expect("status should exist")
                 .as_str()
                 .to_string(),
-            epoch_to_rfc3339(
+            util::epoch_to_rfc3339(
                 backup
                     .backup_creation_date_time
                     .expect("creation date should exist")
@@ -625,7 +536,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
                     format!(
                         "{} ({}, {} bytes)",
                         b.to_owned().backup_name.unwrap(),
-                        epoch_to_rfc3339(b.backup_creation_date_time.unwrap().as_secs_f64()),
+                        util::epoch_to_rfc3339(b.backup_creation_date_time.unwrap().as_secs_f64()),
                         b.backup_size_bytes.unwrap()
                     )
                 })
@@ -673,21 +584,21 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
             debug!("Returned result: {:#?}", res);
             println!("Table restoration from: '{}' has been started", &backup_arn);
             let desc = res.table_description.unwrap();
-            print_table_description(cx.effective_region(), desc);
+            util::print_table_description(cx.effective_region(), desc);
         }
     }
 }
 
 /// Map "BilingModeSummary" field in table description returned from DynamoDB API,
 /// into convenient mode name ("Provisioned" or "OnDemand")
-pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
-    let provisioned_mode = Mode::Provisioned;
-    let ondemand_mode = Mode::OnDemand;
+pub fn extract_mode(bs: &Option<BillingModeSummary>) -> util::Mode {
+    let provisioned_mode = util::Mode::Provisioned;
+    let ondemand_mode = util::Mode::OnDemand;
     match bs {
         // if BillingModeSummary field doesn't exist, the table is Provisioned Mode.
         None => provisioned_mode,
         Some(x) => {
-            if x.clone().billing_mode.unwrap() == ONDEMAND_API_SPEC {
+            if x.clone().billing_mode.unwrap() == util::ONDEMAND_API_SPEC {
                 ondemand_mode
             } else {
                 provisioned_mode
@@ -699,46 +610,6 @@ pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
 /* =================================================
 Private functions
 ================================================= */
-
-/// Using Vec of String which is passed via command line,
-/// generate KeySchemaElement(s) & AttributeDefinition(s), that are essential information to create DynamoDB tables or GSIs.
-fn generate_essential_key_definitions(
-    given_keys: &[String],
-) -> (Vec<KeySchemaElement>, Vec<AttributeDefinition>) {
-    let mut key_schema: Vec<KeySchemaElement> = vec![];
-    let mut attribute_definitions: Vec<AttributeDefinition> = vec![];
-    for (key_id, key_str) in given_keys.iter().enumerate() {
-        let key_and_type = key_str.split(',').collect::<Vec<&str>>();
-        if key_and_type.len() >= 3 {
-            error!(
-                "Invalid format for --keys option: '{}'. Valid format is '--keys myPk,S mySk,N'",
-                &key_str
-            );
-            std::process::exit(1);
-        }
-
-        // assumes first given key is Partition key, and second given key is Sort key (if any).
-        key_schema.push(KeySchemaElement {
-            attribute_name: String::from(key_and_type[0]),
-            key_type: if key_id == 0 {
-                String::from("HASH")
-            } else {
-                String::from("RANGE")
-            },
-        });
-
-        // If data type of key is omitted, dynein assumes it as String (S).
-        attribute_definitions.push(AttributeDefinition {
-            attribute_name: String::from(key_and_type[0]),
-            attribute_type: if key_and_type.len() == 2 {
-                key_and_type[1].to_uppercase()
-            } else {
-                String::from("S")
-            },
-        });
-    }
-    (key_schema, attribute_definitions)
-}
 
 /// Basically called by list_tables function, which is called from `$ dy list`.
 /// To make ListTables API result reusable, separated API logic into this standalone function.
@@ -790,107 +661,4 @@ fn fetch_arn_from_backup_name(
         .unwrap() /* BackupSummary */
         .backup_arn /* Option<String> */
         .unwrap()
-}
-
-fn epoch_to_rfc3339(epoch: f64) -> String {
-    let utc_datetime = DateTime::from_timestamp(epoch as i64, 0).unwrap();
-    utc_datetime.to_rfc3339()
-}
-
-/// Takes "Mode" enum and return exact string value required by DynamoDB API.
-/// i.e. this function returns "PROVISIONED" or "PAY_PER_REQUEST".
-fn mode_to_billing_mode_api_spec(mode: Mode) -> String {
-    match mode {
-        Mode::OnDemand => String::from(ONDEMAND_API_SPEC),
-        Mode::Provisioned => String::from(PROVISIONED_API_SPEC),
-    }
-}
-
-fn extract_capacity(
-    mode: &Mode,
-    cap_desc: &Option<ProvisionedThroughputDescription>,
-) -> Option<PrintCapacityUnits> {
-    if mode == &Mode::OnDemand {
-        None
-    } else {
-        let desc = cap_desc.as_ref().unwrap();
-        Some(PrintCapacityUnits {
-            wcu: desc.write_capacity_units.unwrap(),
-            rcu: desc.read_capacity_units.unwrap(),
-        })
-    }
-}
-
-trait IndexDesc {
-    fn retrieve_index_name(&self) -> &Option<String>;
-    fn retrieve_key_schema(&self) -> &Option<Vec<KeySchemaElement>>;
-    fn extract_index_capacity(&self, m: &Mode) -> Option<PrintCapacityUnits>;
-}
-
-impl IndexDesc for GlobalSecondaryIndexDescription {
-    fn retrieve_index_name(&self) -> &Option<String> {
-        &self.index_name
-    }
-    fn retrieve_key_schema(&self) -> &Option<Vec<KeySchemaElement>> {
-        &self.key_schema
-    }
-    fn extract_index_capacity(&self, m: &Mode) -> Option<PrintCapacityUnits> {
-        if m == &Mode::OnDemand {
-            None
-        } else {
-            extract_capacity(m, &self.provisioned_throughput)
-        }
-    }
-}
-
-impl IndexDesc for LocalSecondaryIndexDescription {
-    fn retrieve_index_name(&self) -> &Option<String> {
-        &self.index_name
-    }
-    fn retrieve_key_schema(&self) -> &Option<Vec<KeySchemaElement>> {
-        &self.key_schema
-    }
-    fn extract_index_capacity(&self, _: &Mode) -> Option<PrintCapacityUnits> {
-        None // Unlike GSI, LSI doesn't have it's own capacity.
-    }
-}
-
-// FYI: https://grammarist.com/usage/indexes-indices/
-fn extract_secondary_indexes<T: IndexDesc>(
-    mode: &Mode,
-    attr_defs: &[AttributeDefinition],
-    option_indexes: Option<Vec<T>>,
-) -> Option<Vec<PrintSecondaryIndex>> {
-    if let Some(indexes) = option_indexes {
-        let mut xs = Vec::<PrintSecondaryIndex>::new();
-        for idx in &indexes {
-            let ks = &idx.retrieve_key_schema().as_ref().unwrap();
-            let idx = PrintSecondaryIndex {
-                name: String::from(idx.retrieve_index_name().as_ref().unwrap()),
-                schema: PrintPrimaryKeys {
-                    pk: key::typed_key_for_schema("HASH", ks, attr_defs)
-                        .expect("pk should exist")
-                        .display(),
-                    sk: key::typed_key_for_schema("RANGE", ks, attr_defs).map(|k| k.display()),
-                },
-                capacity: idx.extract_index_capacity(mode),
-            };
-            xs.push(idx);
-        }
-        Some(xs)
-    } else {
-        None
-    }
-}
-
-fn extract_stream(arn: Option<String>, spec: Option<StreamSpecification>) -> Option<String> {
-    if arn.is_none() {
-        None
-    } else {
-        Some(format!(
-            "{} ({})",
-            arn.unwrap(),
-            spec.unwrap().stream_view_type.unwrap()
-        ))
-    }
 }
