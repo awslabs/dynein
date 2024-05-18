@@ -16,16 +16,19 @@
 
 // This module interact with DynamoDB Control Plane APIs
 use ::serde::{Deserialize, Serialize};
-use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
+use aws_sdk_dynamodb::{
+    types::{BackupStatus as SdkBackupStatus, BackupSummary as SdkBackupSummary},
+    Client as DynamoDbSdkClient,
+};
 use aws_sdk_ec2::Client as Ec2SdkClient;
 use chrono::DateTime;
 use futures::future::join_all;
 use log::{debug, error};
 use rusoto_dynamodb::{
-    AttributeDefinition, BackupSummary, BillingModeSummary, CreateBackupInput,
+    AttributeDefinition, BillingModeSummary, CreateBackupInput,
     CreateGlobalSecondaryIndexAction, CreateTableInput, DescribeTableInput,
     DynamoDb, DynamoDbClient, GlobalSecondaryIndexDescription, GlobalSecondaryIndexUpdate,
-    KeySchemaElement, ListBackupsInput, LocalSecondaryIndexDescription, Projection,
+    KeySchemaElement, LocalSecondaryIndexDescription, Projection,
     ProvisionedThroughput, ProvisionedThroughputDescription, RestoreTableFromBackupInput,
     StreamSpecification, TableDescription, UpdateTableInput,
 };
@@ -574,11 +577,16 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
     for backup in backups {
         let line = [
             backup.table_name.expect("table name should exist"),
-            backup.backup_status.expect("status should exist"),
+            backup
+                .backup_status
+                .expect("status should exist")
+                .as_str()
+                .to_string(),
             epoch_to_rfc3339(
                 backup
                     .backup_creation_date_time
-                    .expect("creation date should exist"),
+                    .expect("creation date should exist")
+                    .as_secs_f64(),
             ),
             backup.backup_name.expect("backup name should exist")
                 + &format!(
@@ -598,10 +606,12 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
 /// Currently overwriting properties during rstore is not supported.
 pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name: Option<String>) {
     // let backups = list_backups_api(&cx, false).await;
-    let available_backups: Vec<BackupSummary> = list_backups_api(&cx, false)
+    let available_backups: Vec<SdkBackupSummary> = list_backups_api(&cx, false)
         .await
         .into_iter()
-        .filter(|b: &BackupSummary| b.to_owned().backup_status.unwrap() == "AVAILABLE")
+        .filter(|b: &SdkBackupSummary| {
+            b.to_owned().backup_status == Some(SdkBackupStatus::Available)
+        })
         .collect();
     // let available_backups: Vec<BackupSummary> = backups.iter().filter(|b| b.backup_status.to_owned().unwrap() == "AVAILABLE").collect();
     if available_backups.is_empty() {
@@ -618,7 +628,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
                     format!(
                         "{} ({}, {} bytes)",
                         b.to_owned().backup_name.unwrap(),
-                        epoch_to_rfc3339(b.backup_creation_date_time.unwrap()),
+                        epoch_to_rfc3339(b.backup_creation_date_time.unwrap().as_secs_f64()),
                         b.backup_size_bytes.unwrap()
                     )
                 })
@@ -751,18 +761,16 @@ async fn list_tables_api(cx: app::Context) -> Vec<String> {
 }
 
 /// This function is a private function that simply calls ListBackups API and return results
-async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSummary> {
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: ListBackupsInput = ListBackupsInput {
-        table_name: if all_tables {
-            None
-        } else {
-            Some(cx.effective_table_name())
-        },
-        ..Default::default()
-    };
+async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<SdkBackupSummary> {
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.list_backups(req).await {
+    let mut req = ddb.list_backups();
+    if !all_tables {
+        req = req.table_name(cx.effective_table_name());
+    }
+
+    match req.send().await {
         Err(e) => {
             debug!("ListBackups API call got an error -- {:#?}", e);
             // app::bye(1, &e.to_string()) // it doesn't meet return value requirement.
@@ -777,7 +785,7 @@ async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSumm
 
 fn fetch_arn_from_backup_name(
     backup_name: String,
-    available_backups: Vec<BackupSummary>,
+    available_backups: Vec<SdkBackupSummary>,
 ) -> String {
     available_backups
         .into_iter()
