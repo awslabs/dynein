@@ -15,13 +15,13 @@
  */
 
 use ::serde::{Deserialize, Serialize};
+use aws_sdk_dynamodb::types::{
+    AttributeDefinition, BillingMode, BillingModeSummary, GlobalSecondaryIndexDescription,
+    KeySchemaElement, KeyType, LocalSecondaryIndexDescription, ProvisionedThroughputDescription,
+    ScalarAttributeType, StreamSpecification, TableDescription,
+};
 use chrono::DateTime;
 use log::error;
-use rusoto_dynamodb::{
-    AttributeDefinition, BillingModeSummary, GlobalSecondaryIndexDescription, KeySchemaElement,
-    LocalSecondaryIndexDescription, ProvisionedThroughputDescription, StreamSpecification,
-    TableDescription,
-};
 use rusoto_signature::Region;
 
 use super::key;
@@ -52,13 +52,19 @@ struct PrintDescribeTable {
     created_at: String,
 }
 
-pub const PROVISIONED_API_SPEC: &str = "PROVISIONED";
-pub const ONDEMAND_API_SPEC: &str = "PAY_PER_REQUEST";
-
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub enum Mode {
     Provisioned,
     OnDemand,
+}
+
+impl Into<BillingMode> for Mode {
+    fn into(self) -> BillingMode {
+        match self {
+            Mode::Provisioned => BillingMode::Provisioned,
+            Mode::OnDemand => BillingMode::PayPerRequest,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -89,7 +95,7 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
     let print_table: PrintDescribeTable = PrintDescribeTable {
         name: String::from(&desc.clone().table_name.unwrap()),
         region: String::from(region.name()),
-        status: String::from(&desc.clone().table_status.unwrap()),
+        status: String::from(desc.clone().table_status.unwrap().as_str()),
         schema: PrintPrimaryKeys {
             pk: key::typed_key("HASH", &desc)
                 .expect("pk should exist")
@@ -106,7 +112,7 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
 
         size_bytes: desc.table_size_bytes.unwrap(),
         count: desc.item_count.unwrap(),
-        created_at: epoch_to_rfc3339(desc.creation_date_time.unwrap()),
+        created_at: epoch_to_rfc3339(desc.creation_date_time.unwrap().as_secs_f64()),
     };
     println!("{}", serde_yaml::to_string(&print_table).unwrap());
 }
@@ -129,24 +135,28 @@ pub fn generate_essential_key_definitions(
         }
 
         // assumes first given key is Partition key, and second given key is Sort key (if any).
-        key_schema.push(KeySchemaElement {
-            attribute_name: String::from(key_and_type[0]),
-            key_type: if key_id == 0 {
-                String::from("HASH")
-            } else {
-                String::from("RANGE")
-            },
-        });
+        key_schema.push(
+            KeySchemaElement::builder()
+                .attribute_name(String::from(key_and_type[0]))
+                .key_type(if key_id == 0 {
+                    KeyType::Hash
+                } else {
+                    KeyType::Range
+                })
+                .build().unwrap(),
+        );
 
         // If data type of key is omitted, dynein assumes it as String (S).
-        attribute_definitions.push(AttributeDefinition {
-            attribute_name: String::from(key_and_type[0]),
-            attribute_type: if key_and_type.len() == 2 {
-                key_and_type[1].to_uppercase()
-            } else {
-                String::from("S")
-            },
-        });
+        attribute_definitions.push(
+            AttributeDefinition::builder()
+                .attribute_name(String::from(key_and_type[0]))
+                .attribute_type(if key_and_type.len() == 2 {
+                    ScalarAttributeType::from(key_and_type[1].to_uppercase().as_ref())
+                } else {
+                    ScalarAttributeType::S
+                })
+                .build().unwrap(),
+        )
     }
     (key_schema, attribute_definitions)
 }
@@ -160,7 +170,7 @@ pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
         // if BillingModeSummary field doesn't exist, the table is Provisioned Mode.
         None => provisioned_mode,
         Some(x) => {
-            if x.clone().billing_mode.unwrap() == ONDEMAND_API_SPEC {
+            if x.clone().billing_mode.unwrap() == BillingMode::PayPerRequest {
                 ondemand_mode
             } else {
                 provisioned_mode
@@ -212,15 +222,6 @@ fn extract_stream(arn: Option<String>, spec: Option<StreamSpecification>) -> Opt
 pub fn epoch_to_rfc3339(epoch: f64) -> String {
     let utc_datetime = DateTime::from_timestamp(epoch as i64, 0).unwrap();
     utc_datetime.to_rfc3339()
-}
-
-/// Takes "Mode" enum and return exact string value required by DynamoDB API.
-/// i.e. this function returns "PROVISIONED" or "PAY_PER_REQUEST".
-pub fn mode_to_billing_mode_api_spec(mode: Mode) -> String {
-    match mode {
-        Mode::OnDemand => String::from(ONDEMAND_API_SPEC),
-        Mode::Provisioned => String::from(PROVISIONED_API_SPEC),
-    }
 }
 
 fn extract_capacity(

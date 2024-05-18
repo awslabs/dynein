@@ -15,7 +15,7 @@
  */
 
 use ::serde::{Deserialize, Serialize};
-use rusoto_dynamodb::{AttributeDefinition, KeySchemaElement, TableDescription};
+use aws_sdk_dynamodb::types::{AttributeDefinition, KeySchemaElement, TableDescription};
 use std::str::FromStr;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -112,7 +112,7 @@ pub fn typed_key_for_schema(
     attrs: &[AttributeDefinition],
 ) -> Option<Key> {
     // Fetch Partition Key ("HASH") or Sort Key ("RANGE") from given Key Schema. pk should always exists, but sk may not.
-    let target_key = ks.iter().find(|x| x.key_type == pk_or_sk);
+    let target_key = ks.iter().find(|x| x.key_type == pk_or_sk.into());
     target_key.map(|key| Key {
         name: key.clone().attribute_name,
         // kind should be one of S/N/B, Which can be retrieved from AttributeDefinition's attribute_type.
@@ -121,7 +121,7 @@ pub fn typed_key_for_schema(
                 .iter()
                 .find(|at| at.attribute_name == key.attribute_name)
                 .expect("primary key should be in AttributeDefinition.")
-                .attribute_type,
+                .attribute_type.as_str(),
         )
         .unwrap(),
     })

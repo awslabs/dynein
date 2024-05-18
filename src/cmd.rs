@@ -119,7 +119,7 @@ pub enum Sub {
     Scan {
         /// Limit number of items to return.
         #[clap(short, long, default_value = "100", verbatim_doc_comment)]
-        limit: i64,
+        limit: i32,
 
         /// Attributes to show, separated by commas, which is mapped to ProjectionExpression (e.g. --attributes name,address,age).
         /// Note that primary key(s) are always included in results regardless of what you've passed to --attributes.
@@ -184,7 +184,7 @@ pub enum Sub {
 
         /// Limit the number of items to return. By default, the number of items is determined by DynamoDB.
         #[clap(short, long, verbatim_doc_comment)]
-        limit: Option<i64>,
+        limit: Option<i32>,
 
         /// Attributes to show, separated by commas, which is mapped to ProjectionExpression (e.g. --attributes name,address,age).
         /// Note that primary key(s) are always included in results regardless of what you've passed to --attributes.

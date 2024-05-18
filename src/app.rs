@@ -16,10 +16,10 @@
 
 use ::serde::{Deserialize, Serialize};
 use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, SdkConfig};
+use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
 use aws_types::region::Region as SdkRegion;
 use backon::ExponentialBuilder;
 use log::{debug, error, info};
-use rusoto_dynamodb::{AttributeDefinition, TableDescription};
 use rusoto_signature::Region;
 use serde_yaml::Error as SerdeYAMLError;
 use std::convert::{TryFrom, TryInto};
@@ -255,6 +255,11 @@ impl Context {
     pub async fn effective_sdk_config(&self) -> SdkConfig {
         let region = self.effective_region();
         let region_name = region.name();
+
+        self.effective_sdk_config_with_region(region_name).await
+    }
+
+    pub async fn effective_sdk_config_with_region(&self, region_name: &str) -> SdkConfig {
         let sdk_region = SdkRegion::new(region_name.to_owned());
 
         let provider = RegionProviderChain::first_try(sdk_region);
@@ -511,7 +516,7 @@ pub async fn use_table(
             debug!("describing the table: {}", tbl);
             let region = cx.effective_region();
             let tbl = tbl.clone();
-            let desc: TableDescription = control::describe_table_api(&region, tbl.clone()).await;
+            let desc: TableDescription = control::describe_table_api(cx, &region, tbl.clone()).await;
             save_using_target(cx, desc)?;
             println!("Now you're using the table '{}' ({}).", tbl, &region.name());
         },
@@ -591,6 +596,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
         Some(table_name) => {
             // TODO: reduce # of DescribeTable API calls. table_schema function is called every time you do something.
             let desc: TableDescription = control::describe_table_api(
+                cx,
                 &cx.effective_region(),
                 table_name, /* should be equal to 'cx.effective_table_name()' */
             )

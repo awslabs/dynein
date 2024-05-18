@@ -16,17 +16,16 @@
 
 // This module interact with DynamoDB Control Plane APIs
 use aws_sdk_dynamodb::{
-    types::{BackupStatus as SdkBackupStatus, BackupSummary as SdkBackupSummary},
+    types::{
+        BackupStatus, BackupSummary, BillingMode, CreateGlobalSecondaryIndexAction,
+        GlobalSecondaryIndexUpdate, Projection, ProjectionType, ProvisionedThroughput,
+        TableDescription,
+    },
     Client as DynamoDbSdkClient,
 };
 use aws_sdk_ec2::Client as Ec2SdkClient;
 use futures::future::join_all;
 use log::{debug, error};
-use rusoto_dynamodb::{
-    BillingModeSummary, CreateGlobalSecondaryIndexAction, CreateTableInput, DescribeTableInput,
-    DynamoDb, DynamoDbClient, GlobalSecondaryIndexUpdate, Projection, ProvisionedThroughput,
-    RestoreTableFromBackupInput, TableDescription, UpdateTableInput,
-};
 use rusoto_signature::Region;
 use std::{
     io::{self, Error as IOError, Write},
@@ -126,6 +125,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
     };
 
     let desc: TableDescription = describe_table_api(
+        &new_context,
         &new_context.effective_region(),
         new_context.effective_table_name(),
     )
@@ -158,11 +158,15 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
 
 /// Originally intended to be called by describe_table function, which is called from `$ dy desc`,
 /// however it turned out that DescribeTable API result is useful in various logic, separated API into this standalone function.
-pub async fn describe_table_api(region: &Region, table_name: String) -> TableDescription {
-    let ddb = DynamoDbClient::new(region.clone());
-    let req: DescribeTableInput = DescribeTableInput { table_name };
+pub async fn describe_table_api(
+    cx: &app::Context,
+    region: &Region,
+    table_name: String,
+) -> TableDescription {
+    let config = cx.effective_sdk_config_with_region(region.name()).await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.describe_table(req).await {
+    match ddb.describe_table().table_name(table_name).send().await {
         Err(e) => {
             debug!("DescribeTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -198,7 +202,10 @@ pub async fn create_table_api(
     cx: app::Context,
     name: String,
     given_keys: Vec<String>,
-) -> Result<TableDescription, rusoto_core::RusotoError<rusoto_dynamodb::CreateTableError>> {
+) -> Result<
+    TableDescription,
+    aws_sdk_dynamodb::error::SdkError<aws_sdk_dynamodb::operation::create_table::CreateTableError>,
+> {
     debug!(
         "Trying to create a table '{}' with keys '{:?}'",
         &name, &given_keys
@@ -206,19 +213,20 @@ pub async fn create_table_api(
 
     let (key_schema, attribute_definitions) = util::generate_essential_key_definitions(&given_keys);
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let req: CreateTableInput = CreateTableInput {
-        table_name: name,
-        billing_mode: Some(String::from(util::ONDEMAND_API_SPEC)),
-        key_schema,            // Vec<KeySchemaElement>
-        attribute_definitions, // Vec<AttributeDefinition>
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    ddb.create_table(req).await.map(|res| {
-        res.table_description
-            .expect("Table Description returned from API should be valid.")
-    })
+    ddb.create_table()
+        .table_name(name)
+        .billing_mode(BillingMode::PayPerRequest)
+        .set_key_schema(Some(key_schema))
+        .set_attribute_definitions(Some(attribute_definitions))
+        .send()
+        .await
+        .map(|res| {
+            res.table_description
+                .expect("Table Description returned from API should be valid.")
+        })
 }
 
 pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<String>) {
@@ -235,29 +243,32 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
 
     let (key_schema, attribute_definitions) = util::generate_essential_key_definitions(&given_keys);
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    let create_gsi_action = CreateGlobalSecondaryIndexAction {
-        index_name,
-        key_schema,
-        projection: Projection {
-            projection_type: Some(String::from("ALL")),
-            non_key_attributes: None,
-        },
-        provisioned_throughput: None, // TODO: assign default rcu/wcu if base table is Provisioned mode. currently it works only for OnDemand talbe.
-    };
-    let gsi_update = GlobalSecondaryIndexUpdate {
-        create: Some(create_gsi_action),
-        update: None,
-        delete: None,
-    };
-    let req: UpdateTableInput = UpdateTableInput {
-        table_name: cx.effective_table_name(),
-        attribute_definitions: Some(attribute_definitions), // contains minimum necessary/missing attributes to add to define new GSI.
-        global_secondary_index_updates: Some(vec![gsi_update]),
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.update_table(req).await {
+    let create_gsi_action = CreateGlobalSecondaryIndexAction::builder()
+        .index_name(index_name)
+        .set_key_schema(Some(key_schema))
+        .projection(
+            Projection::builder()
+                .projection_type(ProjectionType::All)
+                .build(),
+        )
+        .set_provisioned_throughput(None) // TODO: assign default rcu/wcu if base table is Provisioned mode. currently it works only for OnDemand talbe.
+        .build().unwrap();
+
+    let gsi_update = GlobalSecondaryIndexUpdate::builder()
+        .create(create_gsi_action)
+        .build();
+
+    match ddb
+        .update_table()
+        .table_name(cx.effective_table_name())
+        .set_attribute_definitions(Some(attribute_definitions))
+        .global_secondary_index_updates(gsi_update)
+        .send()
+        .await
+    {
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -279,7 +290,7 @@ pub async fn update_table(
 ) {
     // Retrieve TableDescription of the table to update, current (before update) status.
     let desc: TableDescription =
-        describe_table_api(&cx.effective_region(), table_name_to_update.clone()).await;
+        describe_table_api(&cx, &cx.effective_region(), table_name_to_update.clone()).await;
 
     // Map given string into "Mode" enum. Note that in cmd.rs clap already limits acceptable values.
     let switching_to_mode: Option<util::Mode> = match mode_string {
@@ -295,7 +306,7 @@ pub async fn update_table(
     let provisioned_throughput: Option<ProvisionedThroughput> = match &switching_to_mode {
         // when --mode is not given, no mode switch happens. Check the table's current mode.
         None => {
-            match extract_mode(&desc.clone().billing_mode_summary) {
+            match util::extract_mode(&desc.clone().billing_mode_summary) {
                 // When currently OnDemand mode and you're not going to change the it, set None for CU.
                 util::Mode::OnDemand => {
                     if wcu.is_some() || rcu.is_some() {
@@ -305,22 +316,24 @@ pub async fn update_table(
                 }
                 // When currently Provisioned mode and you're not going to change the it,
                 // pass given rcu/wcu, and use current values if missing. Provisioned table should have valid capacity units so unwrap() here.
-                util::Mode::Provisioned => Some(ProvisionedThroughput {
-                    read_capacity_units: rcu.unwrap_or_else(|| {
-                        desc.clone()
-                            .provisioned_throughput
-                            .unwrap()
-                            .read_capacity_units
-                            .unwrap()
-                    }),
-                    write_capacity_units: wcu.unwrap_or_else(|| {
-                        desc.clone()
-                            .provisioned_throughput
-                            .unwrap()
-                            .write_capacity_units
-                            .unwrap()
-                    }),
-                }),
+                util::Mode::Provisioned => Some(
+                    ProvisionedThroughput::builder()
+                        .read_capacity_units(rcu.unwrap_or_else(|| {
+                            desc.clone()
+                                .provisioned_throughput
+                                .unwrap()
+                                .read_capacity_units
+                                .unwrap()
+                        }))
+                        .write_capacity_units(wcu.unwrap_or_else(|| {
+                            desc.clone()
+                                .provisioned_throughput
+                                .unwrap()
+                                .write_capacity_units
+                                .unwrap()
+                        }))
+                        .build().unwrap(),
+                ),
             }
         }
         // When the user trying to switch mode.
@@ -333,10 +346,12 @@ pub async fn update_table(
                 None
             }
             // when switching OnDemand->Provisioned mode, set given wcu/rcu, fill with "5" as a default if not given.
-            util::Mode::Provisioned => Some(ProvisionedThroughput {
-                read_capacity_units: rcu.unwrap_or(5),
-                write_capacity_units: wcu.unwrap_or(5),
-            }),
+            util::Mode::Provisioned => Some(
+                ProvisionedThroughput::builder()
+                    .read_capacity_units(rcu.unwrap_or(5))
+                    .write_capacity_units(wcu.unwrap_or(5))
+                    .build().unwrap(),
+            ),
         },
     };
 
@@ -378,24 +393,25 @@ async fn update_table_api(
     table_name_to_update: String,
     switching_to_mode: Option<util::Mode>,
     provisioned_throughput: Option<ProvisionedThroughput>,
-) -> Result<TableDescription, rusoto_core::RusotoError<rusoto_dynamodb::UpdateTableError>> {
+) -> Result<
+    TableDescription,
+    aws_sdk_dynamodb::error::SdkError<aws_sdk_dynamodb::operation::update_table::UpdateTableError>,
+> {
     debug!("Trying to update the table '{}'.", &table_name_to_update);
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    let req: UpdateTableInput = UpdateTableInput {
-        table_name: table_name_to_update,
-        billing_mode: switching_to_mode.map(util::mode_to_billing_mode_api_spec),
-        provisioned_throughput,
-        // NOTE: In this function we set `global_secondary_index_updates` to None. GSI update is handled in different commands (e.g. dy admin create index xxx --keys)
-        global_secondary_index_updates: None, /* intentional */
-        ..Default::default()
-    };
-
-    ddb.update_table(req).await.map(|res| {
-        res.table_description
-            .expect("Table Description returned from API should be valid.")
-    })
+    ddb.update_table()
+        .table_name(table_name_to_update)
+        .set_billing_mode(switching_to_mode.map(|v| v.into()))
+        .set_provisioned_throughput(provisioned_throughput)
+        .send()
+        .await
+        .map(|res| {
+            res.table_description
+                .expect("Table Description returned from API should be valid.")
+        })
 }
 
 pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: bool) {
@@ -514,12 +530,10 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
 /// Currently overwriting properties during rstore is not supported.
 pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name: Option<String>) {
     // let backups = list_backups_api(&cx, false).await;
-    let available_backups: Vec<SdkBackupSummary> = list_backups_api(&cx, false)
+    let available_backups: Vec<BackupSummary> = list_backups_api(&cx, false)
         .await
         .into_iter()
-        .filter(|b: &SdkBackupSummary| {
-            b.to_owned().backup_status == Some(SdkBackupStatus::Available)
-        })
+        .filter(|b: &BackupSummary| b.to_owned().backup_status == Some(BackupStatus::Available))
         .collect();
     // let available_backups: Vec<BackupSummary> = backups.iter().filter(|b| b.backup_status.to_owned().unwrap() == "AVAILABLE").collect();
     if available_backups.is_empty() {
@@ -565,15 +579,16 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
         Some(restore) => restore,
     };
 
-    let ddb = DynamoDbClient::new(cx.effective_region());
-    // https://docs.rs/rusoto_dynamodb/0.44.0/rusoto_dynamodb/struct.RestoreTableFromBackupInput.html
-    let req: RestoreTableFromBackupInput = RestoreTableFromBackupInput {
-        backup_arn: backup_arn.clone(),
-        target_table_name,
-        ..Default::default()
-    };
+    let config = cx.effective_sdk_config().await;
+    let ddb = DynamoDbSdkClient::new(&config);
 
-    match ddb.restore_table_from_backup(req).await {
+    match ddb
+        .restore_table_from_backup()
+        .backup_arn(backup_arn.clone())
+        .target_table_name(target_table_name)
+        .send()
+        .await
+    {
         Err(e) => {
             debug!("RestoreTableFromBackup API call got an error -- {:#?}", e);
             /* e.g. ... Possibly see "BackupInUse" error:
@@ -585,24 +600,6 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
             println!("Table restoration from: '{}' has been started", &backup_arn);
             let desc = res.table_description.unwrap();
             util::print_table_description(cx.effective_region(), desc);
-        }
-    }
-}
-
-/// Map "BilingModeSummary" field in table description returned from DynamoDB API,
-/// into convenient mode name ("Provisioned" or "OnDemand")
-pub fn extract_mode(bs: &Option<BillingModeSummary>) -> util::Mode {
-    let provisioned_mode = util::Mode::Provisioned;
-    let ondemand_mode = util::Mode::OnDemand;
-    match bs {
-        // if BillingModeSummary field doesn't exist, the table is Provisioned Mode.
-        None => provisioned_mode,
-        Some(x) => {
-            if x.clone().billing_mode.unwrap() == util::ONDEMAND_API_SPEC {
-                ondemand_mode
-            } else {
-                provisioned_mode
-            }
         }
     }
 }
@@ -629,7 +626,7 @@ async fn list_tables_api(cx: app::Context) -> Vec<String> {
 }
 
 /// This function is a private function that simply calls ListBackups API and return results
-async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<SdkBackupSummary> {
+async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSummary> {
     let config = cx.effective_sdk_config().await;
     let ddb = DynamoDbSdkClient::new(&config);
 
@@ -653,7 +650,7 @@ async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<SdkBackupS
 
 fn fetch_arn_from_backup_name(
     backup_name: String,
-    available_backups: Vec<SdkBackupSummary>,
+    available_backups: Vec<BackupSummary>,
 ) -> String {
     available_backups
         .into_iter()

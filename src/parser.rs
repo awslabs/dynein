@@ -15,12 +15,12 @@
  */
 
 use crate::pest::Parser;
+use aws_sdk_dynamodb::types::AttributeValue;
 use base64::engine::{general_purpose, DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 use base64::{DecodeError, Engine};
 use bytes::Bytes;
 use itertools::Itertools;
 use pest::iterators::Pair;
-use rusoto_dynamodb::AttributeValue;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter, Write};
@@ -452,54 +452,24 @@ impl AttrVal {
 
     fn convert_attribute_value(self) -> AttributeValue {
         match self {
-            AttrVal::N(number) => AttributeValue {
-                n: Some(number),
-                ..Default::default()
-            },
-            AttrVal::S(str) => AttributeValue {
-                s: Some(str),
-                ..Default::default()
-            },
-            AttrVal::Bool(boolean) => AttributeValue {
-                bool: Some(boolean),
-                ..Default::default()
-            },
-            AttrVal::Null(isnull) => AttributeValue {
-                null: Some(isnull),
-                ..Default::default()
-            },
-            AttrVal::B(binary) => AttributeValue {
-                b: Some(binary),
-                ..Default::default()
-            },
-            AttrVal::L(list) => AttributeValue {
-                l: Some(
-                    list.into_iter()
-                        .map(|x| x.convert_attribute_value())
-                        .collect(),
-                ),
-                ..Default::default()
-            },
-            AttrVal::M(map) => AttributeValue {
-                m: Some(
-                    map.into_iter()
-                        .map(|(key, val)| (key, val.convert_attribute_value()))
-                        .collect(),
-                ),
-                ..Default::default()
-            },
-            AttrVal::NS(list) => AttributeValue {
-                ns: Some(list),
-                ..Default::default()
-            },
-            AttrVal::SS(list) => AttributeValue {
-                ss: Some(list),
-                ..Default::default()
-            },
-            AttrVal::BS(list) => AttributeValue {
-                bs: Some(list),
-                ..Default::default()
-            },
+            AttrVal::N(number) => AttributeValue::N(number),
+            AttrVal::S(str) => AttributeValue::S(str),
+            AttrVal::Bool(boolean) => AttributeValue::Bool(boolean),
+            AttrVal::Null(isnull) => AttributeValue::Null(isnull),
+            AttrVal::B(binary) => AttributeValue::B(aws_sdk_dynamodb::primitives::Blob::new(binary)),
+            AttrVal::L(list) => AttributeValue::L(
+                list.into_iter()
+                    .map(|x| x.convert_attribute_value())
+                    .collect(),
+            ),
+            AttrVal::M(map) => AttributeValue::M(
+                map.into_iter()
+                    .map(|(key, val)| (key, val.convert_attribute_value()))
+                    .collect(),
+            ),
+            AttrVal::NS(list) => AttributeValue::Ns(list),
+            AttrVal::SS(list) => AttributeValue::Ss(list),
+            AttrVal::BS(list) => AttributeValue::Bs(list.into_iter().map(aws_sdk_dynamodb::primitives::Blob::new).collect()),
         }
     }
 }
@@ -1474,13 +1444,13 @@ impl DyneinParser {
         let result = GeneratedParser::parse(Rule::map_literal, exp);
         match result {
             Ok(mut pair) => {
-                let item = parse_literal(pair.next().unwrap())?.convert_attribute_value();
+                let item = parse_literal(pair.next().unwrap())?.convert_attribute_value().as_m().unwrap().to_owned();
                 // content must be map literal
                 let mut image = match initial_item {
                     Some(init_item) => init_item,
                     None => HashMap::new(),
                 };
-                image.extend(item.m.unwrap());
+                image.extend(item);
                 Ok(image)
             }
             Err(err) => Err(ParseError::ParsingError(Box::new(err))),
