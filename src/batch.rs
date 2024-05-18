@@ -29,6 +29,7 @@ use std::{collections::HashMap, error, fmt, fs, future::Future, io::Error as IOE
 
 use super::app;
 use super::data;
+use super::key;
 
 /* =================================================
 struct / enum / const
@@ -646,25 +647,25 @@ fn validate_item_keys(
 
 fn validate_key_type(
     key_name: &str,
-    expected_key_type: &app::KeyType,
+    expected_key_type: &key::KeyType,
     attrs: &HashMap<String, AttributeValue>,
 ) -> Result<(), DyneinBatchError> {
     match expected_key_type {
-        app::KeyType::S => {
+        key::KeyType::S => {
             if attrs[key_name].s.is_none() {
                 return Err(DyneinBatchError::InvalidInput(
                     generate_type_mismatch_error_message(key_name, "String"),
                 ));
             }
         }
-        app::KeyType::N => {
+        key::KeyType::N => {
             if attrs[key_name].n.is_none() {
                 return Err(DyneinBatchError::InvalidInput(
                     generate_type_mismatch_error_message(key_name, "Number"),
                 ));
             }
         }
-        app::KeyType::B => {
+        key::KeyType::B => {
             if attrs[key_name].b.is_none() {
                 return Err(DyneinBatchError::InvalidInput(
                     generate_type_mismatch_error_message(key_name, "Binary"),

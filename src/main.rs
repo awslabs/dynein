@@ -32,6 +32,7 @@ mod bootstrap;
 mod cmd;
 mod control;
 mod data;
+mod key;
 mod parser;
 mod shell;
 mod transfer;

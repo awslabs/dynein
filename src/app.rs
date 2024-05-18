@@ -19,7 +19,7 @@ use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, SdkConfig};
 use aws_types::region::Region as SdkRegion;
 use backon::ExponentialBuilder;
 use log::{debug, error, info};
-use rusoto_dynamodb::{AttributeDefinition, KeySchemaElement, TableDescription};
+use rusoto_dynamodb::{AttributeDefinition, TableDescription};
 use rusoto_signature::Region;
 use serde_yaml::Error as SerdeYAMLError;
 use std::convert::{TryFrom, TryInto};
@@ -27,7 +27,7 @@ use std::time::Duration;
 use std::{
     collections::HashMap,
     env, error,
-    fmt::{self, Display, Error as FmtError, Formatter},
+    fmt::{self, Formatter},
     fs,
     io::Error as IOError,
     path,
@@ -37,6 +37,7 @@ use tempfile::NamedTempFile;
 use thiserror::Error;
 
 use super::control;
+use super::key;
 
 /* =================================================
 struct / enum / const
@@ -57,8 +58,8 @@ pub enum DyneinFileType {
 pub struct TableSchema {
     pub region: String,
     pub name: String,
-    pub pk: Key,
-    pub sk: Option<Key>,
+    pub pk: key::Key,
+    pub sk: Option<key::Key>,
     pub indexes: Option<Vec<IndexSchema>>,
     pub mode: control::Mode,
 }
@@ -69,86 +70,8 @@ pub struct IndexSchema {
     /// Type of index. i.e. GSI (Global Secondary Index) or LSI (Local Secondary Index).
     /// Use 'kind' as 'type' is a keyword in Rust.
     pub kind: IndexType,
-    pub pk: Key,
-    pub sk: Option<Key>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Key {
-    pub name: String,
-    /// Data type of the primary key. i.e. "S" (String), "N" (Number), or "B" (Binary).
-    /// Use 'kind' as 'type' is a keyword in Rust.
-    pub kind: KeyType,
-}
-
-impl Key {
-    /// return String with "<pk name> (<pk type>)", e.g. "myPk (S)". Used in desc command outputs.
-    pub fn display(&self) -> String {
-        format!("{} ({})", self.name, self.kind)
-    }
-}
-
-/// Restrict acceptable DynamoDB data types for primary keys.
-///     enum witn methods/FromStr ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#226-258
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub enum KeyType {
-    S,
-    N,
-    B,
-}
-
-/// implement Display for KeyType to simply print a single letter "S", "N", or "B".
-impl Display for KeyType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                KeyType::S => "S",
-                KeyType::N => "N",
-                KeyType::B => "B",
-            }
-        )
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ParseKeyTypeError {
-    message: String,
-}
-
-impl std::error::Error for ParseKeyTypeError {
-    fn description(&self) -> &str {
-        &self.message
-    }
-}
-
-impl Display for ParseKeyTypeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FmtError> {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl ParseKeyTypeError {
-    /// Parses a region given as a string literal into a type `KeyType'
-    pub fn new(input: &str) -> Self {
-        Self {
-            message: format!("Not a valid DynamoDB primary key type: {}", input),
-        }
-    }
-}
-
-impl FromStr for KeyType {
-    type Err = ParseKeyTypeError;
-
-    fn from_str(s: &str) -> Result<Self, ParseKeyTypeError> {
-        match s {
-            "S" => Ok(Self::S),
-            "N" => Ok(Self::N),
-            "B" => Ok(Self::B),
-            x => Err(ParseKeyTypeError::new(x)),
-        }
-    }
+    pub pk: key::Key,
+    pub sk: Option<key::Key>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -632,8 +555,8 @@ pub fn insert_to_table_cache(
         TableSchema {
             region: String::from(region.name()),
             name: table_name,
-            pk: typed_key("HASH", &desc).expect("pk should exist"),
-            sk: typed_key("RANGE", &desc),
+            pk: key::typed_key("HASH", &desc).expect("pk should exist"),
+            sk: key::typed_key("RANGE", &desc),
             indexes: index_schemas(&desc),
             mode: control::extract_mode(&desc.billing_mode_summary),
         },
@@ -658,37 +581,6 @@ pub fn remove_dynein_files() -> Result<(), DyneinConfigError> {
     Ok(())
 }
 
-/// returns Option of a tuple (attribute_name, attribute_type (S/N/B)).
-/// Used when you want to know "what is the Partition Key name and its data type of this table".
-pub fn typed_key(pk_or_sk: &str, desc: &TableDescription) -> Option<Key> {
-    // extracting key schema of "base table" here
-    let ks = desc.clone().key_schema.unwrap();
-    typed_key_for_schema(pk_or_sk, &ks, &desc.clone().attribute_definitions.unwrap())
-}
-
-/// Receives key data type (HASH or RANGE), KeySchemaElement(s), and AttributeDefinition(s),
-/// In many cases it's called by typed_key, but when retrieving index schema, this method can be used directly so put it as public.
-pub fn typed_key_for_schema(
-    pk_or_sk: &str,
-    ks: &[KeySchemaElement],
-    attrs: &[AttributeDefinition],
-) -> Option<Key> {
-    // Fetch Partition Key ("HASH") or Sort Key ("RANGE") from given Key Schema. pk should always exists, but sk may not.
-    let target_key = ks.iter().find(|x| x.key_type == pk_or_sk);
-    target_key.map(|key| Key {
-        name: key.clone().attribute_name,
-        // kind should be one of S/N/B, Which can be retrieved from AttributeDefinition's attribute_type.
-        kind: KeyType::from_str(
-            &attrs
-                .iter()
-                .find(|at| at.attribute_name == key.attribute_name)
-                .expect("primary key should be in AttributeDefinition.")
-                .attribute_type,
-        )
-        .unwrap(),
-    })
-}
-
 // If you explicitly specify target table by `--table/-t` option, this function executes DescribeTable API to gather table schema info.
 // Otherwise, load table schema info from config file.
 // fn table_schema(region: &Region, config: &config::Config, table_overwritten: Option<String>) -> TableSchema {
@@ -706,8 +598,8 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             TableSchema {
                 region: String::from(cx.effective_region().name()),
                 name: desc.clone().table_name.unwrap(),
-                pk: typed_key("HASH", &desc).expect("pk should exist"),
-                sk: typed_key("RANGE", &desc),
+                pk: key::typed_key("HASH", &desc).expect("pk should exist"),
+                sk: key::typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
                 mode: control::extract_mode(&desc.billing_mode_summary),
             }
@@ -741,9 +633,9 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
             indexes.push(IndexSchema {
                 name: gsi.index_name.unwrap(),
                 kind: IndexType::Gsi,
-                pk: typed_key_for_schema("HASH", &gsi.key_schema.clone().unwrap(), attr_defs)
+                pk: key::typed_key_for_schema("HASH", &gsi.key_schema.clone().unwrap(), attr_defs)
                     .expect("pk should exist"),
-                sk: typed_key_for_schema("RANGE", &gsi.key_schema.unwrap(), attr_defs),
+                sk: key::typed_key_for_schema("RANGE", &gsi.key_schema.unwrap(), attr_defs),
             });
         }
     };
@@ -753,9 +645,9 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
             indexes.push(IndexSchema {
                 name: lsi.index_name.unwrap(),
                 kind: IndexType::Lsi,
-                pk: typed_key_for_schema("HASH", &lsi.key_schema.clone().unwrap(), attr_defs)
+                pk: key::typed_key_for_schema("HASH", &lsi.key_schema.clone().unwrap(), attr_defs)
                     .expect("pk should exist"),
-                sk: typed_key_for_schema("RANGE", &lsi.key_schema.unwrap(), attr_defs),
+                sk: key::typed_key_for_schema("RANGE", &lsi.key_schema.unwrap(), attr_defs),
             });
         }
     };

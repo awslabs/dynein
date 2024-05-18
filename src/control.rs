@@ -41,6 +41,7 @@ use dialoguer::{theme::ColorfulTheme, Confirm, Select};
 use tabwriter::TabWriter;
 
 use super::app;
+use super::key;
 
 /* =================================================
 struct / enum / const
@@ -244,10 +245,10 @@ pub fn print_table_description(region: Region, desc: TableDescription) {
         region: String::from(region.name()),
         status: String::from(&desc.clone().table_status.unwrap()),
         schema: PrintPrimaryKeys {
-            pk: app::typed_key("HASH", &desc)
+            pk: key::typed_key("HASH", &desc)
                 .expect("pk should exist")
                 .display(),
-            sk: app::typed_key("RANGE", &desc).map(|k| k.display()),
+            sk: key::typed_key("RANGE", &desc).map(|k| k.display()),
         },
 
         mode: mode.clone(),
@@ -867,10 +868,10 @@ fn extract_secondary_indexes<T: IndexDesc>(
             let idx = PrintSecondaryIndex {
                 name: String::from(idx.retrieve_index_name().as_ref().unwrap()),
                 schema: PrintPrimaryKeys {
-                    pk: app::typed_key_for_schema("HASH", ks, attr_defs)
+                    pk: key::typed_key_for_schema("HASH", ks, attr_defs)
                         .expect("pk should exist")
                         .display(),
-                    sk: app::typed_key_for_schema("RANGE", ks, attr_defs).map(|k| k.display()),
+                    sk: key::typed_key_for_schema("RANGE", ks, attr_defs).map(|k| k.display()),
                 },
                 capacity: idx.extract_index_capacity(mode),
             };
