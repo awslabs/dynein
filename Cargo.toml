@@ -30,6 +30,11 @@ name = "dy"
 path = "src/main.rs"
 
 [dependencies]
+aws-config       = "1.4.0"
+aws-sdk-dynamodb = "1.28.0"
+aws-sdk-ec2      = "1.42.0"
+aws-smithy-runtime-api = "1.6.0"
+aws-types        = "1.2.1"
 chrono           = "0.4"
 clap = { version = "4.5.4", features = ["derive"] }
 dialoguer        = "0.11.0"
