@@ -1038,7 +1038,6 @@ dependencies = [
  "reqwest",
  "rusoto_core",
  "rusoto_dynamodb",
- "rusoto_ec2",
  "rusoto_signature",
  "serde",
  "serde_json",
@@ -2327,20 +2326,6 @@ dependencies = [
  "rusoto_core",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "rusoto_ec2"
-version = "0.48.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "666c2f36b125e43229892f1a0d81ad28c0d0231d3b8b00ab0e8120975d6138ca"
-dependencies = [
- "async-trait",
- "bytes",
- "futures",
- "rusoto_core",
- "serde_urlencoded",
- "xml-rs",
 ]
 
 [[package]]
