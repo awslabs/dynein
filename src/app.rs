@@ -15,6 +15,8 @@
  */
 
 use ::serde::{Deserialize, Serialize};
+use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, SdkConfig};
+use aws_types::region::Region as SdkRegion;
 use backon::ExponentialBuilder;
 use log::{debug, error, info};
 use rusoto_dynamodb::{AttributeDefinition, KeySchemaElement, TableDescription};
@@ -323,6 +325,18 @@ impl Context {
             should_strict_for_query: None,
             retry,
         })
+    }
+
+    pub async fn effective_sdk_config(&self) -> SdkConfig {
+        let region = self.effective_region();
+        let region_name = region.name();
+        let sdk_region = SdkRegion::new(region_name.to_owned());
+
+        let provider = RegionProviderChain::first_try(sdk_region);
+        aws_config::defaults(BehaviorVersion::v2024_03_28())
+            .region(provider)
+            .load()
+            .await
     }
 
     pub fn effective_region(&self) -> Region {
