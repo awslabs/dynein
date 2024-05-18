@@ -17,6 +17,7 @@
 // This module interact with DynamoDB Control Plane APIs
 use ::serde::{Deserialize, Serialize};
 use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
+use aws_sdk_ec2::Client as Ec2SdkClient;
 use chrono::DateTime;
 use futures::future::join_all;
 use log::{debug, error};
@@ -24,11 +25,10 @@ use rusoto_dynamodb::{
     AttributeDefinition, BackupSummary, BillingModeSummary, CreateBackupInput,
     CreateGlobalSecondaryIndexAction, CreateTableInput, DeleteTableInput, DescribeTableInput,
     DynamoDb, DynamoDbClient, GlobalSecondaryIndexDescription, GlobalSecondaryIndexUpdate,
-    KeySchemaElement, ListBackupsInput, LocalSecondaryIndexDescription,
-    Projection, ProvisionedThroughput, ProvisionedThroughputDescription,
-    RestoreTableFromBackupInput, StreamSpecification, TableDescription, UpdateTableInput,
+    KeySchemaElement, ListBackupsInput, LocalSecondaryIndexDescription, Projection,
+    ProvisionedThroughput, ProvisionedThroughputDescription, RestoreTableFromBackupInput,
+    StreamSpecification, TableDescription, UpdateTableInput,
 };
-use rusoto_ec2::{DescribeRegionsRequest, Ec2, Ec2Client};
 use rusoto_signature::Region;
 use std::{
     io::{self, Error as IOError, Write},
@@ -99,13 +99,14 @@ Public functions
 ================================================= */
 
 pub async fn list_tables_all_regions(cx: app::Context) {
-    let region = cx.effective_region();
-    let ec2 = Ec2Client::new(match region.name() {
-        "local" => Region::UsEast1,
-        _ => region.clone(),
-    });
-    let input: DescribeRegionsRequest = Default::default();
-    match ec2.describe_regions(input).await {
+    // get all regions from us-east-1 regardless specified region
+    let config = cx
+        .clone()
+        .with_region("us-east-1")
+        .effective_sdk_config()
+        .await;
+    let ec2 = Ec2SdkClient::new(&config);
+    match ec2.describe_regions().send().await {
         Err(e) => {
             error!("{}", e.to_string());
             std::process::exit(1);
@@ -115,11 +116,11 @@ pub async fn list_tables_all_regions(cx: app::Context) {
                 res.regions
                     .expect("regions should exist") // Vec<Region>
                     .iter()
-                    .map(|r| list_tables(cx.clone().with_region(r))),
+                    .map(|r| list_tables(cx.clone().with_region(r.region_name.as_ref().unwrap()))),
             )
             .await;
 
-            if region.name() == "local" {
+            if cx.is_local() {
                 list_tables(cx.clone()).await;
             }
         }
