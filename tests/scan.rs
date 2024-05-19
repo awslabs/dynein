@@ -64,7 +64,8 @@ async fn test_simple_scan() -> Result<(), Box<dyn std::error::Error>> {
         let table_name = tm.create_temporary_table("pk", None).await?;
         let mut c = tm.command()?;
         c.args(["--region", "local", "--table", &table_name, "put", "abc"])
-            .output()?;
+            .assert()
+            .success();
 
         let mut c = tm.command()?;
         let scan_cmd = c.args(["--region", "local", "--table", &table_name, action]);
