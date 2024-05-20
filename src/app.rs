@@ -240,7 +240,7 @@ impl Context {
         Ok(Context {
             config: Some(config),
             cache: Some(load_or_touch_cache_file(true)?),
-            overwritten_region: region_from_str(region, port),
+            overwritten_region: region_from_str(region),
             overwritten_table_name: table,
             overwritten_port: port,
             output: None,
@@ -260,10 +260,12 @@ impl Context {
         let sdk_region = Region::new(region_name.to_owned());
 
         let provider = RegionProviderChain::first_try(sdk_region);
-        aws_config::defaults(BehaviorVersion::v2024_03_28())
-            .region(provider)
-            .load()
-            .await
+        let mut config = aws_config::defaults(BehaviorVersion::v2024_03_28()).region(provider);
+        if self.is_local().await {
+            config = config.endpoint_url(format!("http://localhost:{}", self.effective_port()));
+        }
+
+        config.load().await
     }
 
     pub async fn effective_region(&self) -> Region {
@@ -276,11 +278,8 @@ impl Context {
         if let Some(using_region_name_in_config) =
             &self.config.to_owned().and_then(|x| x.using_region)
         {
-            return region_from_str(
-                Some(using_region_name_in_config.to_owned()),
-                Some(self.effective_port()),
-            ) // Option<Region>
-            .expect("Region name in the config file is invalid.");
+            return region_from_str(Some(using_region_name_in_config.to_owned())) // Option<Region>
+                .expect("Region name in the config file is invalid.");
         };
 
         // otherwise, come down to "default region" of your environment.
@@ -427,10 +426,9 @@ Public functions
 ================================================= */
 
 // Receives given --region option string, including "local", return Region struct.
-pub fn region_from_str(s: Option<String>, p: Option<u32>) -> Option<Region> {
-    let port = p.unwrap_or(8000);
+pub fn region_from_str(s: Option<String>) -> Option<Region> {
     match s.as_deref() {
-        Some(LOCAL_REGION) => Some(region_dynamodb_local(port)),
+        Some(LOCAL_REGION) => Some(Region::from_static(LOCAL_REGION)),
         Some(x) => Some(Region::new(x.to_owned())), // convert Result<T, E> into Option<T>
         None => None,
     }
@@ -671,16 +669,6 @@ pub fn bye(code: i32, msg: &str) -> ! {
 /* =================================================
 Private functions
 ================================================= */
-
-fn region_dynamodb_local(port: u32) -> Region {
-    let endpoint_url = format!("http://localhost:{}", port);
-    debug!(
-        "setting DynamoDB Local '{}' as target region.",
-        &endpoint_url
-    );
-    // TODO: fix
-    Region::from_static(LOCAL_REGION)
-}
 
 fn retrieve_dynein_file_path(file_type: DyneinFileType) -> Result<String, DyneinConfigError> {
     let filename = match file_type {
