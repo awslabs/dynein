@@ -279,27 +279,21 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
         let request_items = batch::build_batch_request_items_from_json(content.to_string())?;
         batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     }
+
+    let region = cx.effective_region().await.to_string();
+
     println!(
         "\n\nNow all tables have sample data. Try following commands to play with dynein. Enjoy!"
     );
-    println!("  $ dy --region {} ls", &cx.effective_region().as_ref());
-    println!(
-        "  $ dy --region {} desc --table Thread",
-        &cx.effective_region().as_ref()
-    );
-    println!(
-        "  $ dy --region {} scan --table Thread",
-        &cx.effective_region().as_ref()
-    );
-    println!(
-        "  $ dy --region {} use --table Thread",
-        &cx.effective_region().as_ref()
-    );
+    println!("  $ dy --region {} ls", region);
+    println!("  $ dy --region {} desc --table Thread", region);
+    println!("  $ dy --region {} scan --table Thread", region);
+    println!("  $ dy --region {} use --table Thread", region);
     println!("  $ dy scan");
     println!("\nAfter you 'use' a table like above, dynein assume you're using the same region & table, which info is stored at ~/.dynein/config.yml and ~/.dynein/cache.yml");
     println!(
         "Let's move on with the '{}' region you've just 'use'd...",
-        &cx.effective_region().as_ref()
+        region
     );
     println!("  $ dy scan --table Forum");
     println!("  $ dy scan -t ProductCatalog");
@@ -321,7 +315,7 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
             println!(
                 "Started to create table '{}' in {} region. status: {}",
                 &table_name,
-                &cx.effective_region().as_ref(),
+                &cx.effective_region().await.as_ref(),
                 desc.table_status.unwrap()
             );
         }
@@ -329,7 +323,7 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
             CreateTableError::ResourceInUseException(_) => println!(
                 "[skip] Table '{}' already exists in {} region, skipping to create new one.",
                 &table_name,
-                &cx.effective_region().as_ref()
+                &cx.effective_region().await.as_ref()
             ),
             e => {
                 debug!("CreateTable API call got an error -- {:#?}", e);

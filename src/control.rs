@@ -63,7 +63,7 @@ pub async fn list_tables_all_regions(cx: app::Context) {
             )
             .await;
 
-            if cx.is_local() {
+            if cx.is_local().await {
                 list_tables(cx.clone()).await;
             }
         }
@@ -72,21 +72,16 @@ pub async fn list_tables_all_regions(cx: app::Context) {
 
 pub async fn list_tables(cx: app::Context) {
     let table_names = list_tables_api(cx.clone()).await;
+    let region = cx.effective_region().await.to_string();
 
-    println!(
-        "DynamoDB tables in region: {}",
-        cx.effective_region().as_ref()
-    );
+    println!("DynamoDB tables in region: {}", region);
     if table_names.is_empty() {
         return println!("  No table in this region.");
     }
 
-    // if let Some(table_in_config) = cx.clone().config.and_then(|x| x.table) {
-    if let Some(table_in_config) = cx.clone().cached_using_table_schema() {
+    if let Some(table_in_config) = cx.clone().cached_using_table_schema().await {
         for table_name in table_names {
-            if cx.clone().effective_region().as_ref() == table_in_config.region
-                && table_name == table_in_config.name
-            {
+            if region == table_in_config.region && table_name == table_in_config.name {
                 println!("* {}", table_name);
             } else {
                 println!("  {}", table_name);
@@ -128,12 +123,12 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
     debug!(
         "Retrieved table to describe is: '{}' table in '{}' region.",
         &new_context.effective_table_name(),
-        &new_context.effective_region().as_ref()
+        &new_context.effective_region().await.as_ref()
     );
 
     // save described table info into cache for future use.
     // Note that when this functiono is called from describe_all_tables, not all tables would be cached as calls are parallel.
-    match app::insert_to_table_cache(&new_context, desc.clone()) {
+    match app::insert_to_table_cache(&new_context, desc.clone()).await {
         Ok(_) => debug!("Described table schema was written to the cache file."),
         Err(e) => println!(
             "Failed to write table schema to the cache with follwoing error: {:?}",
@@ -143,7 +138,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
 
     match new_context.clone().output.as_deref() {
         None | Some("yaml") => {
-            util::print_table_description(new_context.effective_region().as_ref(), desc)
+            util::print_table_description(new_context.effective_region().await.as_ref(), desc)
         }
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => {
@@ -156,7 +151,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
 /// Originally intended to be called by describe_table function, which is called from `$ dy desc`,
 /// however it turned out that DescribeTable API result is useful in various logic, separated API into this standalone function.
 pub async fn describe_table_api(cx: &app::Context, table_name: String) -> TableDescription {
-    let region = cx.effective_region();
+    let region = cx.effective_region().await;
     let config = cx.effective_sdk_config_with_region(region.as_ref()).await;
     let ddb = DynamoDbSdkClient::new(&config);
 
@@ -183,7 +178,7 @@ pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String
     };
 
     match create_table_api(cx.clone(), name, given_keys).await {
-        Ok(desc) => util::print_table_description(cx.effective_region().as_ref(), desc),
+        Ok(desc) => util::print_table_description(cx.effective_region().await.as_ref(), desc),
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
             error!("{}", e.into_service_error());
@@ -272,7 +267,7 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
             util::print_table_description(
-                cx.effective_region().as_ref(),
+                cx.effective_region().await.as_ref(),
                 res.table_description.unwrap(),
             );
         }
@@ -367,7 +362,7 @@ pub async fn update_table(
     )
     .await
     {
-        Ok(desc) => util::print_table_description(cx.effective_region().as_ref(), desc),
+        Ok(desc) => util::print_table_description(cx.effective_region().await.as_ref(), desc),
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -599,7 +594,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
             debug!("Returned result: {:#?}", res);
             println!("Table restoration from: '{}' has been started", &backup_arn);
             let desc = res.table_description.unwrap();
-            util::print_table_description(cx.effective_region().as_ref(), desc);
+            util::print_table_description(cx.effective_region().await.as_ref(), desc);
         }
     }
 }

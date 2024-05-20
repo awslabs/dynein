@@ -250,7 +250,7 @@ impl Context {
     }
 
     pub async fn effective_sdk_config(&self) -> SdkConfig {
-        let region = self.effective_region();
+        let region = self.effective_region().await;
         let region_name = region.as_ref();
 
         self.effective_sdk_config_with_region(region_name).await
@@ -266,7 +266,7 @@ impl Context {
             .await
     }
 
-    pub fn effective_region(&self) -> Region {
+    pub async fn effective_region(&self) -> Region {
         // if region is overwritten by --region comamnd, use it.
         if let Some(ow_region) = &self.overwritten_region {
             return ow_region.to_owned();
@@ -286,8 +286,11 @@ impl Context {
         // otherwise, come down to "default region" of your environment.
         // e.g. region set via AWS CLI (check: $ aws configure get region), or environment variable `AWS_DEFAULT_REGION`.
         //      ref: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-        // TODO: fix
-        Region::from_static("us-east-1")
+        let region_provider = RegionProviderChain::default_provider();
+        region_provider
+            .region()
+            .await
+            .unwrap_or(Region::from_static("us-east-1"))
     }
 
     pub fn effective_table_name(&self) -> String {
@@ -318,15 +321,15 @@ impl Context {
         8000
     }
 
-    pub fn effective_cache_key(&self) -> String {
+    pub async fn effective_cache_key(&self) -> String {
         format!(
             "{}/{}",
-            &self.effective_region().as_ref(),
+            &self.effective_region().await.as_ref(),
             &self.effective_table_name()
         )
     }
 
-    pub fn cached_using_table_schema(&self) -> Option<TableSchema> {
+    pub async fn cached_using_table_schema(&self) -> Option<TableSchema> {
         // return None if table name is not specified in both config and option.
         if self.overwritten_table_name.is_none() {
             match self.config.to_owned() {
@@ -341,7 +344,7 @@ impl Context {
                 None => return None, // return None for this "cached_using_table_schema" function
             };
         let found_table_schema: Option<&TableSchema> =
-            cached_tables.get(&self.effective_cache_key());
+            cached_tables.get(&self.effective_cache_key().await);
         // NOTE: HashMap's `get` returns a reference to the value / (&self, k: &Q) -> Option<&V>
         found_table_schema.map(|schema| schema.to_owned())
     }
@@ -361,9 +364,9 @@ impl Context {
             .unwrap_or_else(|| self.config.as_ref().map_or(false, |c| c.query.strict_mode))
     }
 
-    pub fn is_local(&self) -> bool {
+    pub async fn is_local(&self) -> bool {
         let region = self.effective_region();
-        region.as_ref() == LOCAL_REGION
+        region.await.as_ref() == LOCAL_REGION
     }
 }
 
@@ -513,8 +516,8 @@ pub async fn use_table(
             debug!("describing the table: {}", tbl);
             let tbl = tbl.clone();
             let desc: TableDescription = control::describe_table_api(cx, tbl.clone()).await;
-            save_using_target(cx, desc)?;
-            println!("Now you're using the table '{}' ({}).", tbl, &cx.effective_region().as_ref());
+            save_using_target(cx, desc).await?;
+            println!("Now you're using the table '{}' ({}).", tbl, &cx.effective_region().await.as_ref());
         },
         None => bye(1, "You have to specify a table. How to use (1). 'dy use --table mytable', or (2) 'dy use mytable'."),
     };
@@ -523,7 +526,7 @@ pub async fn use_table(
 }
 
 /// Inserts specified table description into cache file.
-pub fn insert_to_table_cache(
+pub async fn insert_to_table_cache(
     cx: &Context,
     desc: TableDescription,
 ) -> Result<(), DyneinConfigError> {
@@ -531,7 +534,7 @@ pub fn insert_to_table_cache(
         .table_name
         .clone()
         .expect("desc should have table name");
-    let region: Region = cx.effective_region();
+    let region: Region = cx.effective_region().await;
     debug!(
         "Under the region '{}', trying to save table schema of '{}'",
         &region.as_ref(),
@@ -597,7 +600,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             .await;
 
             TableSchema {
-                region: String::from(cx.effective_region().as_ref()),
+                region: String::from(cx.effective_region().await.as_ref()),
                 name: desc.clone().table_name.unwrap(),
                 pk: key::typed_key("HASH", &desc).expect("pk should exist"),
                 sk: key::typed_key("RANGE", &desc),
@@ -614,7 +617,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
                 std::process::exit(1)
             });
             let schema_from_cache: Option<TableSchema> = cached_tables
-                .get(&cx.effective_cache_key())
+                .get(&cx.effective_cache_key().await)
                 .map(|x| x.to_owned());
             schema_from_cache.unwrap_or_else(|| {
                 error!("{}", Messages::NoEffectiveTable);
@@ -709,7 +712,10 @@ fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
 
 /// This function updates `using_region` and `using_table` in config.yml,
 /// and at the same time inserts TableDescription of the target table into cache.yml.
-fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), DyneinConfigError> {
+async fn save_using_target(
+    cx: &mut Context,
+    desc: TableDescription,
+) -> Result<(), DyneinConfigError> {
     let table_name: String = desc
         .table_name
         .clone()
@@ -718,7 +724,7 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
     let port: u32 = cx.effective_port();
 
     // retrieve current config from Context and update "using target".
-    let region = Some(String::from(cx.effective_region().as_ref()));
+    let region = Some(String::from(cx.effective_region().await.as_ref()));
     let config = cx.config.as_mut().expect("cx should have config");
     config.using_region = region;
     config.using_table = Some(table_name);
@@ -730,7 +736,7 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
     write_dynein_file(DyneinFileType::ConfigFile, config_yaml_string)?;
 
     // save target table info into cache.
-    insert_to_table_cache(cx, desc)?;
+    insert_to_table_cache(cx, desc).await?;
 
     Ok(())
 }
@@ -755,8 +761,8 @@ mod tests {
     use std::convert::TryInto;
     use std::error::Error;
 
-    #[test]
-    fn test_context_functions() -> Result<(), Box<dyn Error>> {
+    #[tokio::test]
+    async fn test_context_functions() -> Result<(), Box<dyn Error>> {
         let cx1 = Context {
             config: None,
             cache: None,
@@ -767,7 +773,10 @@ mod tests {
             should_strict_for_query: None,
             retry: None,
         };
-        assert_eq!(cx1.effective_region(), Region::from_static("us-east-1"));
+        assert_eq!(
+            cx1.effective_region().await,
+            Region::from_static("us-east-1")
+        );
         // cx1.effective_table_name(); ... exit(1)
 
         let cx2 = Context {
@@ -787,7 +796,7 @@ mod tests {
             retry: Some(RetryConfig::default().try_into()?),
         };
         assert_eq!(
-            cx2.effective_region(),
+            cx2.effective_region().await,
             Region::from_static("ap-northeast-1")
         );
         assert_eq!(cx2.effective_table_name(), String::from("cfgtbl"));
@@ -797,14 +806,20 @@ mod tests {
             overwritten_table_name: Some(String::from("argtbl")),       // --table argtbl
             ..cx2.clone()
         };
-        assert_eq!(cx3.effective_region(), Region::from_static("us-east-1"));
+        assert_eq!(
+            cx3.effective_region().await,
+            Region::from_static("us-east-1")
+        );
         assert_eq!(cx3.effective_table_name(), String::from("argtbl"));
 
         let cx4 = Context {
             overwritten_region: Some(Region::from_static("us-east-1")), // --region us-east-1
             ..cx2.clone()
         };
-        assert_eq!(cx4.effective_region(), Region::from_static("us-east-1"));
+        assert_eq!(
+            cx4.effective_region().await,
+            Region::from_static("us-east-1")
+        );
         assert_eq!(cx4.effective_table_name(), String::from("cfgtbl"));
 
         let cx5 = Context {
@@ -812,7 +827,7 @@ mod tests {
             ..cx2.clone()
         };
         assert_eq!(
-            cx5.effective_region(),
+            cx5.effective_region().await,
             Region::from_static("ap-northeast-1")
         );
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
