@@ -32,11 +32,11 @@ mod bootstrap;
 mod cmd;
 mod control;
 mod data;
+mod ddb;
 mod key;
 mod parser;
 mod shell;
 mod transfer;
-mod util;
 
 /* =================================================
    helper functions

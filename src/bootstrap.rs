@@ -314,16 +314,16 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
         Ok(desc) => {
             println!(
                 "Started to create table '{}' in {} region. status: {}",
-                &table_name,
-                &cx.effective_region().await.as_ref(),
+                table_name,
+                cx.effective_region().await.as_ref(),
                 desc.table_status.unwrap()
             );
         }
         Err(e) => match e.into_service_error() {
             CreateTableError::ResourceInUseException(_) => println!(
                 "[skip] Table '{}' already exists in {} region, skipping to create new one.",
-                &table_name,
-                &cx.effective_region().await.as_ref()
+                table_name,
+                cx.effective_region().await.as_ref()
             ),
             e => {
                 debug!("CreateTable API call got an error -- {:#?}", e);

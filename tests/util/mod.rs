@@ -19,7 +19,7 @@ use std::env;
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
-use aws_config::{Region, SdkConfig};
+use aws_config::{BehaviorVersion, Region, SdkConfig};
 use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
 use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, Rng};
@@ -340,7 +340,10 @@ async fn setup_container(port: i32) -> Result<(), Box<dyn std::error::Error>> {
     // Wait dynamodb-local
     // https://docs.aws.amazon.com/sdk-for-rust/latest/dg/dynamodb-local.html
     let config = aws_sdk_dynamodb::config::Builder::from(
-        &SdkConfig::builder().region(Region::new("local")).build(),
+        &SdkConfig::builder()
+            .region(Region::new("local"))
+            .behavior_version(BehaviorVersion::v2024_03_28())
+            .build(),
     )
     .endpoint_url(format!("http://localhost:{}", port))
     .build();

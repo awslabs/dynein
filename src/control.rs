@@ -35,7 +35,7 @@ use dialoguer::{theme::ColorfulTheme, Confirm, Select};
 use tabwriter::TabWriter;
 
 use super::app;
-use super::util;
+use super::ddb::table;
 
 /* =================================================
 Public functions
@@ -108,7 +108,7 @@ pub async fn describe_all_tables(cx: app::Context) {
 }
 
 /// Executed when you call `$ dy desc (table)`. Retrieve TableDescription via describe_table_api function,
-/// then print them in convenient way using util::print_table_description function (default/yaml).
+/// then print them in convenient way using table::print_table_description function (default/yaml).
 pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<String>) {
     debug!("context: {:#?}", &cx);
     debug!("positional arg table name: {:?}", &target_table_to_desc);
@@ -122,8 +122,8 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
         describe_table_api(&new_context, new_context.effective_table_name()).await;
     debug!(
         "Retrieved table to describe is: '{}' table in '{}' region.",
-        &new_context.effective_table_name(),
-        &new_context.effective_region().await.as_ref()
+        new_context.effective_table_name(),
+        new_context.effective_region().await.as_ref()
     );
 
     // save described table info into cache for future use.
@@ -138,7 +138,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
 
     match new_context.clone().output.as_deref() {
         None | Some("yaml") => {
-            util::print_table_description(new_context.effective_region().await.as_ref(), desc)
+            table::print_table_description(new_context.effective_region().await.as_ref(), desc)
         }
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => {
@@ -178,7 +178,7 @@ pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String
     };
 
     match create_table_api(cx.clone(), name, given_keys).await {
-        Ok(desc) => util::print_table_description(cx.effective_region().await.as_ref(), desc),
+        Ok(desc) => table::print_table_description(cx.effective_region().await.as_ref(), desc),
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
             error!("{}", e.into_service_error());
@@ -200,7 +200,8 @@ pub async fn create_table_api(
         &name, &given_keys
     );
 
-    let (key_schema, attribute_definitions) = util::generate_essential_key_definitions(&given_keys);
+    let (key_schema, attribute_definitions) =
+        table::generate_essential_key_definitions(&given_keys);
 
     let config = cx.effective_sdk_config().await;
     let ddb = DynamoDbSdkClient::new(&config);
@@ -230,7 +231,8 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
         &cx.effective_table_name()
     );
 
-    let (key_schema, attribute_definitions) = util::generate_essential_key_definitions(&given_keys);
+    let (key_schema, attribute_definitions) =
+        table::generate_essential_key_definitions(&given_keys);
 
     let config = cx.effective_sdk_config().await;
     let ddb = DynamoDbSdkClient::new(&config);
@@ -266,7 +268,7 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
-            util::print_table_description(
+            table::print_table_description(
                 cx.effective_region().await.as_ref(),
                 res.table_description.unwrap(),
             );
@@ -285,11 +287,11 @@ pub async fn update_table(
     let desc: TableDescription = describe_table_api(&cx, table_name_to_update.clone()).await;
 
     // Map given string into "Mode" enum. Note that in cmd.rs clap already limits acceptable values.
-    let switching_to_mode: Option<util::Mode> = match mode_string {
+    let switching_to_mode: Option<table::Mode> = match mode_string {
         None => None,
         Some(ms) => match ms.as_str() {
-            "provisioned" => Some(util::Mode::Provisioned),
-            "ondemand"    => Some(util::Mode::OnDemand),
+            "provisioned" => Some(table::Mode::Provisioned),
+            "ondemand"    => Some(table::Mode::OnDemand),
             _ => panic!("You shouldn't see this message as --mode can takes only 'provisioned' or 'ondemand'."),
         },
     };
@@ -298,9 +300,9 @@ pub async fn update_table(
     let provisioned_throughput: Option<ProvisionedThroughput> = match &switching_to_mode {
         // when --mode is not given, no mode switch happens. Check the table's current mode.
         None => {
-            match util::extract_mode(&desc.clone().billing_mode_summary) {
+            match table::extract_mode(&desc.clone().billing_mode_summary) {
                 // When currently OnDemand mode and you're not going to change the it, set None for CU.
-                util::Mode::OnDemand => {
+                table::Mode::OnDemand => {
                     if wcu.is_some() || rcu.is_some() {
                         println!("Ignoring --rcu/--wcu options as the table mode is OnDemand.");
                     };
@@ -308,7 +310,7 @@ pub async fn update_table(
                 }
                 // When currently Provisioned mode and you're not going to change the it,
                 // pass given rcu/wcu, and use current values if missing. Provisioned table should have valid capacity units so unwrap() here.
-                util::Mode::Provisioned => Some(
+                table::Mode::Provisioned => Some(
                     ProvisionedThroughput::builder()
                         .read_capacity_units(rcu.unwrap_or_else(|| {
                             desc.clone()
@@ -332,14 +334,14 @@ pub async fn update_table(
         // When the user trying to switch mode.
         Some(target_mode) => match target_mode {
             // when switching Provisioned->OnDemand mode, ProvisionedThroughput can be None.
-            util::Mode::OnDemand => {
+            table::Mode::OnDemand => {
                 if wcu.is_some() || rcu.is_some() {
                     println!("Ignoring --rcu/--wcu options as --mode ondemand.");
                 };
                 None
             }
             // when switching OnDemand->Provisioned mode, set given wcu/rcu, fill with "5" as a default if not given.
-            util::Mode::Provisioned => Some(
+            table::Mode::Provisioned => Some(
                 ProvisionedThroughput::builder()
                     .read_capacity_units(rcu.unwrap_or(5))
                     .write_capacity_units(wcu.unwrap_or(5))
@@ -362,7 +364,7 @@ pub async fn update_table(
     )
     .await
     {
-        Ok(desc) => util::print_table_description(cx.effective_region().await.as_ref(), desc),
+        Ok(desc) => table::print_table_description(cx.effective_region().await.as_ref(), desc),
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -385,7 +387,7 @@ pub async fn update_table(
 async fn update_table_api(
     cx: app::Context,
     table_name_to_update: String,
-    switching_to_mode: Option<util::Mode>,
+    switching_to_mode: Option<table::Mode>,
     provisioned_throughput: Option<ProvisionedThroughput>,
 ) -> Result<
     TableDescription,
@@ -500,7 +502,7 @@ pub async fn list_backups(cx: app::Context, all_tables: bool) -> Result<(), IOEr
                 .expect("status should exist")
                 .as_str()
                 .to_string(),
-            util::epoch_to_rfc3339(
+            table::epoch_to_rfc3339(
                 backup
                     .backup_creation_date_time
                     .expect("creation date should exist")
@@ -544,7 +546,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
                     format!(
                         "{} ({}, {} bytes)",
                         b.to_owned().backup_name.unwrap(),
-                        util::epoch_to_rfc3339(b.backup_creation_date_time.unwrap().as_secs_f64()),
+                        table::epoch_to_rfc3339(b.backup_creation_date_time.unwrap().as_secs_f64()),
                         b.backup_size_bytes.unwrap()
                     )
                 })
@@ -594,7 +596,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
             debug!("Returned result: {:#?}", res);
             println!("Table restoration from: '{}' has been started", &backup_arn);
             let desc = res.table_description.unwrap();
-            util::print_table_description(cx.effective_region().await.as_ref(), desc);
+            table::print_table_description(cx.effective_region().await.as_ref(), desc);
         }
     }
 }

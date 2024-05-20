@@ -34,8 +34,8 @@ use tempfile::NamedTempFile;
 use thiserror::Error;
 
 use super::control;
+use super::ddb::table;
 use super::key;
-use super::util;
 
 /* =================================================
 struct / enum / const
@@ -59,7 +59,7 @@ pub struct TableSchema {
     pub pk: key::Key,
     pub sk: Option<key::Key>,
     pub indexes: Option<Vec<IndexSchema>>,
-    pub mode: util::Mode,
+    pub mode: table::Mode,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -323,8 +323,8 @@ impl Context {
     pub async fn effective_cache_key(&self) -> String {
         format!(
             "{}/{}",
-            &self.effective_region().await.as_ref(),
-            &self.effective_table_name()
+            self.effective_region().await.as_ref(),
+            self.effective_table_name()
         )
     }
 
@@ -515,7 +515,7 @@ pub async fn use_table(
             let tbl = tbl.clone();
             let desc: TableDescription = control::describe_table_api(cx, tbl.clone()).await;
             save_using_target(cx, desc).await?;
-            println!("Now you're using the table '{}' ({}).", tbl, &cx.effective_region().await.as_ref());
+            println!("Now you're using the table '{}' ({}).", tbl, cx.effective_region().await.as_ref());
         },
         None => bye(1, "You have to specify a table. How to use (1). 'dy use --table mytable', or (2) 'dy use mytable'."),
     };
@@ -561,7 +561,7 @@ pub async fn insert_to_table_cache(
             pk: key::typed_key("HASH", &desc).expect("pk should exist"),
             sk: key::typed_key("RANGE", &desc),
             indexes: index_schemas(&desc),
-            mode: util::extract_mode(&desc.billing_mode_summary),
+            mode: table::extract_mode(&desc.billing_mode_summary),
         },
     );
     cache.tables = Some(table_schema_hashmap);
@@ -603,7 +603,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
                 pk: key::typed_key("HASH", &desc).expect("pk should exist"),
                 sk: key::typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
-                mode: util::extract_mode(&desc.billing_mode_summary),
+                mode: table::extract_mode(&desc.billing_mode_summary),
             }
         }
         None => {

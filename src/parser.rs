@@ -1444,6 +1444,7 @@ impl DyneinParser {
         let result = GeneratedParser::parse(Rule::map_literal, exp);
         match result {
             Ok(mut pair) => {
+                // pair is parsed through Rule::map_literal so we expect that pair should be HashMap
                 let item = parse_literal(pair.next().unwrap())?
                     .convert_attribute_value()
                     .as_m()
