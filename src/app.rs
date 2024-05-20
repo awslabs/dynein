@@ -17,10 +17,9 @@
 use ::serde::{Deserialize, Serialize};
 use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, SdkConfig};
 use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
-use aws_types::region::Region as SdkRegion;
+use aws_types::region::Region;
 use backon::ExponentialBuilder;
 use log::{debug, error, info};
-use rusoto_signature::Region;
 use serde_yaml::Error as SerdeYAMLError;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
@@ -31,7 +30,6 @@ use std::{
     fs,
     io::Error as IOError,
     path,
-    str::FromStr,
 };
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -254,13 +252,13 @@ impl Context {
 
     pub async fn effective_sdk_config(&self) -> SdkConfig {
         let region = self.effective_region();
-        let region_name = region.name();
+        let region_name = region.as_ref();
 
         self.effective_sdk_config_with_region(region_name).await
     }
 
     pub async fn effective_sdk_config_with_region(&self, region_name: &str) -> SdkConfig {
-        let sdk_region = SdkRegion::new(region_name.to_owned());
+        let sdk_region = Region::new(region_name.to_owned());
 
         let provider = RegionProviderChain::first_try(sdk_region);
         aws_config::defaults(BehaviorVersion::v2024_03_28())
@@ -290,7 +288,8 @@ impl Context {
         // e.g. region set via AWS CLI (check: $ aws configure get region), or environment variable `AWS_DEFAULT_REGION`.
         //      ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#282-290
         //      ref: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-        Region::default()
+        // TODO: fix
+        Region::from_static("us-east-1")
     }
 
     pub fn effective_table_name(&self) -> String {
@@ -324,7 +323,7 @@ impl Context {
     pub fn effective_cache_key(&self) -> String {
         format!(
             "{}/{}",
-            &self.effective_region().name(),
+            &self.effective_region().as_ref(),
             &self.effective_table_name()
         )
     }
@@ -350,7 +349,7 @@ impl Context {
     }
 
     pub fn with_region(mut self, ec2_region: &str) -> Self {
-        self.overwritten_region = Some(Region::from_str(ec2_region).unwrap());
+        self.overwritten_region = Some(Region::new(ec2_region.to_owned()));
         self
     }
 
@@ -366,7 +365,7 @@ impl Context {
 
     pub fn is_local(&self) -> bool {
         let region = self.effective_region();
-        region.name() == LOCAL_REGION
+        region.as_ref() == LOCAL_REGION
     }
 }
 
@@ -431,7 +430,7 @@ pub fn region_from_str(s: Option<String>, p: Option<u32>) -> Option<Region> {
     let port = p.unwrap_or(8000);
     match s.as_deref() {
         Some(LOCAL_REGION) => Some(region_dynamodb_local(port)),
-        Some(x) => Region::from_str(x).ok(), // convert Result<T, E> into Option<T>
+        Some(x) => Some(Region::new(x.to_owned())), // convert Result<T, E> into Option<T>
         None => None,
     }
 }
@@ -514,11 +513,10 @@ pub async fn use_table(
     match target_table {
         Some(tbl) => {
             debug!("describing the table: {}", tbl);
-            let region = cx.effective_region();
             let tbl = tbl.clone();
-            let desc: TableDescription = control::describe_table_api(cx, &region, tbl.clone()).await;
+            let desc: TableDescription = control::describe_table_api(cx, tbl.clone()).await;
             save_using_target(cx, desc)?;
-            println!("Now you're using the table '{}' ({}).", tbl, &region.name());
+            println!("Now you're using the table '{}' ({}).", tbl, &cx.effective_region().as_ref());
         },
         None => bye(1, "You have to specify a table. How to use (1). 'dy use --table mytable', or (2) 'dy use mytable'."),
     };
@@ -538,14 +536,14 @@ pub fn insert_to_table_cache(
     let region: Region = cx.effective_region();
     debug!(
         "Under the region '{}', trying to save table schema of '{}'",
-        &region.name(),
+        &region.as_ref(),
         &table_name
     );
 
     // retrieve current cache from Context and update target table desc.
     // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
     let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
-    let cache_key = format!("{}/{}", region.name(), table_name);
+    let cache_key = format!("{}/{}", region.as_ref(), table_name);
 
     let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
         Some(ts) => ts,
@@ -559,7 +557,7 @@ pub fn insert_to_table_cache(
     table_schema_hashmap.insert(
         cache_key,
         TableSchema {
-            region: String::from(region.name()),
+            region: String::from(region.as_ref()),
             name: table_name,
             pk: key::typed_key("HASH", &desc).expect("pk should exist"),
             sk: key::typed_key("RANGE", &desc),
@@ -597,13 +595,12 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
             // TODO: reduce # of DescribeTable API calls. table_schema function is called every time you do something.
             let desc: TableDescription = control::describe_table_api(
                 cx,
-                &cx.effective_region(),
                 table_name, /* should be equal to 'cx.effective_table_name()' */
             )
             .await;
 
             TableSchema {
-                region: String::from(cx.effective_region().name()),
+                region: String::from(cx.effective_region().as_ref()),
                 name: desc.clone().table_name.unwrap(),
                 pk: key::typed_key("HASH", &desc).expect("pk should exist"),
                 sk: key::typed_key("RANGE", &desc),
@@ -681,10 +678,8 @@ fn region_dynamodb_local(port: u32) -> Region {
         "setting DynamoDB Local '{}' as target region.",
         &endpoint_url
     );
-    Region::Custom {
-        name: LOCAL_REGION.to_owned(),
-        endpoint: endpoint_url,
-    }
+    // TODO: fix
+    Region::from_static(LOCAL_REGION)
 }
 
 fn retrieve_dynein_file_path(file_type: DyneinFileType) -> Result<String, DyneinConfigError> {
@@ -726,7 +721,7 @@ fn save_using_target(cx: &mut Context, desc: TableDescription) -> Result<(), Dyn
     let port: u32 = cx.effective_port();
 
     // retrieve current config from Context and update "using target".
-    let region = Some(String::from(cx.effective_region().name()));
+    let region = Some(String::from(cx.effective_region().as_ref()));
     let config = cx.config.as_mut().expect("cx should have config");
     config.using_region = region;
     config.using_table = Some(table_name);
@@ -776,7 +771,7 @@ mod tests {
             should_strict_for_query: None,
             retry: None,
         };
-        assert_eq!(cx1.effective_region(), Region::default());
+        assert_eq!(cx1.effective_region(), Region::from_static("us-east-1"));
         // cx1.effective_table_name(); ... exit(1)
 
         let cx2 = Context {

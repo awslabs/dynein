@@ -22,7 +22,6 @@ use aws_sdk_dynamodb::types::{
 };
 use chrono::DateTime;
 use log::error;
-use rusoto_signature::Region;
 
 use super::key;
 
@@ -88,13 +87,13 @@ struct PrintSecondaryIndex {
 
 /// Receives region (just to show in one line for reference) and TableDescription,
 /// print them in readable YAML format. NOTE: '~' representes 'null' or 'no value' in YAML syntax.
-pub fn print_table_description(region: Region, desc: TableDescription) {
+pub fn print_table_description(region: &str, desc: TableDescription) {
     let attr_defs = desc.clone().attribute_definitions.unwrap();
     let mode = extract_mode(&desc.billing_mode_summary);
 
     let print_table: PrintDescribeTable = PrintDescribeTable {
         name: String::from(&desc.clone().table_name.unwrap()),
-        region: String::from(region.name()),
+        region: String::from(region),
         status: String::from(desc.clone().table_status.unwrap().as_str()),
         schema: PrintPrimaryKeys {
             pk: key::typed_key("HASH", &desc)

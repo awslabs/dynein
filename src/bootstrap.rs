@@ -27,7 +27,6 @@ use aws_sdk_dynamodb::{
 };
 use futures::future::join_all;
 use log::{debug, error};
-use rusoto_signature::Region;
 
 use brotli::Decompressor;
 use serde_json::Value as JsonValue;
@@ -278,24 +277,24 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
     println!(
         "\n\nNow all tables have sample data. Try following commands to play with dynein. Enjoy!"
     );
-    println!("  $ dy --region {} ls", &cx.effective_region().name());
+    println!("  $ dy --region {} ls", &cx.effective_region().as_ref());
     println!(
         "  $ dy --region {} desc --table Thread",
-        &cx.effective_region().name()
+        &cx.effective_region().as_ref()
     );
     println!(
         "  $ dy --region {} scan --table Thread",
-        &cx.effective_region().name()
+        &cx.effective_region().as_ref()
     );
     println!(
         "  $ dy --region {} use --table Thread",
-        &cx.effective_region().name()
+        &cx.effective_region().as_ref()
     );
     println!("  $ dy scan");
     println!("\nAfter you 'use' a table like above, dynein assume you're using the same region & table, which info is stored at ~/.dynein/config.yml and ~/.dynein/cache.yml");
     println!(
         "Let's move on with the '{}' region you've just 'use'd...",
-        &cx.effective_region().name()
+        &cx.effective_region().as_ref()
     );
     println!("  $ dy scan --table Forum");
     println!("  $ dy scan -t ProductCatalog");
@@ -317,7 +316,7 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
             println!(
                 "Started to create table '{}' in {} region. status: {}",
                 &table_name,
-                &cx.effective_region().name(),
+                &cx.effective_region().as_ref(),
                 desc.table_status.unwrap()
             );
         }
@@ -325,7 +324,7 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
             CreateTableError::ResourceInUseException(_) => println!(
                 "[skip] Table '{}' already exists in {} region, skipping to create new one.",
                 &table_name,
-                &cx.effective_region().name()
+                &cx.effective_region().as_ref()
             ),
             e => {
                 debug!("CreateTable API call got an error -- {:#?}", e);
@@ -339,11 +338,10 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
 async fn wait_table_creation(cx: &app::Context, mut processing_tables: Vec<&str>) {
     debug!("tables in progress: {:?}", processing_tables);
     loop {
-        let r: &Region = &cx.effective_region();
         let create_table_results = join_all(
             processing_tables
                 .iter()
-                .map(|t| control::describe_table_api(cx, r, (*t).to_string())),
+                .map(|t| control::describe_table_api(cx, (*t).to_string())),
         )
         .await;
         let statuses: Vec<String> = create_table_results

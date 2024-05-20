@@ -26,7 +26,6 @@ use aws_sdk_dynamodb::{
 use aws_sdk_ec2::Client as Ec2SdkClient;
 use futures::future::join_all;
 use log::{debug, error};
-use rusoto_signature::Region;
 use std::{
     io::{self, Error as IOError, Write},
     time,
@@ -76,7 +75,7 @@ pub async fn list_tables(cx: app::Context) {
 
     println!(
         "DynamoDB tables in region: {}",
-        cx.effective_region().name()
+        cx.effective_region().as_ref()
     );
     if table_names.is_empty() {
         return println!("  No table in this region.");
@@ -85,7 +84,7 @@ pub async fn list_tables(cx: app::Context) {
     // if let Some(table_in_config) = cx.clone().config.and_then(|x| x.table) {
     if let Some(table_in_config) = cx.clone().cached_using_table_schema() {
         for table_name in table_names {
-            if cx.clone().effective_region().name() == table_in_config.region
+            if cx.clone().effective_region().as_ref() == table_in_config.region
                 && table_name == table_in_config.name
             {
                 println!("* {}", table_name);
@@ -126,14 +125,13 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
 
     let desc: TableDescription = describe_table_api(
         &new_context,
-        &new_context.effective_region(),
         new_context.effective_table_name(),
     )
     .await;
     debug!(
         "Retrieved table to describe is: '{}' table in '{}' region.",
         &new_context.effective_table_name(),
-        &new_context.effective_region().name()
+        &new_context.effective_region().as_ref()
     );
 
     // save described table info into cache for future use.
@@ -147,7 +145,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
     };
 
     match new_context.clone().output.as_deref() {
-        None | Some("yaml") => util::print_table_description(new_context.effective_region(), desc),
+        None | Some("yaml") => util::print_table_description(new_context.effective_region().as_ref(), desc),
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => {
             println!("ERROR: unsupported output type.");
@@ -160,10 +158,10 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
 /// however it turned out that DescribeTable API result is useful in various logic, separated API into this standalone function.
 pub async fn describe_table_api(
     cx: &app::Context,
-    region: &Region,
     table_name: String,
 ) -> TableDescription {
-    let config = cx.effective_sdk_config_with_region(region.name()).await;
+    let region = cx.effective_region();
+    let config = cx.effective_sdk_config_with_region(region.as_ref()).await;
     let ddb = DynamoDbSdkClient::new(&config);
 
     match ddb.describe_table().table_name(table_name).send().await {
@@ -189,7 +187,7 @@ pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String
     };
 
     match create_table_api(cx.clone(), name, given_keys).await {
-        Ok(desc) => util::print_table_description(cx.effective_region(), desc),
+        Ok(desc) => util::print_table_description(cx.effective_region().as_ref(), desc),
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -276,7 +274,7 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
-            util::print_table_description(cx.effective_region(), res.table_description.unwrap());
+            util::print_table_description(cx.effective_region().as_ref(), res.table_description.unwrap());
         }
     }
 }
@@ -290,7 +288,7 @@ pub async fn update_table(
 ) {
     // Retrieve TableDescription of the table to update, current (before update) status.
     let desc: TableDescription =
-        describe_table_api(&cx, &cx.effective_region(), table_name_to_update.clone()).await;
+        describe_table_api(&cx, table_name_to_update.clone()).await;
 
     // Map given string into "Mode" enum. Note that in cmd.rs clap already limits acceptable values.
     let switching_to_mode: Option<util::Mode> = match mode_string {
@@ -368,7 +366,7 @@ pub async fn update_table(
     )
     .await
     {
-        Ok(desc) => util::print_table_description(cx.effective_region(), desc),
+        Ok(desc) => util::print_table_description(cx.effective_region().as_ref(), desc),
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
             error!("{}", e.to_string());
@@ -599,7 +597,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
             debug!("Returned result: {:#?}", res);
             println!("Table restoration from: '{}' has been started", &backup_arn);
             let desc = res.table_description.unwrap();
-            util::print_table_description(cx.effective_region(), desc);
+            util::print_table_description(cx.effective_region().as_ref(), desc);
         }
     }
 }
