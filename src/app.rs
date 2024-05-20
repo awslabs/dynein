@@ -15,9 +15,8 @@
  */
 
 use ::serde::{Deserialize, Serialize};
-use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, SdkConfig};
+use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, Region, SdkConfig};
 use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
-use aws_types::region::Region;
 use backon::ExponentialBuilder;
 use log::{debug, error, info};
 use serde_yaml::Error as SerdeYAMLError;

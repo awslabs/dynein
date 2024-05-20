@@ -19,9 +19,8 @@ use std::env;
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
-use aws_config::SdkConfig;
+use aws_config::{Region, SdkConfig};
 use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
-use aws_types::region::Region;
 use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, Rng};
 use regex::bytes::Regex;
