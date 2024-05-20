@@ -496,7 +496,7 @@ pub enum CreateSub {
 
         /// (requried) Primary key(s) of the table. Key name followed by comma and data type (S/N/B).
         /// e.g. for Partition key only table: `--keys myPk,S`, and for Partition and Sort key table `--keys myPk,S mySk,N`
-        #[clap(short, long, required = true, num_args = 1.., verbatim_doc_comment)]
+        #[clap(short, long, required = true, num_args = 1..=2, verbatim_doc_comment)]
         keys: Vec<String>,
     },
 
@@ -508,7 +508,7 @@ pub enum CreateSub {
 
         /// (requried) Primary key(s) of the index. Key name followed by comma and data type (S/N/B).
         /// e.g. for Partition key only table: `--keys myPk,S`, and for Partition and Sort key table `--keys myPk,S mySk,N`
-        #[clap(short, long, required = true, num_args = 1.., verbatim_doc_comment)]
+        #[clap(short, long, required = true, num_args = 1..=2, verbatim_doc_comment)]
         keys: Vec<String>,
     },
 }
