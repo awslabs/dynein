@@ -339,12 +339,13 @@ async fn setup_container(port: i32) -> Result<(), Box<dyn std::error::Error>> {
     io::stderr().write_all(&output.stderr).unwrap();
 
     // Wait dynamodb-local
-    let health_check_url = format!("http://localhost:{}", port);
-    // let ddb = DynamoDbClient::new(Region::Custom {
-    //     name: "local".to_owned(),
-    //     endpoint: health_check_url,
-    // });
-    let ddb = DynamoDbSdkClient::new(&SdkConfig::builder().region(Region::new("local")).build());
+    // https://docs.aws.amazon.com/sdk-for-rust/latest/dg/dynamodb-local.html
+    let config = aws_sdk_dynamodb::config::Builder::from(
+        &SdkConfig::builder().region(Region::new("local")).build(),
+    )
+    .endpoint_url(format!("http://localhost:{}", port))
+    .build();
+    let ddb = DynamoDbSdkClient::from_conf(config);
     let max_retries = 5;
     let mut attempts = 0;
     loop {
