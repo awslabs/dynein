@@ -594,8 +594,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
         Some(table_name) => {
             // TODO: reduce # of DescribeTable API calls. table_schema function is called every time you do something.
             let desc: TableDescription = control::describe_table_api(
-                cx,
-                table_name, /* should be equal to 'cx.effective_table_name()' */
+                cx, table_name, /* should be equal to 'cx.effective_table_name()' */
             )
             .await;
 
@@ -663,7 +662,7 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
     }
 }
 
-pub fn bye(code: i32, msg: &str) {
+pub fn bye(code: i32, msg: &str) -> ! {
     println!("{}", msg);
     std::process::exit(code);
 }
@@ -757,7 +756,6 @@ mod tests {
     use super::*;
     use std::convert::TryInto;
     use std::error::Error;
-    use std::str::FromStr; // to utilize Region::from_str // for unit tests
 
     #[test]
     fn test_context_functions() -> Result<(), Box<dyn Error>> {
@@ -790,29 +788,35 @@ mod tests {
             should_strict_for_query: None,
             retry: Some(RetryConfig::default().try_into()?),
         };
-        assert_eq!(cx2.effective_region(), Region::from_str("ap-northeast-1")?);
+        assert_eq!(
+            cx2.effective_region(),
+            Region::from_static("ap-northeast-1")
+        );
         assert_eq!(cx2.effective_table_name(), String::from("cfgtbl"));
 
         let cx3 = Context {
-            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
-            overwritten_table_name: Some(String::from("argtbl")),     // --table argtbl
+            overwritten_region: Some(Region::from_static("us-east-1")), // --region us-east-1
+            overwritten_table_name: Some(String::from("argtbl")),       // --table argtbl
             ..cx2.clone()
         };
-        assert_eq!(cx3.effective_region(), Region::from_str("us-east-1")?);
+        assert_eq!(cx3.effective_region(), Region::from_static("us-east-1"));
         assert_eq!(cx3.effective_table_name(), String::from("argtbl"));
 
         let cx4 = Context {
-            overwritten_region: Some(Region::from_str("us-east-1")?), // --region us-east-1
+            overwritten_region: Some(Region::from_static("us-east-1")), // --region us-east-1
             ..cx2.clone()
         };
-        assert_eq!(cx4.effective_region(), Region::from_str("us-east-1")?);
+        assert_eq!(cx4.effective_region(), Region::from_static("us-east-1"));
         assert_eq!(cx4.effective_table_name(), String::from("cfgtbl"));
 
         let cx5 = Context {
             overwritten_table_name: Some(String::from("argtbl")), // --table argtbl
             ..cx2.clone()
         };
-        assert_eq!(cx5.effective_region(), Region::from_str("ap-northeast-1")?);
+        assert_eq!(
+            cx5.effective_region(),
+            Region::from_static("ap-northeast-1")
+        );
         assert_eq!(cx5.effective_table_name(), String::from("argtbl"));
 
         Ok(())

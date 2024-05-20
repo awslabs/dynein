@@ -38,7 +38,7 @@ async fn test_backup() -> Result<(), Box<dyn std::error::Error>> {
         .failure()
         .stdout(predicate::str::contains(
             // This error message only happens on DynamoDB Local which does not support backup feature.
-            "com.amazonaws.dynamodb.v20120810#UnknownOperationException",
+            "unhandled error (UnknownOperationException)",
         ));
 
     Ok(())

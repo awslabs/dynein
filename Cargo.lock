@@ -948,6 +948,7 @@ dependencies = [
  "aws-sdk-dynamodb",
  "aws-sdk-ec2",
  "aws-smithy-runtime-api",
+ "aws-smithy-types",
  "aws-types",
  "backon",
  "base64 0.22.0",

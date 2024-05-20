@@ -123,11 +123,8 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
         cx
     };
 
-    let desc: TableDescription = describe_table_api(
-        &new_context,
-        new_context.effective_table_name(),
-    )
-    .await;
+    let desc: TableDescription =
+        describe_table_api(&new_context, new_context.effective_table_name()).await;
     debug!(
         "Retrieved table to describe is: '{}' table in '{}' region.",
         &new_context.effective_table_name(),
@@ -145,7 +142,9 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
     };
 
     match new_context.clone().output.as_deref() {
-        None | Some("yaml") => util::print_table_description(new_context.effective_region().as_ref(), desc),
+        None | Some("yaml") => {
+            util::print_table_description(new_context.effective_region().as_ref(), desc)
+        }
         // Some("raw") => println!("{:#?}", desc),
         Some(_) => {
             println!("ERROR: unsupported output type.");
@@ -156,10 +155,7 @@ pub async fn describe_table(cx: app::Context, target_table_to_desc: Option<Strin
 
 /// Originally intended to be called by describe_table function, which is called from `$ dy desc`,
 /// however it turned out that DescribeTable API result is useful in various logic, separated API into this standalone function.
-pub async fn describe_table_api(
-    cx: &app::Context,
-    table_name: String,
-) -> TableDescription {
+pub async fn describe_table_api(cx: &app::Context, table_name: String) -> TableDescription {
     let region = cx.effective_region();
     let config = cx.effective_sdk_config_with_region(region.as_ref()).await;
     let ddb = DynamoDbSdkClient::new(&config);
@@ -167,7 +163,7 @@ pub async fn describe_table_api(
     match ddb.describe_table().table_name(table_name).send().await {
         Err(e) => {
             debug!("DescribeTable API call got an error -- {:#?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error().meta());
             std::process::exit(1);
         }
         Ok(res) => {
@@ -190,7 +186,7 @@ pub async fn create_table(cx: app::Context, name: String, given_keys: Vec<String
         Ok(desc) => util::print_table_description(cx.effective_region().as_ref(), desc),
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error());
             std::process::exit(1);
         }
     }
@@ -253,7 +249,8 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
                 .build(),
         )
         .set_provisioned_throughput(None) // TODO: assign default rcu/wcu if base table is Provisioned mode. currently it works only for OnDemand talbe.
-        .build().unwrap();
+        .build()
+        .unwrap();
 
     let gsi_update = GlobalSecondaryIndexUpdate::builder()
         .create(create_gsi_action)
@@ -274,7 +271,10 @@ pub async fn create_index(cx: app::Context, index_name: String, given_keys: Vec<
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
-            util::print_table_description(cx.effective_region().as_ref(), res.table_description.unwrap());
+            util::print_table_description(
+                cx.effective_region().as_ref(),
+                res.table_description.unwrap(),
+            );
         }
     }
 }
@@ -287,8 +287,7 @@ pub async fn update_table(
     rcu: Option<i64>,
 ) {
     // Retrieve TableDescription of the table to update, current (before update) status.
-    let desc: TableDescription =
-        describe_table_api(&cx, table_name_to_update.clone()).await;
+    let desc: TableDescription = describe_table_api(&cx, table_name_to_update.clone()).await;
 
     // Map given string into "Mode" enum. Note that in cmd.rs clap already limits acceptable values.
     let switching_to_mode: Option<util::Mode> = match mode_string {
@@ -330,7 +329,8 @@ pub async fn update_table(
                                 .write_capacity_units
                                 .unwrap()
                         }))
-                        .build().unwrap(),
+                        .build()
+                        .unwrap(),
                 ),
             }
         }
@@ -348,7 +348,8 @@ pub async fn update_table(
                 ProvisionedThroughput::builder()
                     .read_capacity_units(rcu.unwrap_or(5))
                     .write_capacity_units(wcu.unwrap_or(5))
-                    .build().unwrap(),
+                    .build()
+                    .unwrap(),
             ),
         },
     };
@@ -427,7 +428,7 @@ pub async fn delete_table(cx: app::Context, name: String, skip_confirmation: boo
     match ddb.delete_table().table_name(name).send().await {
         Err(e) => {
             debug!("DeleteTable API call got an error -- {:#?}", e);
-            error!("{}", e.to_string());
+            error!("{}", e.into_service_error());
             std::process::exit(1);
         }
         Ok(res) => {
@@ -469,7 +470,7 @@ pub async fn backup(cx: app::Context, all_tables: bool) {
     match req.send().await {
         Err(e) => {
             debug!("CreateBackup API call got an error -- {:#?}", e);
-            app::bye(1, &e.to_string());
+            app::bye(1, &e.into_service_error().to_string());
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
@@ -589,6 +590,7 @@ pub async fn restore(cx: app::Context, backup_name: Option<String>, restore_name
     {
         Err(e) => {
             debug!("RestoreTableFromBackup API call got an error -- {:#?}", e);
+            app::bye(1, &e.into_service_error().to_string());
             /* e.g. ... Possibly see "BackupInUse" error:
                 [2020-08-14T13:16:07Z DEBUG dy::control] RestoreTableFromBackup API call got an error -- Service( BackupInUse( "Backup is being used to restore another table: arn:aws:dynamodb:us-west-2:111111111111:table/Music/backup/01527492829107-81b9b3dd",))
             */
@@ -636,9 +638,7 @@ async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSumm
     match req.send().await {
         Err(e) => {
             debug!("ListBackups API call got an error -- {:#?}", e);
-            // app::bye(1, &e.to_string()) // it doesn't meet return value requirement.
-            println!("{}", &e.to_string());
-            std::process::exit(1);
+            app::bye(1, &e.into_service_error().to_string());
         }
         Ok(res) => res
             .backup_summaries

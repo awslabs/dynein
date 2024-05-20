@@ -57,9 +57,9 @@ pub enum Mode {
     OnDemand,
 }
 
-impl Into<BillingMode> for Mode {
-    fn into(self) -> BillingMode {
-        match self {
+impl From<Mode> for BillingMode {
+    fn from(mode: Mode) -> Self {
+        match mode {
             Mode::Provisioned => BillingMode::Provisioned,
             Mode::OnDemand => BillingMode::PayPerRequest,
         }
@@ -142,7 +142,8 @@ pub fn generate_essential_key_definitions(
                 } else {
                     KeyType::Range
                 })
-                .build().unwrap(),
+                .build()
+                .unwrap(),
         );
 
         // If data type of key is omitted, dynein assumes it as String (S).
@@ -154,7 +155,8 @@ pub fn generate_essential_key_definitions(
                 } else {
                     ScalarAttributeType::S
                 })
-                .build().unwrap(),
+                .build()
+                .unwrap(),
         )
     }
     (key_schema, attribute_definitions)

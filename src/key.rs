@@ -117,11 +117,12 @@ pub fn typed_key_for_schema(
         name: key.clone().attribute_name,
         // kind should be one of S/N/B, Which can be retrieved from AttributeDefinition's attribute_type.
         kind: KeyType::from_str(
-            &attrs
+            attrs
                 .iter()
                 .find(|at| at.attribute_name == key.attribute_name)
                 .expect("primary key should be in AttributeDefinition.")
-                .attribute_type.as_str(),
+                .attribute_type
+                .as_str(),
         )
         .unwrap(),
     })

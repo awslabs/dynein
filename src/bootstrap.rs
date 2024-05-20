@@ -200,7 +200,12 @@ see https://github.com/awslabs/dynein#working-with-dynamodb-items for detail
                         .collect();
                     write_requests.push(
                         WriteRequest::builder()
-                            .put_request(PutRequest::builder().set_item(Some(item_attrval)).build().unwrap())
+                            .put_request(
+                                PutRequest::builder()
+                                    .set_item(Some(item_attrval))
+                                    .build()
+                                    .unwrap(),
+                            )
                             .build(),
                     );
                     if write_requests.len() == 25 {

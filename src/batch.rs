@@ -158,7 +158,9 @@ pub fn build_batch_request_items_from_json(
                         ddbjson_attributes_to_attrvals(raw_item);
                     write_requests.push(
                         WriteRequest::builder()
-                            .put_request(PutRequest::builder().set_item(Some(item)).build().unwrap())
+                            .put_request(
+                                PutRequest::builder().set_item(Some(item)).build().unwrap(),
+                            )
                             .build(),
                     );
                 } else {
@@ -191,7 +193,9 @@ pub fn build_batch_request_items_from_json(
                         ddbjson_attributes_to_attrvals(raw_key);
                     write_requests.push(
                         WriteRequest::builder()
-                            .delete_request(DeleteRequest::builder().set_key(Some(key)).build().unwrap())
+                            .delete_request(
+                                DeleteRequest::builder().set_key(Some(key)).build().unwrap(),
+                            )
                             .build(),
                     );
                 } else {
@@ -353,7 +357,12 @@ pub async fn batch_write_item(
                 validate_item_keys(&attrs, &ts)?;
                 write_requests.push(
                     WriteRequest::builder()
-                        .delete_request(DeleteRequest::builder().set_key(Some(attrs)).build().unwrap())
+                        .delete_request(
+                            DeleteRequest::builder()
+                                .set_key(Some(attrs))
+                                .build()
+                                .unwrap(),
+                        )
                         .build(),
                 );
             }
@@ -554,7 +563,9 @@ fn ddbjson_val_to_attrval(ddb_jsonval: &JsonValue) -> Option<AttributeValue> {
     } else if let Some(x) = ddb_jsonval.get("N") {
         Some(AttributeValue::N(x.as_str().unwrap().to_string()))
     } else if let Some(x) = ddb_jsonval.get("B") {
-        Some(AttributeValue::B(aws_sdk_dynamodb::primitives::Blob::new(json_binary_val_to_bytes(x))))
+        Some(AttributeValue::B(aws_sdk_dynamodb::primitives::Blob::new(
+            json_binary_val_to_bytes(x),
+        )))
     } else if let Some(x) = ddb_jsonval.get("BOOL") {
         Some(AttributeValue::Bool(x.as_bool().unwrap()))
     } else if let Some(x) = ddb_jsonval.get("SS") {

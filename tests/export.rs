@@ -62,7 +62,7 @@ async fn test_export_empty_table() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: this behavior should be fixed by the issue
     // https://github.com/awslabs/dynein/issues/152
     cmd.assert().failure().stderr(predicate::str::contains(
-        "thread 'main' panicked at src/transfer.rs:478:20:\nattempt to subtract with overflow",
+        "thread 'main' panicked at src/transfer.rs:481:20:\nattempt to subtract with overflow",
     ));
     Ok(())
 }

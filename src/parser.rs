@@ -15,7 +15,7 @@
  */
 
 use crate::pest::Parser;
-use aws_sdk_dynamodb::types::AttributeValue;
+use aws_sdk_dynamodb::{primitives::Blob, types::AttributeValue};
 use base64::engine::{general_purpose, DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 use base64::{DecodeError, Engine};
 use bytes::Bytes;
@@ -456,7 +456,7 @@ impl AttrVal {
             AttrVal::S(str) => AttributeValue::S(str),
             AttrVal::Bool(boolean) => AttributeValue::Bool(boolean),
             AttrVal::Null(isnull) => AttributeValue::Null(isnull),
-            AttrVal::B(binary) => AttributeValue::B(aws_sdk_dynamodb::primitives::Blob::new(binary)),
+            AttrVal::B(binary) => AttributeValue::B(Blob::new(binary)),
             AttrVal::L(list) => AttributeValue::L(
                 list.into_iter()
                     .map(|x| x.convert_attribute_value())
@@ -469,7 +469,7 @@ impl AttrVal {
             ),
             AttrVal::NS(list) => AttributeValue::Ns(list),
             AttrVal::SS(list) => AttributeValue::Ss(list),
-            AttrVal::BS(list) => AttributeValue::Bs(list.into_iter().map(aws_sdk_dynamodb::primitives::Blob::new).collect()),
+            AttrVal::BS(list) => AttributeValue::Bs(list.into_iter().map(Blob::new).collect()),
         }
     }
 }
@@ -1444,7 +1444,11 @@ impl DyneinParser {
         let result = GeneratedParser::parse(Rule::map_literal, exp);
         match result {
             Ok(mut pair) => {
-                let item = parse_literal(pair.next().unwrap())?.convert_attribute_value().as_m().unwrap().to_owned();
+                let item = parse_literal(pair.next().unwrap())?
+                    .convert_attribute_value()
+                    .as_m()
+                    .unwrap()
+                    .to_owned();
                 // content must be map literal
                 let mut image = match initial_item {
                     Some(init_item) => init_item,
@@ -2384,92 +2388,44 @@ mod tests {
 
         do_test!(
             AttrVal::N("123".to_owned()),
-            AttributeValue {
-                n: Some("123".to_owned()),
-                ..Default::default()
-            }
+            AttributeValue::N("123".to_owned())
         );
         do_test!(
             AttrVal::S("string".to_owned()),
-            AttributeValue {
-                s: Some("string".to_owned()),
-                ..Default::default()
-            }
+            AttributeValue::S("string".to_owned())
         );
-        do_test!(
-            AttrVal::Bool(true),
-            AttributeValue {
-                bool: Some(true),
-                ..Default::default()
-            }
-        );
-        do_test!(
-            AttrVal::Bool(false),
-            AttributeValue {
-                bool: Some(false),
-                ..Default::default()
-            }
-        );
-        do_test!(
-            AttrVal::Null(true),
-            AttributeValue {
-                null: Some(true),
-                ..Default::default()
-            }
-        );
+        do_test!(AttrVal::Bool(true), AttributeValue::Bool(true));
+        do_test!(AttrVal::Bool(false), AttributeValue::Bool(false));
+        do_test!(AttrVal::Null(true), AttributeValue::Null(true));
         do_test!(
             AttrVal::B(Bytes::from_static(b"123")),
-            AttributeValue {
-                b: Some(Bytes::from_static(b"123")),
-                ..Default::default()
-            }
+            AttributeValue::B(Blob::new(Bytes::from_static(b"123")))
         );
         do_test!(
             AttrVal::L(vec![AttrVal::N("123".to_owned())]),
-            AttributeValue {
-                l: Some(vec![AttributeValue {
-                    n: Some("123".to_owned()),
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            }
+            AttributeValue::L(vec![AttributeValue::N("123".to_owned())])
         );
         do_test!(
             AttrVal::M(HashMap::from([(
                 "m".to_owned(),
                 AttrVal::N("123".to_owned()),
             )])),
-            AttributeValue {
-                m: Some(HashMap::from([(
-                    "m".to_owned(),
-                    AttributeValue {
-                        n: Some("123".to_owned()),
-                        ..Default::default()
-                    }
-                )])),
-                ..Default::default()
-            }
+            AttributeValue::M(HashMap::from([(
+                "m".to_owned(),
+                AttributeValue::N("123".to_owned())
+            )]))
         );
         do_test!(
             AttrVal::NS(vec!["123".to_owned()]),
-            AttributeValue {
-                ns: Some(vec!["123".to_owned()]),
-                ..Default::default()
-            }
+            AttributeValue::Ns(vec!["123".to_owned()])
         );
         do_test!(
             AttrVal::SS(vec!["123".to_owned()]),
-            AttributeValue {
-                ss: Some(vec!["123".to_owned()]),
-                ..Default::default()
-            }
+            AttributeValue::Ss(vec!["123".to_owned()])
         );
         do_test!(
             AttrVal::BS(vec![Bytes::from_static(b"123")]),
-            AttributeValue {
-                bs: Some(vec![Bytes::from_static(b"123")]),
-                ..Default::default()
-            }
+            AttributeValue::Bs(vec![Blob::new(Bytes::from_static(b"123"))])
         );
     }
 
@@ -2488,13 +2444,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0)),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        n: Some("1".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::N("1".to_owned()))]),
             }
         );
 
@@ -2510,13 +2460,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0)),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        s: Some("1".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::S("1".to_owned()))]),
             }
         );
 
@@ -2532,13 +2476,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}>{}", attr_name_ref(0), attr_val_ref(0)),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        s: Some("1".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::S("1".to_owned()))]),
             }
         );
 
@@ -2554,13 +2492,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}>={}", attr_name_ref(0), attr_val_ref(0)),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        n: Some("1".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::N("1".to_owned()))]),
             }
         );
 
@@ -2576,13 +2508,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}<{}", attr_name_ref(0), attr_val_ref(0)),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        s: Some("1 2".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::S("1 2".to_owned()))]),
             }
         );
 
@@ -2598,13 +2524,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}<={}", attr_name_ref(0), attr_val_ref(0)),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        n: Some("-1e5".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::N("-1e5".to_owned()))]),
             }
         );
 
@@ -2628,17 +2548,11 @@ mod tests {
                 values: HashMap::from([
                     (
                         attr_val_ref(0),
-                        AttributeValue {
-                            b: Some(Bytes::from_static(b"1")),
-                            ..Default::default()
-                        }
+                        AttributeValue::B(Blob::new(Bytes::from_static(b"1")))
                     ),
                     (
                         attr_val_ref(1),
-                        AttributeValue {
-                            b: Some(Bytes::from_static(b"2")),
-                            ..Default::default()
-                        }
+                        AttributeValue::B(Blob::new(Bytes::from_static(b"2")))
                     )
                 ]),
             }
@@ -2658,10 +2572,7 @@ mod tests {
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
                 values: HashMap::from([(
                     attr_val_ref(0),
-                    AttributeValue {
-                        s: Some("id1234#e1234".to_owned()),
-                        ..Default::default()
-                    }
+                    AttributeValue::S("id1234#e1234".to_owned())
                 )]),
             }
         );
@@ -2684,10 +2595,7 @@ mod tests {
                     names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
                     values: HashMap::from([(
                         attr_val_ref(0),
-                        AttributeValue {
-                            s: Some(expected_val[i].to_owned()),
-                            ..Default::default()
-                        }
+                        AttributeValue::S(expected_val[i].to_owned())
                     )]),
                 }
             );
@@ -2738,20 +2646,8 @@ mod tests {
                 ),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
                 values: HashMap::from([
-                    (
-                        attr_val_ref(0),
-                        AttributeValue {
-                            s: Some("1".to_owned()),
-                            ..Default::default()
-                        }
-                    ),
-                    (
-                        attr_val_ref(1),
-                        AttributeValue {
-                            s: Some("2".to_owned()),
-                            ..Default::default()
-                        }
-                    )
+                    (attr_val_ref(0), AttributeValue::S("1".to_owned())),
+                    (attr_val_ref(1), AttributeValue::S("2".to_owned()))
                 ]),
             }
         );
@@ -2770,10 +2666,7 @@ mod tests {
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
                 values: HashMap::from([(
                     attr_val_ref(0),
-                    AttributeValue {
-                        s: Some("id12#i-12@i-12/i-12".to_owned()),
-                        ..Default::default()
-                    }
+                    AttributeValue::S("id12#i-12@i-12/i-12".to_owned())
                 )]),
             }
         );
@@ -2790,13 +2683,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0),),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        s: Some("123".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::S("123".to_owned()))]),
             }
         );
 
@@ -2812,13 +2699,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0),),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        n: Some("123".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::N("123".to_owned()))]),
             }
         );
     }
@@ -2845,90 +2726,42 @@ mod tests {
                 )
                 .unwrap(),
             HashMap::from([
-                (
-                    "k0".to_owned(),
-                    AttributeValue {
-                        null: Some(true),
-                        ..Default::default()
-                    }
-                ),
+                ("k0".to_owned(), AttributeValue::Null(true)),
                 (
                     "k1".to_owned(),
-                    AttributeValue {
-                        l: Some(Vec::from([
-                            AttributeValue {
-                                n: Some("1".to_owned()),
-                                ..Default::default()
-                            },
-                            AttributeValue {
-                                n: Some("2".to_owned()),
-                                ..Default::default()
-                            },
-                            AttributeValue {
-                                n: Some("3".to_owned()),
-                                ..Default::default()
-                            },
-                            AttributeValue {
-                                s: Some("str".to_owned()),
-                                ..Default::default()
-                            },
-                        ])),
-                        ..Default::default()
-                    }
+                    AttributeValue::L(vec![
+                        AttributeValue::N("1".to_owned()),
+                        AttributeValue::N("2".to_owned()),
+                        AttributeValue::N("3".to_owned()),
+                        AttributeValue::S("str".to_owned()),
+                    ])
                 ),
-                (
-                    "k2".to_owned(),
-                    AttributeValue {
-                        s: Some("str".to_owned()),
-                        ..Default::default()
-                    }
-                ),
+                ("k2".to_owned(), AttributeValue::S("str".to_owned())),
                 (
                     "k3".to_owned(),
-                    AttributeValue {
-                        m: Some(HashMap::from([
-                            (
-                                "l0".to_owned(),
-                                AttributeValue {
-                                    ns: Some(vec!["1".to_owned(), "2".to_owned()]),
-                                    ..Default::default()
-                                }
-                            ),
-                            (
-                                "l1".to_owned(),
-                                AttributeValue {
-                                    ss: Some(vec!["str1".to_owned(), "str2".to_owned()]),
-                                    ..Default::default()
-                                }
-                            ),
-                            (
-                                "l2".to_owned(),
-                                AttributeValue {
-                                    bool: Some(true),
-                                    ..Default::default()
-                                }
-                            )
-                        ])),
-                        ..Default::default()
-                    }
+                    AttributeValue::M(HashMap::from([
+                        (
+                            "l0".to_owned(),
+                            AttributeValue::Ns(vec!["1".to_owned(), "2".to_owned()])
+                        ),
+                        (
+                            "l1".to_owned(),
+                            AttributeValue::Ss(vec!["str1".to_owned(), "str2".to_owned()])
+                        ),
+                        ("l2".to_owned(), AttributeValue::Bool(true))
+                    ]))
                 ),
                 (
                     "k4".to_owned(),
-                    AttributeValue {
-                        b: Some(Bytes::from_static(b"\x20")),
-                        ..Default::default()
-                    }
+                    AttributeValue::B(Blob::new(Bytes::from_static(b"\x20")))
                 ),
                 (
                     "k5".to_owned(),
-                    AttributeValue {
-                        bs: Some(vec!(
-                            Bytes::from_static(b"This"),
-                            Bytes::from_static(b"bin"),
-                            Bytes::from_static(b"file"),
-                        )),
-                        ..Default::default()
-                    }
+                    AttributeValue::Bs(vec![
+                        Blob::new(Bytes::from_static(b"This")),
+                        Blob::new(Bytes::from_static(b"bin")),
+                        Blob::new(Bytes::from_static(b"file"))
+                    ])
                 )
             ])
         )
@@ -2942,13 +2775,7 @@ mod tests {
             ExpressionResult {
                 exp: format!("{}={}", attr_name_ref(0), attr_val_ref(0)),
                 names: HashMap::from([(attr_name_ref(0), "id".to_owned())]),
-                values: HashMap::from([(
-                    attr_val_ref(0),
-                    AttributeValue {
-                        s: Some("string".to_owned()),
-                        ..Default::default()
-                    }
-                )]),
+                values: HashMap::from([(attr_val_ref(0), AttributeValue::S("string".to_owned()))]),
             }
         );
     }
@@ -2984,13 +2811,7 @@ mod tests {
     fn test_set_and_remove_action() {
         let mut parser = DyneinParser::new();
         let names = HashMap::from([(attr_name_ref(0), "p0".to_owned())]);
-        let values = HashMap::from([(
-            attr_val_ref(0),
-            AttributeValue {
-                s: Some("string".to_owned()),
-                ..Default::default()
-            },
-        )]);
+        let values = HashMap::from([(attr_val_ref(0), AttributeValue::S("string".to_owned()))]);
         assert_eq!(
             parser.parse_set_action("p0 = \"string\"").unwrap(),
             ExpressionResult {
