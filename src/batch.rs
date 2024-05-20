@@ -104,7 +104,7 @@ Public functions
 /// HashMap<
 ///   String, ... table name. Batch requests can contain multiple tables as targets.
 ///   Vec<    ... requests for one table should be gathered.
-///     WriteRequest ... https://docs.rs/rusoto_dynamodb/0.42.0/rusoto_dynamodb/struct.WriteRequest.html
+///     WriteRequest ... https://docs.rs/aws-sdk-dynamodb/1.28.0/aws_sdk_dynamodb/types/struct.WriteRequest.html
 ///       either:
 ///         - put_request (Option<PutRequest>), where PutRequest { item: HashMap<String, AttributeValue> }
 ///             ... it should be same as "item" parameter used in PutItem.

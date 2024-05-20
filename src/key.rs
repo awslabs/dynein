@@ -34,7 +34,6 @@ impl Key {
 }
 
 /// Restrict acceptable DynamoDB data types for primary keys.
-///     enum witn methods/FromStr ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#226-258
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum KeyType {
     S,

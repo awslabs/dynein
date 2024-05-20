@@ -120,7 +120,7 @@ You can move the binary file named "dy" to anywhere under your `$PATH`.
 
 ## Prerequisites - AWS Credentials
 
-First of all, please make sure you've already configured AWS Credentials in your environment. dynein depends on [rusoto](https://github.com/rusoto/rusoto) and rusoto [can utilize standard AWS credential toolchains](https://github.com/rusoto/rusoto/blob/master/AWS-CREDENTIALS.md) - for example `~/.aws/credentials` file, [IAM EC2 Instance Profile](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html), or environment variables such as `AWS_DEFAULT_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_PROFILE`.
+First of all, please make sure you've already configured AWS Credentials in your environment. dynein depends on [aws-sdk-rust](https://github.com/awslabs/aws-sdk-rust) - for example `~/.aws/credentials` file, [IAM EC2 Instance Profile](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-ec2_instance-profiles.html), or environment variables such as `AWS_DEFAULT_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_PROFILE`.
 
 One convenient way to check if your AWS credential configuration is ok to use dynein is to install and try to execute [AWS CLI](https://aws.amazon.com/cli/) in your environment (e.g. `$ aws dynamodb list-tables`). Once you've [configured AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html), you should be ready to use dynein.
 

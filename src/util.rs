@@ -30,7 +30,6 @@ struct / enum / const
 ================================================= */
 
 // TableDescription doesn't implement Serialize
-// https://docs.rs/rusoto_dynamodb/0.42.0/rusoto_dynamodb/struct.TableDescription.html
 #[derive(Serialize, Deserialize, Debug)]
 struct PrintDescribeTable {
     name: String,

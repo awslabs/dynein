@@ -617,7 +617,6 @@ fn identify_target(
 // top 3 scalar types that can be used for primary keys.
 //   ref: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html
 //        https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html#HowItWorks.DataTypes
-//        https://rusoto.github.io/rusoto/rusoto_dynamodb/struct.AttributeValue.html
 fn build_attrval_scalar(_ktype: &str, _kval: &str) -> AttributeValue {
     debug!(
         "Constructing an AttributeValue for (type: {:?}, val: {:?})",
@@ -653,7 +652,6 @@ fn build_attrval_set(ktype: &str, kval: &[JsonValue]) -> AttributeValue {
                 .collect(),
         ),
         // NOTE: Currently BS is not supported.
-        // "BS": Vec<bytes::Bytes> (serialize_with = "::rusoto_core::serialization::SerdeBlobList::serialize_blob_list")
         _ => panic!("ERROR: Unknown DynamoDB Data Type: {}", ktype),
     }
 }

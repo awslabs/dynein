@@ -286,7 +286,6 @@ impl Context {
 
         // otherwise, come down to "default region" of your environment.
         // e.g. region set via AWS CLI (check: $ aws configure get region), or environment variable `AWS_DEFAULT_REGION`.
-        //      ref: https://docs.rs/rusoto_signature/0.42.0/src/rusoto_signature/region.rs.html#282-290
         //      ref: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
         // TODO: fix
         Region::from_static("us-east-1")
