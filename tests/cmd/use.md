@@ -2,64 +2,57 @@
 
 ```
 $ dy use --help
-dy-use 0.2.1
-Switch target table context. After you use the command you don't need to specify table every time, but you may overwrite
-the target table with --table (-t) option.
+Switch target table context. After you use the command you don't need to specify table every time, but you may overwrite the target table with --table (-t) option.
 
-When you execute `use`, dynein retrieves table schema info via DescribeTable API and stores it in ~/.dynein/ directory.
+When you execute `use`, dynein retrieves table schema info via DescribeTable API
+and stores it in ~/.dynein/ directory.
 
-USAGE:
-    dy use [OPTIONS] [target-table-to-use]
+Usage: dy use [OPTIONS] [TARGET_TABLE_TO_USE]
 
-FLAGS:
-    -h, --help       
-            Prints help information
+Arguments:
+  [TARGET_TABLE_TO_USE]
+          Target table name to use. Optionally you may specify the target table by --table (-t) option
 
-    -V, --version    
-            Prints version information
+Options:
+  -r, --region <REGION>
+          The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
+          You can use --region option in both top-level and subcommand-level.
 
+  -p, --port <PORT>
+          Specify the port number. This option has an effect only when `--region local` is used.
 
-OPTIONS:
-    -p, --port <port>        
-            Specify the port number. This option has an effect only when `--region local` is used
+  -t, --table <TABLE>
+          Target table of the operation. You can use --table option in both top-level and subcommand-level.
+          You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
 
-    -r, --region <region>    
-            The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`. You can use
-            --region option in both top-level and subcommand-level
-    -t, --table <table>      
-            Target table of the operation. You can use --table option in both top-level and subcommand-level. You can
-            store table schema locally by executing `$ dy use`, after that you need not to specify --table on every
-            command
-
-ARGS:
-    <target-table-to-use>    
-            Target table name to use. Optionally you may specify the target table by --table (-t) option
-
+  -h, --help
+          Print help (see a summary with '-h')
 
 $ dy help use
-dy-use 0.2.1
-Switch target table context. After you use the command you don't need to specify table every time, but you may overwrite
-the target table with --table (-t) option.
+Switch target table context. After you use the command you don't need to specify table every time, but you may overwrite the target table with --table (-t) option.
 
-When you execute `use`, dynein retrieves table schema info via DescribeTable API and stores it in ~/.dynein/ directory.
+When you execute `use`, dynein retrieves table schema info via DescribeTable API
+and stores it in ~/.dynein/ directory.
 
-USAGE:
-    dy use [OPTIONS] [target-table-to-use]
+Usage: dy use [OPTIONS] [TARGET_TABLE_TO_USE]
 
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+Arguments:
+  [TARGET_TABLE_TO_USE]
+          Target table name to use. Optionally you may specify the target table by --table (-t) option
 
-OPTIONS:
-    -p, --port <port>        Specify the port number. This option has an effect only when `--region local` is used
-    -r, --region <region>    The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region
-                             local`. You can use --region option in both top-level and subcommand-level
-    -t, --table <table>      Target table of the operation. You can use --table option in both top-level and subcommand-
-                             level. You can store table schema locally by executing `$ dy use`, after that
-                             you need not to specify --table on every command
+Options:
+  -r, --region <REGION>
+          The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
+          You can use --region option in both top-level and subcommand-level.
 
-ARGS:
-    <target-table-to-use>    Target table name to use. Optionally you may specify the target table by --table (-t)
-                             option
+  -p, --port <PORT>
+          Specify the port number. This option has an effect only when `--region local` is used.
+
+  -t, --table <TABLE>
+          Target table of the operation. You can use --table option in both top-level and subcommand-level.
+          You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
+
+  -h, --help
+          Print help (see a summary with '-h')
 
 ```

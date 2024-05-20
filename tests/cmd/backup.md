@@ -2,61 +2,59 @@
 
 ```
 $ dy backup --help
-dy-backup 0.2.1
 Take backup of a DynamoDB table using on-demand backup
 
 For more details: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BackupRestore.html
 
-USAGE:
-    dy backup [FLAGS] [OPTIONS]
+Usage: dy backup [OPTIONS]
 
-FLAGS:
-        --all-tables    
-            List backups for all tables in the region
+Options:
+  -l, --list
+          List existing DynamoDB backups
 
-    -h, --help          
-            Prints help information
+      --all-tables
+          List backups for all tables in the region
 
-    -l, --list          
-            List existing DynamoDB backups
+  -r, --region <REGION>
+          The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
+          You can use --region option in both top-level and subcommand-level.
 
-    -V, --version       
-            Prints version information
+  -p, --port <PORT>
+          Specify the port number. This option has an effect only when `--region local` is used.
 
+  -t, --table <TABLE>
+          Target table of the operation. You can use --table option in both top-level and subcommand-level.
+          You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
 
-OPTIONS:
-    -p, --port <port>        
-            Specify the port number. This option has an effect only when `--region local` is used
-
-    -r, --region <region>    
-            The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`. You can use
-            --region option in both top-level and subcommand-level
-    -t, --table <table>      
-            Target table of the operation. You can use --table option in both top-level and subcommand-level. You can
-            store table schema locally by executing `$ dy use`, after that you need not to specify --table on every
-            command
+  -h, --help
+          Print help (see a summary with '-h')
 
 $ dy help backup
-dy-backup 0.2.1
 Take backup of a DynamoDB table using on-demand backup
 
 For more details: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BackupRestore.html
 
-USAGE:
-    dy backup [FLAGS] [OPTIONS]
+Usage: dy backup [OPTIONS]
 
-FLAGS:
-        --all-tables    List backups for all tables in the region
-    -h, --help          Prints help information
-    -l, --list          List existing DynamoDB backups
-    -V, --version       Prints version information
+Options:
+  -l, --list
+          List existing DynamoDB backups
 
-OPTIONS:
-    -p, --port <port>        Specify the port number. This option has an effect only when `--region local` is used
-    -r, --region <region>    The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region
-                             local`. You can use --region option in both top-level and subcommand-level
-    -t, --table <table>      Target table of the operation. You can use --table option in both top-level and subcommand-
-                             level. You can store table schema locally by executing `$ dy use`, after that
-                             you need not to specify --table on every command
+      --all-tables
+          List backups for all tables in the region
+
+  -r, --region <REGION>
+          The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
+          You can use --region option in both top-level and subcommand-level.
+
+  -p, --port <PORT>
+          Specify the port number. This option has an effect only when `--region local` is used.
+
+  -t, --table <TABLE>
+          Target table of the operation. You can use --table option in both top-level and subcommand-level.
+          You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
+
+  -h, --help
+          Print help (see a summary with '-h')
 
 ```
