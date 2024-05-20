@@ -60,7 +60,6 @@ console = "0.15.8"
 brotli = "5.0.0"
 base64 = "0.22.0"
 thiserror = "1.0.59"
-backon = "0.4"
 
 [dev-dependencies]
 assert_cmd = "2.0.14" # contains helpers make executing the main binary on integration tests easier.

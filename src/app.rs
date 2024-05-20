@@ -15,9 +15,10 @@
  */
 
 use ::serde::{Deserialize, Serialize};
-use aws_config::{meta::region::RegionProviderChain, BehaviorVersion, Region, SdkConfig};
+use aws_config::{
+    meta::region::RegionProviderChain, retry::RetryConfig, BehaviorVersion, Region, SdkConfig,
+};
 use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
-use backon::ExponentialBuilder;
 use log::{debug, error, info};
 use serde_yaml::Error as SerdeYAMLError;
 use std::convert::{TryFrom, TryInto};
@@ -105,19 +106,19 @@ pub struct Config {
     #[serde(default)]
     pub query: QueryConfig,
     // pub cache_expiration_time: Option<i64>, // in second. default 300 (= 5 minutes)
-    pub retry: Option<RetryConfig>,
+    pub retry: Option<RetrySettingGlobal>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct RetryConfig {
+pub struct RetrySettingGlobal {
     pub default: RetrySetting,
     pub batch_write_item: Option<RetrySetting>,
 }
 
-impl TryFrom<RetryConfig> for Retry {
+impl TryFrom<RetrySettingGlobal> for Retry {
     type Error = RetryConfigError;
 
-    fn try_from(value: RetryConfig) -> Result<Self, Self::Error> {
+    fn try_from(value: RetrySettingGlobal) -> Result<Self, Self::Error> {
         let default = value.default.try_into()?;
         let batch_write_item = match value.batch_write_item {
             Some(v) => Some(v.try_into()?),
@@ -154,29 +155,26 @@ pub enum RetryConfigError {
     #[error("max_backoff should be greater than zero")]
     MaxBackoff,
 }
-impl TryFrom<RetrySetting> for ExponentialBuilder {
+impl TryFrom<RetrySetting> for RetryConfig {
     type Error = RetryConfigError;
 
     fn try_from(value: RetrySetting) -> Result<Self, Self::Error> {
-        let mut builder = Self::default()
-            .with_jitter()
-            .with_factor(2.0)
-            .with_min_delay(Duration::from_secs(1));
+        let mut builder = Self::standard();
 
         if let Some(max_attempts) = value.max_attempts {
             if max_attempts == 0 {
                 return Err(RetryConfigError::MaxAttempts);
             }
-            builder = builder.with_max_times(max_attempts as usize - 1);
+            builder = builder.with_max_attempts(max_attempts - 1);
         }
         if let Some(max_backoff) = value.max_backoff {
             if max_backoff.is_zero() {
                 return Err(RetryConfigError::MaxBackoff);
             }
-            builder = builder.with_max_delay(max_backoff);
+            builder = builder.with_max_backoff(max_backoff);
         }
         if let Some(initial_backoff) = value.initial_backoff {
-            builder = builder.with_min_delay(initial_backoff);
+            builder = builder.with_initial_backoff(initial_backoff);
         }
         Ok(builder)
     }
@@ -203,8 +201,8 @@ pub struct Cache {
 
 #[derive(Debug, Clone)]
 pub struct Retry {
-    pub default: ExponentialBuilder,
-    pub batch_write_item: Option<ExponentialBuilder>,
+    pub default: RetryConfig,
+    pub batch_write_item: Option<RetryConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -257,12 +255,34 @@ impl Context {
     }
 
     pub async fn effective_sdk_config_with_region(&self, region_name: &str) -> SdkConfig {
+        self.build_sdk_config(region_name, None).await
+    }
+
+    pub async fn effective_sdk_config_with_retry(
+        &self,
+        retry_config: Option<RetryConfig>,
+    ) -> SdkConfig {
+        let region = self.effective_region().await;
+        let region_name = region.as_ref();
+
+        self.build_sdk_config(region_name, retry_config).await
+    }
+
+    async fn build_sdk_config(
+        &self,
+        region_name: &str,
+        retry_config: Option<RetryConfig>,
+    ) -> SdkConfig {
         let sdk_region = Region::new(region_name.to_owned());
 
         let provider = RegionProviderChain::first_try(sdk_region);
         let mut config = aws_config::defaults(BehaviorVersion::v2024_03_28()).region(provider);
         if self.is_local().await {
             config = config.endpoint_url(format!("http://localhost:{}", self.effective_port()));
+        }
+
+        if let Some(retry_config) = retry_config {
+            config = config.retry_config(retry_config);
         }
 
         config.load().await
@@ -773,7 +793,7 @@ mod tests {
                 using_table: Some(String::from("cfgtbl")),
                 using_port: Some(8000),
                 query: QueryConfig { strict_mode: false },
-                retry: Some(RetryConfig::default()),
+                retry: Some(RetrySettingGlobal::default()),
             }),
             cache: None,
             overwritten_region: None,
@@ -781,7 +801,7 @@ mod tests {
             overwritten_port: None,
             output: None,
             should_strict_for_query: None,
-            retry: Some(RetryConfig::default().try_into()?),
+            retry: Some(RetrySettingGlobal::default().try_into()?),
         };
         assert_eq!(
             cx2.effective_region().await,
@@ -826,12 +846,10 @@ mod tests {
     #[test]
     fn test_retry_setting_success() {
         let config1 = RetrySetting::default();
-        let actual = ExponentialBuilder::try_from(config1).unwrap();
-        let expected = ExponentialBuilder::default()
-            .with_min_delay(Duration::from_secs(1))
-            .with_jitter()
-            .with_factor(2.0)
-            .with_max_times(9);
+        let actual = RetryConfig::try_from(config1).unwrap();
+        let expected = RetryConfig::standard()
+            .with_initial_backoff(Duration::from_secs(1))
+            .with_max_attempts(9);
         assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
 
         let config2 = RetrySetting {
@@ -839,13 +857,11 @@ mod tests {
             max_backoff: Some(Duration::from_secs(100)),
             max_attempts: Some(20),
         };
-        let actual = ExponentialBuilder::try_from(config2).unwrap();
-        let expected = ExponentialBuilder::default()
-            .with_jitter()
-            .with_factor(2.0)
-            .with_min_delay(Duration::from_secs(1))
-            .with_max_delay(Duration::from_secs(100))
-            .with_max_times(19);
+        let actual = RetryConfig::try_from(config2).unwrap();
+        let expected = RetryConfig::standard()
+            .with_initial_backoff(Duration::from_secs(1))
+            .with_max_backoff(Duration::from_secs(100))
+            .with_max_attempts(19);
         assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
     }
 
@@ -855,7 +871,7 @@ mod tests {
             max_attempts: Some(0),
             ..Default::default()
         };
-        match ExponentialBuilder::try_from(config).unwrap_err() {
+        match RetryConfig::try_from(config).unwrap_err() {
             RetryConfigError::MaxAttempts => {}
             _ => unreachable!("unexpected error"),
         }
@@ -864,7 +880,7 @@ mod tests {
             max_backoff: Some(Duration::new(0, 0)),
             ..Default::default()
         };
-        match ExponentialBuilder::try_from(config).unwrap_err() {
+        match RetryConfig::try_from(config).unwrap_err() {
             RetryConfigError::MaxBackoff => {}
             _ => unreachable!("unexpected error"),
         }

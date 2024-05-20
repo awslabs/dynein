@@ -20,10 +20,9 @@ use aws_sdk_dynamodb::{
     types::{AttributeValue, DeleteRequest, PutRequest, WriteRequest},
     Client as DynamoDbSdkClient,
 };
-use backon::Retryable;
 use base64::{engine::general_purpose, Engine as _};
 use bytes::Bytes;
-use log::{debug, error, warn};
+use log::{debug, error};
 use serde_json::Value as JsonValue;
 use std::{collections::HashMap, error, fmt, fs, future::Future, io::Error as IOError, pin::Pin};
 
@@ -231,58 +230,19 @@ async fn batch_write_item_api(
         &request_items
     );
 
-    let config = cx.effective_sdk_config().await;
+    let retry_config = cx
+        .retry
+        .clone()
+        .map(|v| v.batch_write_item.to_owned().unwrap_or(v.default));
+    let config = cx.effective_sdk_config_with_retry(retry_config).await;
     let ddb = DynamoDbSdkClient::new(&config);
 
-    let retry_setting = cx
-        .retry
-        .map(|v| v.batch_write_item.to_owned().unwrap_or(v.default));
-    let res = match retry_setting {
-        Some(backoff) => {
-            let f = || async {
-                ddb.batch_write_item()
-                    .set_request_items(Some(request_items.clone()))
-                    .send()
-                    .await
-            };
-            f.retry(&backoff)
-                .when(|err| match err.as_service_error() {
-                    Some(BatchWriteItemError::ProvisionedThroughputExceededException(e)) => {
-                        warn!("Retry batch_write_item : {}", e);
-                        true
-                    }
-                    Some(BatchWriteItemError::InternalServerError(e)) => {
-                        warn!("Retry batch_write_item : {}", e);
-                        true
-                    }
-                    Some(BatchWriteItemError::RequestLimitExceeded(e)) => {
-                        warn!("Retry batch_write_item : {}", e);
-                        true
-                    }
-                    // aws_sdk_dynamodb::error::SdkError::DispatchFailure(e) => {
-                    //     warn!("Retry batch_write_item : {}", &e);
-                    //     true
-                    // }
-                    // aws_sdk_dynamodb::error::SdkError::a(response) => {
-                    //     if response.body_as_str().contains("ThrottlingException") {
-                    //         warn!("Retry batch_write_item : {}", err);
-                    //         true
-                    //     } else {
-                    //         false
-                    //     }
-                    // }
-                    _ => false,
-                })
-                .await
-        }
-        None => {
-            ddb.batch_write_item()
-                .set_request_items(Some(request_items))
-                .send()
-                .await
-        }
-    };
-    match res {
+    match ddb
+        .batch_write_item()
+        .set_request_items(Some(request_items))
+        .send()
+        .await
+    {
         Ok(res) => Ok(res.unprocessed_items),
         Err(e) => Err(e),
     }
