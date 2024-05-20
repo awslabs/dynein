@@ -13,17 +13,7 @@ env:
   # We are working to migrate from Rusoto to AWS SDK for Rust.
   # To emphasize other issues and because of not affecting the customer immediately, we disable this error.
   # See: https://github.com/awslabs/dynein/pull/126
-  #
-  # RUSTSEC-2021-0139
-  # We are working to migrate from structopt to clap 4 to delete `ansi_term` dependency.
-  # To emphasize other issues and because of not affecting the customer immediately, we disable this error.
-  # See: https://github.com/awslabs/dynein/pull/127
-  #
-  # RUSTSEC-2021-0145
-  # We are working to migrate from structopt to clap 4 to delete `atty` dependency.
-  # To emphasize other issues and because of not affecting the customer immediately, we disable this error.
-  # See: https://github.com/awslabs/dynein/pull/127
-  CARGO_AUDIT_IGNORE_FLAGS: --ignore RUSTSEC-2022-0071 --ignore RUSTSEC-2021-0139 --ignore RUSTSEC-2021-0145
+  CARGO_AUDIT_IGNORE_FLAGS: --ignore RUSTSEC-2022-0071
 
 permissions: {}
 
