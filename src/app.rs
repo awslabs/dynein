@@ -35,8 +35,7 @@ use tempfile::NamedTempFile;
 use thiserror::Error;
 
 use super::control;
-use super::ddb::table;
-use super::key;
+use super::ddb::{key, table};
 
 /* =================================================
 struct / enum / const
@@ -165,7 +164,7 @@ impl TryFrom<RetrySetting> for RetryConfig {
             if max_attempts == 0 {
                 return Err(RetryConfigError::MaxAttempts);
             }
-            builder = builder.with_max_attempts(max_attempts - 1);
+            builder = builder.with_max_attempts(max_attempts);
         }
         if let Some(max_backoff) = value.max_backoff {
             if max_backoff.is_zero() {
@@ -555,8 +554,8 @@ pub async fn insert_to_table_cache(
     let region: Region = cx.effective_region().await;
     debug!(
         "Under the region '{}', trying to save table schema of '{}'",
-        &region.as_ref(),
-        &table_name
+        region.as_ref(),
+        table_name
     );
 
     // retrieve current cache from Context and update target table desc.
@@ -782,8 +781,11 @@ mod tests {
             retry: None,
         };
         assert_eq!(
-            cx1.effective_region().await,
-            Region::from_static("us-east-1")
+            &cx1.effective_region().await,
+            aws_config::load_defaults(BehaviorVersion::v2024_03_28())
+                .await
+                .region()
+                .unwrap_or(&Region::from_static("us-east-1"))
         );
         // cx1.effective_table_name(); ... exit(1)
 
@@ -849,7 +851,7 @@ mod tests {
         let actual = RetryConfig::try_from(config1).unwrap();
         let expected = RetryConfig::standard()
             .with_initial_backoff(Duration::from_secs(1))
-            .with_max_attempts(9);
+            .with_max_attempts(10);
         assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
 
         let config2 = RetrySetting {
@@ -861,7 +863,7 @@ mod tests {
         let expected = RetryConfig::standard()
             .with_initial_backoff(Duration::from_secs(1))
             .with_max_backoff(Duration::from_secs(100))
-            .with_max_attempts(19);
+            .with_max_attempts(20);
         assert_eq!(format!("{:?}", actual), format!("{:?}", expected));
     }
 

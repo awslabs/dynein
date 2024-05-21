@@ -36,7 +36,7 @@ use tabwriter::TabWriter;
 // use bytes::Bytes;
 
 use super::app;
-use super::key;
+use super::ddb::key;
 
 /* =================================================
 struct / enum / const

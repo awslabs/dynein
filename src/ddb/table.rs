@@ -23,7 +23,7 @@ use aws_sdk_dynamodb::types::{
 use chrono::DateTime;
 use log::error;
 
-use crate::key;
+use crate::ddb::key;
 
 /* =================================================
 struct / enum / const
