@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-use assert_cmd::prelude::*; // Add methods on commands
+use assert_cmd::prelude::*;
 use std::env;
 use std::process::Command; // Run programs
                            // use assert_cmd::cmd::Command; // Run programs - it seems to be equal to "use assert_cmd::prelude::* + use std::process::Command"
 
+use aws_config::{BehaviorVersion, Region, SdkConfig};
+use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
 use once_cell::sync::Lazy;
 use rand::{distributions::Alphanumeric, Rng};
 use regex::bytes::Regex;
-use rusoto_core::Region;
-use rusoto_dynamodb::{DynamoDb, DynamoDbClient};
 use serde_json::Value;
 use std::io::{self, Write}; // Used when check results by printing to stdout
 use std::path::{Path, PathBuf};
@@ -338,15 +338,20 @@ async fn setup_container(port: i32) -> Result<(), Box<dyn std::error::Error>> {
     io::stderr().write_all(&output.stderr).unwrap();
 
     // Wait dynamodb-local
-    let health_check_url = format!("http://localhost:{}", port);
-    let ddb = DynamoDbClient::new(Region::Custom {
-        name: "local".to_owned(),
-        endpoint: health_check_url,
-    });
+    // https://docs.aws.amazon.com/sdk-for-rust/latest/dg/dynamodb-local.html
+    let config = aws_sdk_dynamodb::config::Builder::from(
+        &SdkConfig::builder()
+            .region(Region::new("local"))
+            .behavior_version(BehaviorVersion::v2024_03_28())
+            .build(),
+    )
+    .endpoint_url(format!("http://localhost:{}", port))
+    .build();
+    let ddb = DynamoDbSdkClient::from_conf(config);
     let max_retries = 5;
     let mut attempts = 0;
     loop {
-        match ddb.list_tables(Default::default()).await {
+        match ddb.list_tables().send().await {
             Ok(_result) => {
                 println!("ListTables API succeeded.");
                 break;

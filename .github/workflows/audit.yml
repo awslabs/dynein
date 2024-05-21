@@ -8,12 +8,7 @@ env:
   # We treat all findings as error to notify its status for maintainers.
   # If we need to temporarily suppress the error, we use `--ignore` option with justification.
   CARGO_AUDIT_BASE_FLAGS: --quiet -D warnings -D unmaintained -D unsound -D yanked
-
-  # RUSTSEC-2022-0071
-  # We are working to migrate from Rusoto to AWS SDK for Rust.
-  # To emphasize other issues and because of not affecting the customer immediately, we disable this error.
-  # See: https://github.com/awslabs/dynein/pull/126
-  CARGO_AUDIT_IGNORE_FLAGS: --ignore RUSTSEC-2022-0071
+  CARGO_AUDIT_IGNORE_FLAGS:
 
 permissions: {}
 

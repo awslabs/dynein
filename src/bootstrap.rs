@@ -21,13 +21,12 @@ use std::{
     thread, time,
 };
 
+use aws_sdk_dynamodb::{
+    operation::{batch_write_item::BatchWriteItemError, create_table::CreateTableError},
+    types::{AttributeValue, PutRequest, WriteRequest},
+};
 use futures::future::join_all;
 use log::{debug, error};
-use rusoto_core::RusotoError;
-use rusoto_dynamodb::{
-    AttributeValue, BatchWriteItemError, CreateTableError, PutRequest, WriteRequest,
-};
-use rusoto_signature::Region;
 
 use brotli::Decompressor;
 use serde_json::Value as JsonValue;
@@ -47,7 +46,7 @@ pub enum DyneinBootstrapError {
     PraseJSON(serde_json::Error),
     ReqwestError(reqwest::Error),
     ZipError(zip::result::ZipError),
-    BatchError(RusotoError<BatchWriteItemError>),
+    BatchError(aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>),
 }
 impl fmt::Display for DyneinBootstrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -91,8 +90,8 @@ impl From<zip::result::ZipError> for DyneinBootstrapError {
         Self::ZipError(e)
     }
 }
-impl From<RusotoError<BatchWriteItemError>> for DyneinBootstrapError {
-    fn from(e: RusotoError<BatchWriteItemError>) -> Self {
+impl From<aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>> for DyneinBootstrapError {
+    fn from(e: aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>) -> Self {
         Self::BatchError(e)
     }
 }
@@ -199,10 +198,16 @@ see https://github.com/awslabs/dynein#working-with-dynamodb-items for detail
                             )
                         })
                         .collect();
-                    write_requests.push(WriteRequest {
-                        put_request: Some(PutRequest { item: item_attrval }),
-                        delete_request: None,
-                    });
+                    write_requests.push(
+                        WriteRequest::builder()
+                            .put_request(
+                                PutRequest::builder()
+                                    .set_item(Some(item_attrval))
+                                    .build()
+                                    .unwrap(),
+                            )
+                            .build(),
+                    );
                     if write_requests.len() == 25 {
                         break 'batch;
                     };
@@ -274,27 +279,21 @@ https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/AppendixSampleT
         let request_items = batch::build_batch_request_items_from_json(content.to_string())?;
         batch::batch_write_untill_processed(cx.clone(), request_items).await?;
     }
+
+    let region = cx.effective_region().await.to_string();
+
     println!(
         "\n\nNow all tables have sample data. Try following commands to play with dynein. Enjoy!"
     );
-    println!("  $ dy --region {} ls", &cx.effective_region().name());
-    println!(
-        "  $ dy --region {} desc --table Thread",
-        &cx.effective_region().name()
-    );
-    println!(
-        "  $ dy --region {} scan --table Thread",
-        &cx.effective_region().name()
-    );
-    println!(
-        "  $ dy --region {} use --table Thread",
-        &cx.effective_region().name()
-    );
+    println!("  $ dy --region {} ls", region);
+    println!("  $ dy --region {} desc --table Thread", region);
+    println!("  $ dy --region {} scan --table Thread", region);
+    println!("  $ dy --region {} use --table Thread", region);
     println!("  $ dy scan");
     println!("\nAfter you 'use' a table like above, dynein assume you're using the same region & table, which info is stored at ~/.dynein/config.yml and ~/.dynein/cache.yml");
     println!(
         "Let's move on with the '{}' region you've just 'use'd...",
-        &cx.effective_region().name()
+        region
     );
     println!("  $ dy scan --table Forum");
     println!("  $ dy scan -t ProductCatalog");
@@ -315,18 +314,18 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
         Ok(desc) => {
             println!(
                 "Started to create table '{}' in {} region. status: {}",
-                &table_name,
-                &cx.effective_region().name(),
+                table_name,
+                cx.effective_region().await.as_ref(),
                 desc.table_status.unwrap()
             );
         }
-        Err(e) => match e {
-            RusotoError::Service(CreateTableError::ResourceInUse(_)) => println!(
+        Err(e) => match e.into_service_error() {
+            CreateTableError::ResourceInUseException(_) => println!(
                 "[skip] Table '{}' already exists in {} region, skipping to create new one.",
-                &table_name,
-                &cx.effective_region().name()
+                table_name,
+                cx.effective_region().await.as_ref()
             ),
-            _ => {
+            e => {
                 debug!("CreateTable API call got an error -- {:#?}", e);
                 error!("{}", e.to_string());
                 std::process::exit(1);
@@ -338,16 +337,15 @@ async fn prepare_table(cx: &app::Context, table_name: &str, keys: &[&str]) {
 async fn wait_table_creation(cx: &app::Context, mut processing_tables: Vec<&str>) {
     debug!("tables in progress: {:?}", processing_tables);
     loop {
-        let r: &Region = &cx.effective_region();
         let create_table_results = join_all(
             processing_tables
                 .iter()
-                .map(|t| control::describe_table_api(r, (*t).to_string())),
+                .map(|t| control::describe_table_api(cx, (*t).to_string())),
         )
         .await;
         let statuses: Vec<String> = create_table_results
             .iter()
-            .map(|desc| desc.table_status.to_owned().unwrap())
+            .map(|desc| desc.table_status.to_owned().unwrap().to_string())
             .collect();
         debug!("Current table statues: {:?}", statuses);
         processing_tables = processing_tables

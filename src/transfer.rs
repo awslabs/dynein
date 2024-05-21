@@ -28,13 +28,16 @@ use dialoguer::Confirm;
 use log::{debug, error};
 use serde_json::{de::StrRead, Deserializer, StreamDeserializer, Value as JsonValue};
 
-use rusoto_dynamodb::{AttributeValue, ScanOutput, WriteRequest};
+use aws_sdk_dynamodb::{
+    operation::scan::ScanOutput,
+    types::{AttributeValue, WriteRequest},
+};
 use thiserror::Error;
 
 use super::app;
 use super::batch;
-use super::control;
 use super::data;
+use super::ddb::table;
 
 #[derive(Error, Debug)]
 pub enum DyneinExportError {
@@ -148,7 +151,7 @@ pub async fn export(
     let ts: app::TableSchema = app::table_schema(&cx).await;
     let format_str: Option<&str> = format.as_deref();
 
-    if ts.mode == control::Mode::Provisioned {
+    if ts.mode == table::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
         if !Confirm::new().with_prompt(msg).interact()? {
             app::bye(0, "Operation has been cancelled.");
@@ -201,7 +204,7 @@ pub async fn export(
         .open(tmp_output_filename)?;
     tmp_output_file.set_len(0)?;
 
-    let mut last_evaluated_key: Option<HashMap<String, rusoto_dynamodb::AttributeValue>> = None;
+    let mut last_evaluated_key: Option<HashMap<String, AttributeValue>> = None;
     let mut progress_status = ProgressState::new(MAX_NUMBER_OF_OBSERVES);
     loop {
         // Invoke Scan API here. At the 1st iteration exclusive_start_key would be "None" as defined above, outside of the loop.
@@ -294,7 +297,7 @@ pub async fn import(
     let format_str: Option<&str> = format.as_deref();
 
     let ts: app::TableSchema = app::table_schema(&cx).await;
-    if ts.mode == control::Mode::Provisioned {
+    if ts.mode == table::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
         if !Confirm::new().with_prompt(msg).interact()? {
             println!("Operation has been cancelled.");
