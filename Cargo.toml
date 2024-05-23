@@ -38,7 +38,6 @@ aws-smithy-types = "1.1.9"
 chrono           = "0.4"
 clap = { version = "4.5.4", features = ["derive"] }
 dialoguer        = "0.11.0"
-dirs             = "5.0.1"
 env_logger       = "0.11.3"
 futures          = "0.3.30"
 log              = "0.4.21"
@@ -60,6 +59,7 @@ console = "0.15.8"
 brotli = "6.0.0"
 base64 = "0.22.0"
 thiserror = "1.0.59"
+home = "0.5.9"
 
 [dev-dependencies]
 assert_cmd = "2.0.14" # contains helpers make executing the main binary on integration tests easier.

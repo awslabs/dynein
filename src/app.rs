@@ -700,7 +700,7 @@ fn retrieve_dynein_file_path(file_type: DyneinFileType) -> Result<String, Dynein
 
 fn retrieve_or_create_dynein_dir() -> Result<String, DyneinConfigError> {
     let full_path = env::var(CONFIG_PATH_ENV_VAR_NAME).unwrap_or(
-        dirs::home_dir()
+        home::home_dir()
             .ok_or(DyneinConfigError::HomeDir)?
             .to_str()
             .ok_or(DyneinConfigError::HomeDir)?
