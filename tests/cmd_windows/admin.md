@@ -144,7 +144,7 @@ Arguments:
   <TABLE_NAME_TO_DELETE>  table name to delete
 
 Options:
-      --yes              Skip interactive confirmation before deleting a table.
+  -y, --yes              Skip interactive confirmation before deleting a table.
   -r, --region <REGION>  The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
                          You can use --region option in both top-level and subcommand-level.
   -p, --port <PORT>      Specify the port number. This option has an effect only when `--region local` is used.

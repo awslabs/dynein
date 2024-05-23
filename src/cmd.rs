@@ -550,7 +550,7 @@ pub enum DeleteSub {
         table_name_to_delete: String,
 
         /// Skip interactive confirmation before deleting a table.
-        #[clap(long, verbatim_doc_comment)]
+        #[clap(short, long, verbatim_doc_comment)]
         yes: bool,
     },
     // #[clap(verbatim_doc_comment)]
