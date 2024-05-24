@@ -475,7 +475,8 @@ fn filter_attributes_to_append(ts: &app::TableSchema, ats: String) -> Vec<String
 fn connectable_json(mut s: String, compact: bool) -> String {
     s.remove(0); // remove first char "["
     let len = s.len();
-    if compact {
+    if compact || len == 1 {
+        // empty array even if not compact is on one line
         s.truncate(len - 1); // remove last char "]"
     } else {
         s.truncate(len - 2); // remove last char "]" and newline
