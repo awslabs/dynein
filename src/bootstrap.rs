@@ -45,7 +45,6 @@ pub enum DyneinBootstrapError {
     LoadData(IOError),
     PraseJSON(serde_json::Error),
     ReqwestError(reqwest::Error),
-    ZipError(zip::result::ZipError),
     BatchError(aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>),
 }
 impl fmt::Display for DyneinBootstrapError {
@@ -54,7 +53,6 @@ impl fmt::Display for DyneinBootstrapError {
             DyneinBootstrapError::LoadData(ref e) => e.fmt(f),
             DyneinBootstrapError::PraseJSON(ref e) => e.fmt(f),
             DyneinBootstrapError::ReqwestError(ref e) => e.fmt(f),
-            DyneinBootstrapError::ZipError(ref e) => e.fmt(f),
             DyneinBootstrapError::BatchError(ref e) => e.fmt(f),
         }
     }
@@ -65,7 +63,6 @@ impl error::Error for DyneinBootstrapError {
             DyneinBootstrapError::LoadData(ref e) => Some(e),
             DyneinBootstrapError::PraseJSON(ref e) => Some(e),
             DyneinBootstrapError::ReqwestError(ref e) => Some(e),
-            DyneinBootstrapError::ZipError(ref e) => Some(e),
             DyneinBootstrapError::BatchError(ref e) => Some(e),
         }
     }
@@ -83,11 +80,6 @@ impl From<serde_json::Error> for DyneinBootstrapError {
 impl From<reqwest::Error> for DyneinBootstrapError {
     fn from(e: reqwest::Error) -> Self {
         Self::ReqwestError(e)
-    }
-}
-impl From<zip::result::ZipError> for DyneinBootstrapError {
-    fn from(e: zip::result::ZipError) -> Self {
-        Self::ZipError(e)
     }
 }
 impl From<aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>> for DyneinBootstrapError {
