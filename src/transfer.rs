@@ -140,7 +140,7 @@ Public functions
 /// As CSV is a kind of "structured" format, you cannot export DynamoDB's NoSQL-ish "unstructured" data into CSV without any instruction from users.
 /// Thus as an "instruction" this function takes --attributes or --keys-only options. If neither of them are given, dynein "guesses" attributes to export from the first item.
 pub async fn export(
-    cx: app::Context,
+    cx: &app::Context,
     given_attributes: Option<String>,
     keys_only: bool,
     output_file: String,
@@ -148,7 +148,7 @@ pub async fn export(
 ) -> Result<(), DyneinExportError> {
     // TODO: Parallel scan to make it faster https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Scan.html#Scan.ParallelScan
     // TODO: Show rough progress bar (sum(scan_output.scanned_item)/item_size_of_the_table(6hr)) to track progress.
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
     let format_str: Option<&str> = format.as_deref();
 
     if ts.mode == table::Mode::Provisioned {
@@ -159,13 +159,14 @@ pub async fn export(
     }
 
     // Basically given_attributes would be used, but on CSV format, it can be overwritten by suggested attributes
-    let mut attributes: Option<String> = given_attributes.clone();
-    match format_str {
+    let attributes: Option<String> = match format_str {
         Some("csv") => {
             if !keys_only && given_attributes.is_none() {
-                attributes = overwrite_attributes_or_exit(&cx, &ts)
+                overwrite_attributes_or_exit(cx, &ts)
                     .await
-                    .expect("failed to overwrite attributes based on a scanned item");
+                    .expect("failed to overwrite attributes based on a scanned item")
+            } else {
+                given_attributes
             }
         }
         None | Some(_) => {
@@ -175,8 +176,9 @@ pub async fn export(
                     "You can use --keys-only and --attributes only with CSV format.",
                 )
             }
+            given_attributes
         }
-    }
+    };
 
     // Create output file. If target file already exists, ask users if it's ok to delete contents of the file.
     // Though final output file is created here, it would be blank until scan all items. You can see progress in temporary output file.
@@ -210,7 +212,7 @@ pub async fn export(
         // Invoke Scan API here. At the 1st iteration exclusive_start_key would be "None" as defined above, outside of the loop.
         // On 2nd iteration and later, passing last_evaluated_key from the previous loop as an exclusive_start_key.
         let scan_output: ScanOutput = data::scan_api(
-            cx.clone(),
+            cx,
             None,  /* index */
             false, /* consistent_read */
             &attributes,
@@ -289,14 +291,14 @@ pub async fn export(
 }
 
 pub async fn import(
-    cx: app::Context,
+    cx: &app::Context,
     input_file: String,
     format: Option<String>,
     enable_set_inference: bool,
 ) -> Result<(), batch::DyneinBatchError> {
     let format_str: Option<&str> = format.as_deref();
 
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
     if ts.mode == table::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
         if !Confirm::new().with_prompt(msg).interact()? {
@@ -332,9 +334,8 @@ pub async fn import(
             let lines: Vec<&str> = input_string
                 .split('\n')
                 .collect::<Vec<&str>>() // split by "\n" and get lines
-                .iter()
+                .into_iter()
                 .filter(|&x| !x.is_empty())
-                .cloned()
                 .collect::<Vec<&str>>(); // remove blank line (e.g. last line)
             let headers: Vec<&str> = lines[0].split(',').collect::<Vec<&str>>();
             let mut matrix: Vec<Vec<&str>> = vec![];
@@ -345,7 +346,7 @@ pub async fn import(
                 debug!("splitted line => {:?}", cells);
                 matrix.push(cells);
                 if i % 25 == 0 {
-                    write_csv_matrix(&cx, matrix.clone(), &headers, enable_set_inference).await?;
+                    write_csv_matrix(cx, &matrix, &headers, enable_set_inference).await?;
                     progress_status.add_observation(25);
                     progress_status.show();
                     matrix.clear();
@@ -353,7 +354,7 @@ pub async fn import(
             }
             debug!("rest of matrix => {:?}", matrix);
             if !matrix.is_empty() {
-                write_csv_matrix(&cx, matrix.clone(), &headers, enable_set_inference).await?;
+                write_csv_matrix(cx, &matrix, &headers, enable_set_inference).await?;
                 progress_status.add_observation(matrix.len());
                 progress_status.show();
             }
@@ -403,7 +404,7 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
 
     // items: Vec<HashMap<String, AttributeValue>>
     let items = data::scan_api(
-        cx.clone(),
+        cx,
         None,    /* index */
         false,   /* consistent_read */
         &None,   /* attributes */
@@ -448,18 +449,18 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
 
 fn attrs_to_append(ts: &app::TableSchema, attributes: &Option<String>) -> Option<Vec<String>> {
     attributes
-        .clone()
+        .as_ref()
         .map(|ats| filter_attributes_to_append(ts, ats))
 }
 
 /// This function takes list of attributes separated by comma (e.g. "name,age,address")
 /// and return vec of these strings, filtering pk/sk.
-fn filter_attributes_to_append(ts: &app::TableSchema, ats: String) -> Vec<String> {
+fn filter_attributes_to_append(ts: &app::TableSchema, ats: &str) -> Vec<String> {
     let mut attributes_to_append: Vec<String> = vec![];
     let splitted_attributes: Vec<String> = ats.split(',').map(|x| x.trim().to_owned()).collect();
     for attr in splitted_attributes {
         // skip if attributes contain primary key(s)
-        if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.clone().sk.unwrap().name) {
+        if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.sk.as_ref().unwrap().name) {
             println!("NOTE: primary keys are included by default and you don't need to give them as a part of --attributes.");
             continue;
         }
@@ -541,7 +542,7 @@ fn build_csv_header(
 }
 
 async fn write_array_of_jsons_with_chunked_25(
-    cx: app::Context,
+    cx: &app::Context,
     array_of_json_obj: Vec<JsonValue>,
     enable_set_inference: bool,
 ) -> Result<(), batch::DyneinBatchError> {
@@ -549,8 +550,8 @@ async fn write_array_of_jsons_with_chunked_25(
     for chunk /* Vec<JsonValue> */ in array_of_json_obj.chunks(25) { // As BatchWriteItem request can have up to 25 items.
         let items = chunk.to_vec();
         let count = items.len();
-        let request_items: HashMap<String, Vec<WriteRequest>> = batch::convert_jsonvals_to_request_items(&cx, items, enable_set_inference).await?;
-        batch::batch_write_untill_processed(cx.clone(), request_items).await?;
+        let request_items: HashMap<String, Vec<WriteRequest>> = batch::convert_jsonvals_to_request_items(cx, items, enable_set_inference).await?;
+        batch::batch_write_until_processed(cx, request_items).await?;
         progress_status.add_observation(count);
         progress_status.show();
     }
@@ -567,13 +568,13 @@ async fn write_array_of_jsons_with_chunked_25(
 ///  [Shu, 42, Banana]] ... matrix
 async fn write_csv_matrix(
     cx: &app::Context,
-    matrix: Vec<Vec<&str>>,
+    matrix: &[Vec<&str>],
     headers: &[&str],
     enable_set_inference: bool,
 ) -> Result<(), batch::DyneinBatchError> {
     let request_items: HashMap<String, Vec<WriteRequest>> =
-        batch::csv_matrix_to_request_items(cx, &matrix, headers, enable_set_inference).await?;
-    batch::batch_write_untill_processed(cx.clone(), request_items).await?;
+        batch::csv_matrix_to_request_items(cx, matrix, headers, enable_set_inference).await?;
+    batch::batch_write_until_processed(cx, request_items).await?;
     Ok(())
 }
 

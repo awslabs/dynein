@@ -99,8 +99,8 @@ impl FromStr for KeyType {
 /// Used when you want to know "what is the Partition Key name and its data type of this table".
 pub fn typed_key(pk_or_sk: &str, desc: &TableDescription) -> Option<Key> {
     // extracting key schema of "base table" here
-    let ks = desc.clone().key_schema.unwrap();
-    typed_key_for_schema(pk_or_sk, &ks, &desc.clone().attribute_definitions.unwrap())
+    let ks = desc.key_schema.as_ref().unwrap();
+    typed_key_for_schema(pk_or_sk, ks, desc.attribute_definitions.as_ref().unwrap())
 }
 
 /// Receives key data type (HASH or RANGE), KeySchemaElement(s), and AttributeDefinition(s),
@@ -113,7 +113,7 @@ pub fn typed_key_for_schema(
     // Fetch Partition Key ("HASH") or Sort Key ("RANGE") from given Key Schema. pk should always exists, but sk may not.
     let target_key = ks.iter().find(|x| x.key_type == pk_or_sk.into());
     target_key.map(|key| Key {
-        name: key.clone().attribute_name,
+        name: key.attribute_name.to_owned(),
         // kind should be one of S/N/B, Which can be retrieved from AttributeDefinition's attribute_type.
         kind: KeyType::from_str(
             attrs

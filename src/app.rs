@@ -545,9 +545,9 @@ pub async fn use_table(
 /// Inserts specified table description into cache file.
 pub async fn insert_to_table_cache(
     cx: &Context,
-    desc: TableDescription,
+    desc: &TableDescription,
 ) -> Result<(), DyneinConfigError> {
-    let table_name: String = desc
+    let table_name = desc
         .table_name
         .clone()
         .expect("desc should have table name");
@@ -560,7 +560,7 @@ pub async fn insert_to_table_cache(
 
     // retrieve current cache from Context and update target table desc.
     // key to save the table desc is "<RegionName>/<TableName>" -- e.g. "us-west-2/app_data"
-    let mut cache: Cache = cx.clone().cache.expect("cx should have cache");
+    let mut cache: Cache = cx.cache.clone().expect("cx should have cache");
     let cache_key = format!("{}/{}", region.as_ref(), table_name);
 
     let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
@@ -577,9 +577,9 @@ pub async fn insert_to_table_cache(
         TableSchema {
             region: String::from(region.as_ref()),
             name: table_name,
-            pk: key::typed_key("HASH", &desc).expect("pk should exist"),
-            sk: key::typed_key("RANGE", &desc),
-            indexes: index_schemas(&desc),
+            pk: key::typed_key("HASH", desc).expect("pk should exist"),
+            sk: key::typed_key("RANGE", desc),
+            indexes: index_schemas(desc),
             mode: table::extract_mode(&desc.billing_mode_summary),
         },
     );
@@ -618,7 +618,7 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
 
             TableSchema {
                 region: String::from(cx.effective_region().await.as_ref()),
-                name: desc.clone().table_name.unwrap(),
+                name: desc.table_name.to_owned().unwrap(),
                 pk: key::typed_key("HASH", &desc).expect("pk should exist"),
                 sk: key::typed_key("RANGE", &desc),
                 indexes: index_schemas(&desc),
@@ -628,8 +628,8 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
         None => {
             // simply maps config data into TableSchema struct.
             debug!("current context {:#?}", cx);
-            let cache: Cache = cx.clone().cache.expect("Cache should exist in context"); // can refactor here using and_then
-            let cached_tables: HashMap<String, TableSchema> = cache.tables.unwrap_or_else(|| {
+            let cache = cx.cache.as_ref().expect("Cache should exist in context"); // can refactor here using and_then
+            let cached_tables = cache.tables.as_ref().unwrap_or_else(|| {
                 error!("{}", Messages::NoEffectiveTable);
                 std::process::exit(1)
             });
@@ -645,30 +645,30 @@ pub async fn table_schema(cx: &Context) -> TableSchema {
 }
 
 pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
-    let attr_defs: &Vec<AttributeDefinition> = &desc.clone().attribute_definitions.unwrap();
+    let attr_defs: &Vec<AttributeDefinition> = desc.attribute_definitions.as_ref().unwrap();
 
     let mut indexes: Vec<IndexSchema> = vec![];
 
-    if let Some(gsis) = desc.clone().global_secondary_indexes {
+    if let Some(gsis) = desc.global_secondary_indexes.as_ref() {
         for gsi in gsis {
             indexes.push(IndexSchema {
-                name: gsi.index_name.unwrap(),
+                name: gsi.index_name.to_owned().unwrap(),
                 kind: IndexType::Gsi,
-                pk: key::typed_key_for_schema("HASH", &gsi.key_schema.clone().unwrap(), attr_defs)
+                pk: key::typed_key_for_schema("HASH", gsi.key_schema.as_ref().unwrap(), attr_defs)
                     .expect("pk should exist"),
-                sk: key::typed_key_for_schema("RANGE", &gsi.key_schema.unwrap(), attr_defs),
+                sk: key::typed_key_for_schema("RANGE", gsi.key_schema.as_ref().unwrap(), attr_defs),
             });
         }
     };
 
-    if let Some(lsis) = desc.clone().local_secondary_indexes {
+    if let Some(lsis) = desc.local_secondary_indexes.as_ref() {
         for lsi in lsis {
             indexes.push(IndexSchema {
-                name: lsi.index_name.unwrap(),
+                name: lsi.index_name.to_owned().unwrap(),
                 kind: IndexType::Lsi,
-                pk: key::typed_key_for_schema("HASH", &lsi.key_schema.clone().unwrap(), attr_defs)
+                pk: key::typed_key_for_schema("HASH", lsi.key_schema.as_ref().unwrap(), attr_defs)
                     .expect("pk should exist"),
-                sk: key::typed_key_for_schema("RANGE", &lsi.key_schema.unwrap(), attr_defs),
+                sk: key::typed_key_for_schema("RANGE", lsi.key_schema.as_ref().unwrap(), attr_defs),
             });
         }
     };
@@ -743,7 +743,7 @@ async fn save_using_target(
     write_dynein_file(DyneinFileType::ConfigFile, config_yaml_string)?;
 
     // save target table info into cache.
-    insert_to_table_cache(cx, desc).await?;
+    insert_to_table_cache(cx, &desc).await?;
 
     Ok(())
 }
