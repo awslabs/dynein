@@ -44,7 +44,6 @@ struct / enum / const
 pub enum DyneinBootstrapError {
     LoadData(IOError),
     PraseJSON(serde_json::Error),
-    ReqwestError(reqwest::Error),
     BatchError(aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>),
 }
 impl fmt::Display for DyneinBootstrapError {
@@ -52,7 +51,6 @@ impl fmt::Display for DyneinBootstrapError {
         match *self {
             DyneinBootstrapError::LoadData(ref e) => e.fmt(f),
             DyneinBootstrapError::PraseJSON(ref e) => e.fmt(f),
-            DyneinBootstrapError::ReqwestError(ref e) => e.fmt(f),
             DyneinBootstrapError::BatchError(ref e) => e.fmt(f),
         }
     }
@@ -62,7 +60,6 @@ impl error::Error for DyneinBootstrapError {
         match *self {
             DyneinBootstrapError::LoadData(ref e) => Some(e),
             DyneinBootstrapError::PraseJSON(ref e) => Some(e),
-            DyneinBootstrapError::ReqwestError(ref e) => Some(e),
             DyneinBootstrapError::BatchError(ref e) => Some(e),
         }
     }
@@ -75,11 +72,6 @@ impl From<IOError> for DyneinBootstrapError {
 impl From<serde_json::Error> for DyneinBootstrapError {
     fn from(e: serde_json::Error) -> Self {
         Self::PraseJSON(e)
-    }
-}
-impl From<reqwest::Error> for DyneinBootstrapError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::ReqwestError(e)
     }
 }
 impl From<aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>> for DyneinBootstrapError {
