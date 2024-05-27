@@ -123,17 +123,17 @@ Public functions
 /// This function calls Scan API and return mutiple items. By default it uses 'table' output format.
 /// Scan API retrieves all items in a given table, something like `SELECT * FROM mytable` in SQL world.
 pub async fn scan(
-    cx: app::Context,
+    cx: &app::Context,
     index: Option<String>,
     consistent_read: bool,
     attributes: &Option<String>,
     keys_only: bool,
     limit: i32,
 ) {
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
 
     let items = scan_api(
-        cx.clone(),
+        cx,
         index,
         consistent_read,
         attributes,
@@ -162,7 +162,7 @@ pub async fn scan(
 }
 
 pub async fn scan_api(
-    cx: app::Context,
+    cx: &app::Context,
     index: Option<String>,
     consistent_read: bool,
     attributes: &Option<String>,
@@ -171,7 +171,7 @@ pub async fn scan_api(
     esk: Option<HashMap<String, AttributeValue>>,
 ) -> ScanOutput {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
 
     let scan_params: GeneratedScanParams = generate_scan_expressions(&ts, attributes, keys_only);
 
@@ -211,9 +211,9 @@ pub struct QueryParams {
 /// References:
 /// - https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html#Query.KeyConditionExpressions
 /// - https://aws.amazon.com/blogs/database/using-sort-keys-to-organize-data-in-amazon-dynamodb/
-pub async fn query(cx: app::Context, params: QueryParams) {
+pub async fn query(cx: &app::Context, params: QueryParams) {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
+    let ts: app::TableSchema = app::table_schema(cx).await;
 
     debug!("For table '{}' (index '{:?}'), generating KeyConditionExpression using sort_key_expression: '{:?}'", &ts.name, &params.index, &params.sort_key_expression);
     let query_params: GeneratedQueryParams = match generate_query_expressions(
@@ -281,11 +281,16 @@ pub async fn query(cx: app::Context, params: QueryParams) {
 }
 
 /// This function calls GetItem API - get an item with given primary key(s). By default it uses 'json' output format.
-pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, consistent_read: bool) {
+pub async fn get_item(
+    cx: &app::Context,
+    pval: String,
+    sval: Option<String>,
+    consistent_read: bool,
+) {
     debug!("context: {:#?}", &cx);
     // Use table if explicitly specified by `--table/-t` option. Otherwise, load table name from config file.
-    let ts: app::TableSchema = app::table_schema(&cx).await;
-    let primary_keys = identify_target(&ts, pval, sval);
+    let ts: app::TableSchema = app::table_schema(cx).await;
+    let primary_keys = identify_target(&ts, &pval, sval.as_deref());
 
     debug!(
         "Calling GetItem API for the table '{}' with key(s): {:?}",
@@ -334,10 +339,10 @@ pub async fn get_item(cx: app::Context, pval: String, sval: Option<String>, cons
 
 // put_item function saves an item with given primary key(s). You can pass other attributes with --item/-i option in JSON format.
 // As per DynamoDB PutItem API behavior, if the item already exists it'd be replaced.
-pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item: Option<String>) {
+pub async fn put_item(cx: &app::Context, pval: String, sval: Option<String>, item: Option<String>) {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
-    let mut full_item_image = identify_target(&ts, pval, sval); // Firstly, ideitify primary key(s) to ideitnfy an item to put.
+    let ts: app::TableSchema = app::table_schema(cx).await;
+    let mut full_item_image = identify_target(&ts, &pval, sval.as_deref()); // Firstly, ideitify primary key(s) to ideitnfy an item to put.
 
     debug!(
         "Inserting (or replacing) an item identified by the primary key(s): {:?}",
@@ -386,10 +391,10 @@ pub async fn put_item(cx: app::Context, pval: String, sval: Option<String>, item
 }
 
 // delete_item functions calls DeleteItem API - delete an item with given primary key(s).
-pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
+pub async fn delete_item(cx: &app::Context, pval: String, sval: Option<String>) {
     debug!("context: {:#?}", &cx);
-    let ts: app::TableSchema = app::table_schema(&cx).await;
-    let primary_keys = identify_target(&ts, pval, sval);
+    let ts: app::TableSchema = app::table_schema(cx).await;
+    let primary_keys = identify_target(&ts, &pval, sval.as_deref());
 
     debug!(
         "Calling DeleteItem API for the table '{}' with key(s): {:?}",
@@ -423,7 +428,7 @@ pub async fn delete_item(cx: app::Context, pval: String, sval: Option<String>) {
 
 // UpdateItem API https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html
 pub async fn update_item(
-    cx: app::Context,
+    cx: &app::Context,
     pval: String,
     sval: Option<String>,
     set_expression: Option<String>,
@@ -436,8 +441,8 @@ pub async fn update_item(
         std::process::exit(1);
     };
 
-    let ts: app::TableSchema = app::table_schema(&cx).await;
-    let primary_keys = identify_target(&ts, pval.clone(), sval.clone());
+    let ts: app::TableSchema = app::table_schema(cx).await;
+    let primary_keys = identify_target(&ts, &pval, sval.as_deref());
 
     debug!(
         "Calling UpdateItem API for the table '{}' with key(s): {:?}",
@@ -484,7 +489,7 @@ pub async fn update_item(
 
 // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithItems.html#WorkingWithItems.AtomicCounters
 pub async fn atomic_counter(
-    cx: app::Context,
+    cx: &app::Context,
     pval: String,
     sval: Option<String>,
     set_expression: Option<String>,
@@ -585,13 +590,13 @@ fn generate_update_expressions(
 // With `--table/-t` option, `identify_target` retrieves primary key(s) info by calling DescribeTable API each time which would consumre additional time.
 fn identify_target(
     ts: &app::TableSchema,
-    pval: String,
-    optional_sval: Option<String>,
+    pval: &str,
+    optional_sval: Option<&str>,
 ) -> HashMap<String, AttributeValue> {
     let mut target = HashMap::<String, AttributeValue>::new();
     target.insert(
         ts.pk.name.to_string(),
-        build_attrval_scalar(&ts.pk.kind.to_string(), &pval),
+        build_attrval_scalar(&ts.pk.kind.to_string(), pval),
     );
 
     // if sort key value is given from command line, add sort key to target HashMap to identify an item.
@@ -599,7 +604,7 @@ fn identify_target(
         match ts.sk.as_ref() {
             Some(sk) => target.insert(
                 sk.name.to_string(),
-                build_attrval_scalar(&sk.kind.to_string(), &sval),
+                build_attrval_scalar(&sk.kind.to_string(), sval),
             ),
             None => {
                 error!("Partition and Sort keys are given to identify an item, but table '{t}' uses Partition key only. Check `dy desc {t}`", t = &ts.name);
@@ -820,12 +825,9 @@ fn generate_query_expressions(
         /* Query for base table */
         {
             debug!("Assigning PK name/value and sort key (if any)");
-            names.insert(
-                String::from("#DYNEIN_PKNAME"),
-                String::from(&ts.clone().pk.name),
-            );
+            names.insert("#DYNEIN_PKNAME".to_owned(), ts.pk.name.to_owned());
             vals.insert(
-                String::from(":DYNEIN_PKVAL"),
+                ":DYNEIN_PKVAL".to_owned(),
                 build_attrval_scalar(&ts.pk.kind.to_string(), pval),
             );
             sort_key_of_target_table_or_index = ts.sk.clone();
@@ -859,7 +861,7 @@ fn generate_query_expressions(
             if names.is_empty() {
                 return Err(DyneinQueryParamsError::NoSuchIndex(
                     idx.to_string(),
-                    ts.clone().name,
+                    ts.name.clone(),
                 ));
             }
         }
@@ -916,7 +918,7 @@ fn append_sort_key_expression(
 ) -> Result<GeneratedQueryParams, DyneinQueryParamsError> {
     // Check if the target table/index key schema has sort key. If there's no sort key definition, return with Err immediately.
     let (sk_name, sk_type) = match sort_key {
-        Some(sk) => (sk.clone().name, sk.kind),
+        Some(sk) => (sk.name.clone(), sk.kind),
         None => return Err(DyneinQueryParamsError::NoSortKeyDefined),
     };
 
@@ -1211,11 +1213,11 @@ fn generate_scan_expressions(
 
     // dynein always shows primary key(s) i.e. pk and sk (if any).
     let mut names = HashMap::<String, String>::new();
-    names.insert(String::from("#DYNEIN_PKNAME"), ts.clone().pk.name);
+    names.insert(String::from("#DYNEIN_PKNAME"), ts.pk.name.clone());
     let mut returning_attributes: Vec<String> = vec![String::from("#DYNEIN_PKNAME")];
     if let Some(sk) = &ts.sk {
         returning_attributes.push(String::from("#DYNEIN_SKNAME"));
-        names.insert(String::from("#DYNEIN_SKNAME"), sk.clone().name);
+        names.insert(String::from("#DYNEIN_SKNAME"), sk.name.clone());
     };
 
     // if keys_only flag is true, no more attribute would be added.
@@ -1225,7 +1227,9 @@ fn generate_scan_expressions(
         let attrs: Vec<&str> = _attributes.split(',').map(|x| x.trim()).collect();
         for attr in attrs {
             // skip if attributes contain primary key(s) as they're already included in the expression.
-            if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.clone().sk.unwrap().name) {
+            if attr == ts.pk.name
+                || (ts.sk.is_some() && attr == ts.sk.as_ref().unwrap().name.clone())
+            {
                 continue;
             }
 

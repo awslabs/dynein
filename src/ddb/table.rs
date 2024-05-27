@@ -86,27 +86,27 @@ struct PrintSecondaryIndex {
 
 /// Receives region (just to show in one line for reference) and TableDescription,
 /// print them in readable YAML format. NOTE: '~' representes 'null' or 'no value' in YAML syntax.
-pub fn print_table_description(region: &str, desc: TableDescription) {
-    let attr_defs = desc.clone().attribute_definitions.unwrap();
+pub fn print_table_description(region: &str, desc: &TableDescription) {
+    let attr_defs = desc.attribute_definitions.as_ref().unwrap();
     let mode = extract_mode(&desc.billing_mode_summary);
 
     let print_table: PrintDescribeTable = PrintDescribeTable {
-        name: String::from(&desc.clone().table_name.unwrap()),
+        name: String::from(desc.table_name.as_ref().unwrap()),
         region: String::from(region),
-        status: String::from(desc.clone().table_status.unwrap().as_str()),
+        status: String::from(desc.table_status.as_ref().unwrap().as_str()),
         schema: PrintPrimaryKeys {
-            pk: key::typed_key("HASH", &desc)
+            pk: key::typed_key("HASH", desc)
                 .expect("pk should exist")
                 .display(),
-            sk: key::typed_key("RANGE", &desc).map(|k| k.display()),
+            sk: key::typed_key("RANGE", desc).map(|k| k.display()),
         },
 
         mode: mode.clone(),
         capacity: extract_capacity(&mode, &desc.provisioned_throughput),
 
-        gsi: extract_secondary_indexes(&mode, &attr_defs, desc.global_secondary_indexes),
-        lsi: extract_secondary_indexes(&mode, &attr_defs, desc.local_secondary_indexes),
-        stream: extract_stream(desc.latest_stream_arn, desc.stream_specification),
+        gsi: extract_secondary_indexes(&mode, attr_defs, &desc.global_secondary_indexes),
+        lsi: extract_secondary_indexes(&mode, attr_defs, &desc.local_secondary_indexes),
+        stream: extract_stream(&desc.latest_stream_arn, &desc.stream_specification),
 
         size_bytes: desc.table_size_bytes.unwrap(),
         count: desc.item_count.unwrap(),
@@ -164,16 +164,14 @@ pub fn generate_essential_key_definitions(
 /// Map "BilingModeSummary" field in table description returned from DynamoDB API,
 /// into convenient mode name ("Provisioned" or "OnDemand")
 pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
-    let provisioned_mode = Mode::Provisioned;
-    let ondemand_mode = Mode::OnDemand;
     match bs {
         // if BillingModeSummary field doesn't exist, the table is Provisioned Mode.
-        None => provisioned_mode,
+        None => Mode::Provisioned,
         Some(x) => {
-            if x.clone().billing_mode.unwrap() == BillingMode::PayPerRequest {
-                ondemand_mode
+            if x.billing_mode == Some(BillingMode::PayPerRequest) {
+                Mode::OnDemand
             } else {
-                provisioned_mode
+                Mode::Provisioned
             }
         }
     }
@@ -183,11 +181,11 @@ pub fn extract_mode(bs: &Option<BillingModeSummary>) -> Mode {
 fn extract_secondary_indexes<T: IndexDesc>(
     mode: &Mode,
     attr_defs: &[AttributeDefinition],
-    option_indexes: Option<Vec<T>>,
+    option_indexes: &Option<Vec<T>>,
 ) -> Option<Vec<PrintSecondaryIndex>> {
     if let Some(indexes) = option_indexes {
         let mut xs = Vec::<PrintSecondaryIndex>::new();
-        for idx in &indexes {
+        for idx in indexes {
             let ks = &idx.retrieve_key_schema().as_ref().unwrap();
             let idx = PrintSecondaryIndex {
                 name: String::from(idx.retrieve_index_name().as_ref().unwrap()),
@@ -207,15 +205,19 @@ fn extract_secondary_indexes<T: IndexDesc>(
     }
 }
 
-fn extract_stream(arn: Option<String>, spec: Option<StreamSpecification>) -> Option<String> {
-    if arn.is_none() {
-        None
-    } else {
-        Some(format!(
-            "{} ({})",
-            arn.unwrap(),
-            spec.unwrap().stream_view_type.unwrap()
-        ))
+fn extract_stream(arn: &Option<String>, spec: &Option<StreamSpecification>) -> Option<String> {
+    match arn {
+        None => None,
+        Some(arn) => match spec {
+            None => Some(arn.to_owned()),
+            Some(spec) => Some(format!(
+                "{} ({})",
+                arn,
+                spec.stream_view_type
+                    .as_ref()
+                    .expect("StreamViewType must not be empty")
+            )),
+        },
     }
 }
 

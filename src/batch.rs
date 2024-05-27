@@ -24,7 +24,7 @@ use base64::{engine::general_purpose, Engine as _};
 use bytes::Bytes;
 use log::{debug, error};
 use serde_json::Value as JsonValue;
-use std::{collections::HashMap, error, fmt, fs, future::Future, io::Error as IOError, pin::Pin};
+use std::{collections::HashMap, error, fmt, fs, io::Error as IOError};
 
 use super::app;
 use super::data;
@@ -219,7 +219,7 @@ pub fn build_batch_request_items_from_json(
 /// > You can investigate and optionally resend the requests. Typically, you would call BatchWriteItem in a loop. Each iteration would
 /// > check for unprocessed items and submit a new BatchWriteItem request with those unprocessed items until all items have been processed.
 async fn batch_write_item_api(
-    cx: app::Context,
+    cx: &app::Context,
     request_items: HashMap<String, Vec<WriteRequest>>,
 ) -> Result<
     Option<HashMap<String, Vec<WriteRequest>>>,
@@ -232,9 +232,11 @@ async fn batch_write_item_api(
 
     let retry_config = cx
         .retry
-        .clone()
-        .map(|v| v.batch_write_item.to_owned().unwrap_or(v.default));
-    let config = cx.effective_sdk_config_with_retry(retry_config).await;
+        .as_ref()
+        .map(|v| v.batch_write_item.as_ref().unwrap_or(&v.default));
+    let config = cx
+        .effective_sdk_config_with_retry(retry_config.cloned())
+        .await;
     let ddb = DynamoDbSdkClient::new(&config);
 
     match ddb
@@ -250,36 +252,33 @@ async fn batch_write_item_api(
 
 // Basically this function is intended to be defined as `pub async fn`.
 // However, to recursively use async function, you have to return a future wrapped by pinned box. For more details: `rustc --explain E0733`.
-pub fn batch_write_untill_processed(
-    cx: app::Context,
-    request_items: HashMap<String, Vec<WriteRequest>>,
-) -> Pin<Box<dyn Future<Output = Result<(), aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>>>>>
-{
-    Box::pin(async move {
-        match batch_write_item_api(cx.clone(), request_items).await {
+pub async fn batch_write_until_processed(
+    cx: &app::Context,
+    mut request_items: HashMap<String, Vec<WriteRequest>>,
+) -> Result<(), aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>> {
+    loop {
+        request_items = match batch_write_item_api(cx, request_items).await {
             Ok(result) => {
                 let unprocessed_items: HashMap<String, Vec<WriteRequest>> =
                     result.expect("alwasy wrapped by Some");
-                // if there's any unprocessed items, recursively call this function itself.
                 if !unprocessed_items.is_empty() {
+                    // if there are any unprocessed items, retry rest items
                     debug!("UnprocessedItems: {:?}", &unprocessed_items);
-                    batch_write_untill_processed(cx, unprocessed_items).await
-                }
-                // untill it processes items completely.
-                else {
-                    Ok(())
+                    unprocessed_items
+                } else {
+                    return Ok(());
                 }
             }
-            Err(e) => Err(e),
+            Err(e) => return Err(e),
         }
-    })
+    }
 }
 
 /// This function is intended to be called from main.rs, as a destination of bwrite command.
 /// It executes batch write operations based on the provided `puts`, `dels`, and `input_file` arguments.
 /// At least one argument `puts`, `dels` or `input_file` is required, and all arguments can be specified simultaneously.
 pub async fn batch_write_item(
-    cx: app::Context,
+    cx: &app::Context,
     puts: Option<Vec<String>>,
     dels: Option<Vec<String>>,
     input_file: Option<String>,
@@ -297,7 +296,7 @@ pub async fn batch_write_item(
     if puts.is_some() || dels.is_some() {
         let mut write_requests = Vec::<WriteRequest>::new();
         let parser = DyneinParser::new();
-        let ts: app::TableSchema = app::table_schema(&cx).await;
+        let ts: app::TableSchema = app::table_schema(cx).await;
 
         if let Some(items) = puts {
             for item in items.iter() {
