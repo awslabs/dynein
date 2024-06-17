@@ -190,8 +190,7 @@ pub async fn scan_api(
         .await
         .unwrap_or_else(|e| {
             debug!("Scan API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         })
 }
 
@@ -274,8 +273,7 @@ pub async fn query(cx: &app::Context, params: QueryParams) {
         }
         Err(e) => {
             debug!("Query API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
     }
 }
@@ -331,8 +329,7 @@ pub async fn get_item(
         },
         Err(e) => {
             debug!("GetItem API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
     }
 }
@@ -384,8 +381,7 @@ pub async fn put_item(cx: &app::Context, pval: String, sval: Option<String>, ite
         }
         Err(e) => {
             debug!("PutItem API call got an error -- {:?}", e);
-            error!("{}", e.into_service_error().meta());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
     }
 }
@@ -420,8 +416,7 @@ pub async fn delete_item(cx: &app::Context, pval: String, sval: Option<String>) 
         }
         Err(e) => {
             debug!("Deletetem API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
     }
 }
@@ -481,8 +476,7 @@ pub async fn update_item(
         }
         Err(e) => {
             debug!("UpdateItem API call got an error -- {:?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
     }
 }

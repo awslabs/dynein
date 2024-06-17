@@ -52,8 +52,7 @@ pub async fn list_tables_all_regions(cx: &app::Context) {
     let ec2 = Ec2SdkClient::new(&config);
     match ec2.describe_regions().send().await {
         Err(e) => {
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
         Ok(res) => {
             join_all(
@@ -154,8 +153,7 @@ pub async fn describe_table_api(cx: &app::Context, table_name: String) -> TableD
     match ddb.describe_table().table_name(table_name).send().await {
         Err(e) => {
             debug!("DescribeTable API call got an error -- {:#?}", e);
-            error!("{}", e.into_service_error().meta());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
         Ok(res) => {
             let desc: TableDescription = res.table.expect("This message should not be shown.");
@@ -177,8 +175,7 @@ pub async fn create_table(cx: &app::Context, name: String, given_keys: Vec<Strin
         Ok(desc) => table::print_table_description(cx.effective_region().await.as_ref(), &desc),
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
-            error!("{}", e.into_service_error());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
     }
 }
@@ -259,8 +256,7 @@ pub async fn create_index(cx: &app::Context, index_name: String, given_keys: Vec
     {
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
@@ -363,8 +359,7 @@ pub async fn update_table(
         Ok(desc) => table::print_table_description(cx.effective_region().await.as_ref(), &desc),
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
     }
 }
@@ -421,8 +416,7 @@ pub async fn delete_table(cx: &app::Context, name: String, skip_confirmation: bo
     match ddb.delete_table().table_name(name).send().await {
         Err(e) => {
             debug!("DeleteTable API call got an error -- {:#?}", e);
-            error!("{}", e.into_service_error());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
@@ -463,7 +457,7 @@ pub async fn backup(cx: &app::Context, all_tables: bool) {
     match req.send().await {
         Err(e) => {
             debug!("CreateBackup API call got an error -- {:#?}", e);
-            app::bye(1, &e.into_service_error().to_string());
+            app::bye_with_sdk_error(1, e);
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
@@ -583,10 +577,7 @@ pub async fn restore(cx: &app::Context, backup_name: Option<String>, restore_nam
     {
         Err(e) => {
             debug!("RestoreTableFromBackup API call got an error -- {:#?}", e);
-            app::bye(1, &e.into_service_error().to_string());
-            /* e.g. ... Possibly see "BackupInUse" error:
-                [2020-08-14T13:16:07Z DEBUG dy::control] RestoreTableFromBackup API call got an error -- Service( BackupInUse( "Backup is being used to restore another table: arn:aws:dynamodb:us-west-2:111111111111:table/Music/backup/01527492829107-81b9b3dd",))
-            */
+            app::bye_with_sdk_error(1, e);
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
@@ -614,8 +605,7 @@ async fn list_tables_api(cx: &app::Context, override_region: Option<&str>) -> Ve
     match ddb.list_tables().send().await {
         Err(e) => {
             debug!("ListTables API call got an error -- {:#?}", e);
-            error!("{}", e.to_string());
-            std::process::exit(1);
+            app::bye_with_sdk_error(1, e);
         }
         // ListTables API returns blank array even if no table exists in a region.
         Ok(res) => res.table_names.expect("This message should not be shown"),
@@ -635,7 +625,7 @@ async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSumm
     match req.send().await {
         Err(e) => {
             debug!("ListBackups API call got an error -- {:#?}", e);
-            app::bye(1, &e.into_service_error().to_string());
+            app::bye_with_sdk_error(1, e);
         }
         Ok(res) => res
             .backup_summaries

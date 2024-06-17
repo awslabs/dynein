@@ -19,6 +19,8 @@ use aws_config::{
     meta::region::RegionProviderChain, retry::RetryConfig, BehaviorVersion, Region, SdkConfig,
 };
 use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
+use aws_smithy_runtime_api::client::result::SdkError;
+use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use log::{debug, error, info};
 use serde_yaml::Error as SerdeYAMLError;
 use std::convert::{TryFrom, TryInto};
@@ -682,6 +684,18 @@ pub fn index_schemas(desc: &TableDescription) -> Option<Vec<IndexSchema>> {
 
 pub fn bye(code: i32, msg: &str) -> ! {
     println!("{}", msg);
+    std::process::exit(code);
+}
+
+pub fn bye_with_sdk_error<E, R>(code: i32, error: SdkError<E, R>) -> !
+where
+    E: fmt::Debug + ProvideErrorMetadata,
+    R: fmt::Debug,
+{
+    match error.as_service_error() {
+        Some(service_error) => error!("service error occurred: {:?}", service_error.meta()),
+        None => error!("an error occurred: {:?}", error),
+    };
     std::process::exit(code);
 }
 
