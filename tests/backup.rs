@@ -32,13 +32,14 @@ async fn test_backup() -> Result<(), Box<dyn std::error::Error>> {
             "To execute the command you must specify target table in one of following ways:",
         ));
 
+    // This error message only happens on DynamoDB Local which does not support backup feature.
     tm.command()?
         .args(["-r", "local", "backup", "--table", "non-existent-table"])
         .assert()
         .failure()
-        .stdout(predicate::str::contains(
-            // This error message only happens on DynamoDB Local which does not support backup feature.
-            "unhandled error (UnknownOperationException)",
+        .stderr(predicate::str::contains("UnknownOperationException"))
+        .stderr(predicate::str::contains(
+            "An unknown operation was requested.",
         ));
 
     Ok(())
