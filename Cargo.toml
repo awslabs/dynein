@@ -25,11 +25,19 @@ repository = "https://github.com/awslabs/dynein"
 keywords = ["cli", "dynamodb", "aws"]
 categories = ["command-line-utilities"]
 
+[lib]
+name = "dylib"
+path = "src/lib.rs"
+
 [[bin]]
 name = "dy"
 path = "src/main.rs"
 
+[features]
+default = []
+
 [dependencies]
+arbitrary = { version = "1", features = ["derive"], optional = true }
 aws-config       = "1.4.0"
 aws-sdk-dynamodb = "1.28.0"
 aws-sdk-ec2      = "1.42.0"
