@@ -99,6 +99,26 @@ you must also update the snapshot for the Windows environment.
 In this case, you can create a pull request for draft mode and execute `/snapshot` to create a diff file for Windows.
 Generated diff can be copied into a file and applied by `git diff <file-name>` command.
 
+#### Fuzz testing
+We use fuzz testing to verify the implementation of our parser.
+
+You can find resources related to fuzz testing in Rust in the following links:
+
+* [Rust Fuzz Book](https://rust-fuzz.github.io/book/introduction.html)
+* [Instrumentation-based Code Coverage - The rustc book](https://doc.rust-lang.org/stable/rustc/instrument-coverage.html)
+
+If you want to quickly run the fuzz tests with libfuzzer, you can use the following commands:
+
+```bash
+# Install cargo-fuzz
+cargo +nightly install cargo-fuzz
+# Start a series of fuzz tests
+cargo +nightly fuzz run -j $(nproc) parse_dynein_format -- -dict=fuzz/fuzz_dict
+cargo +nightly fuzz run -j $(nproc) parse_remove_action -- -dict=fuzz/fuzz_dict
+cargo +nightly fuzz run -j $(nproc) parse_set_action -- -dict=fuzz/fuzz_dict
+cargo +nightly fuzz run -j $(nproc) parse_sort_key_with_fallback -- -dict=fuzz/fuzz_dict
+cargo +nightly fuzz run -j $(nproc) parse_sort_key_with_suggest -- -dict=fuzz/fuzz_dict
+```
 
 ## Finding contributions to work on
 Looking at the existing issues is a great way to find something to contribute on. As our projects, by default, use the default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help wanted' issues is a great place to start.
