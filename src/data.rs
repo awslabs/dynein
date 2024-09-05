@@ -1121,7 +1121,10 @@ fn convert_item_to_csv_line(
     if keys_only {
     } else if let Some(attrs) = attributes_to_append {
         for attr /* String */ in attrs {
-            let attrval: &AttributeValue = item.iter().find(|x| x.0 == attr).expect("Specified attribute not found in the item.").1;
+            let attrval: &AttributeValue = match item.iter().find(|x| x.0 == attr) {
+                None => &AttributeValue::Null(true),
+                Some(x) => x.1
+            };
             line.push(',');
             // NOTE: If special handling for complex data type is needed: `if let Some(_) = attrval.m {...`
             line.push_str(&attrval_to_jsonval(attrval).to_string());
