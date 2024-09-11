@@ -1,0 +1,48 @@
+[package]
+name = "dynein-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = {version = "1", features = ["derive"]}
+dynein = {path = "..", features = ["arbitrary"]}
+
+[[bin]]
+name = "parse_sort_key_with_suggest"
+path = "fuzz_targets/parse_sort_key_with_suggest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_sort_key_with_fallback"
+path = "fuzz_targets/parse_sort_key_with_fallback.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_dynein_format"
+path = "fuzz_targets/parse_dynein_format.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_set_action"
+path = "fuzz_targets/parse_set_action.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_remove_action"
+path = "fuzz_targets/parse_remove_action.rs"
+test = false
+doc = false
+bench = false
