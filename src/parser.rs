@@ -35,6 +35,8 @@ struct GeneratedParser;
 type SetAction = Vec<AtomicSet>;
 type RemoveAction = Vec<AtomicRemove>;
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct AttributeDefinition {
     attribute_name: String,
     attribute_type: AttributeType,
@@ -53,6 +55,7 @@ impl AttributeDefinition {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum AttributeType {
     S,
     N,
@@ -1365,6 +1368,12 @@ pub struct DyneinParser {
     names: HashMap<String, String>,
     names_inv: HashMap<String, String>,
     values: HashMap<String, AttributeValue>,
+}
+
+impl Default for DyneinParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DyneinParser {
