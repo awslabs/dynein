@@ -1451,10 +1451,7 @@ impl DyneinParser {
                     .unwrap()
                     .to_owned();
                 // content must be map literal
-                let mut image = match initial_item {
-                    Some(init_item) => init_item,
-                    None => HashMap::new(),
-                };
+                let mut image = initial_item.unwrap_or_default();
                 image.extend(item);
                 Ok(image)
             }

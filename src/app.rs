@@ -565,10 +565,7 @@ pub async fn insert_to_table_cache(
     let mut cache: Cache = cx.cache.clone().expect("cx should have cache");
     let cache_key = format!("{}/{}", region.as_ref(), table_name);
 
-    let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
-        Some(ts) => ts,
-        None => HashMap::<String, TableSchema>::new(),
-    };
+    let mut table_schema_hashmap: HashMap<String, TableSchema> = cache.tables.unwrap_or_default();
     debug!(
         "table schema cache before insert: {:#?}",
         table_schema_hashmap
