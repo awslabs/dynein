@@ -164,7 +164,7 @@ async fn prepare_table_with_item<'a>(
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "42",
                 None,
                 Some("{\"flag\": true}"),

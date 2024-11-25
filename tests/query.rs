@@ -30,7 +30,7 @@ async fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
             .create_temporary_table_with_items(
                 "pk",
                 Some("sk,N"),
-                vec![
+                [
                     util::TemporaryItem::new("abc", Some("1"), None),
                     util::TemporaryItem::new("abc", Some("2"), None),
                 ],
@@ -57,7 +57,7 @@ async fn test_simple_desc_query() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
             ],
@@ -91,7 +91,7 @@ async fn test_query_limit() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
             ],
@@ -124,7 +124,7 @@ async fn test_query_with_sort_key() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
                 util::TemporaryItem::new("abc", Some("3"), None),
@@ -161,7 +161,7 @@ async fn test_query_with_keys_only() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), Some("{'opt':'A'}")),
                 util::TemporaryItem::new("abc", Some("2"), Some("{'opt':'B'}")),
                 util::TemporaryItem::new("abc", Some("3"), Some("{'opt':'C'}")),
@@ -197,7 +197,7 @@ async fn test_query_with_attributes() -> Result<(), Box<dyn std::error::Error>> 
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), Some("{'opt1':'1','opt2':'1'}")),
                 util::TemporaryItem::new("abc", Some("2"), Some("{'opt1':'2','opt2':'2'}")),
                 util::TemporaryItem::new("abc", Some("3"), Some("{'opt1':'3','opt2':'3'}")),
@@ -232,7 +232,7 @@ async fn test_query_for_index() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), Some("{'gsi':'1'}")),
                 util::TemporaryItem::new("abc", Some("2"), Some("{'gsi':'2'}")),
                 util::TemporaryItem::new("abc", Some("3"), Some("{'gsi':'3'}")),
@@ -285,7 +285,7 @@ async fn test_query_with_sort_key_order() -> Result<(), Box<dyn std::error::Erro
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
                 util::TemporaryItem::new("abc", Some("3"), None),
@@ -320,7 +320,7 @@ async fn test_query_with_sort_key_le() -> Result<(), Box<dyn std::error::Error>>
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
                 util::TemporaryItem::new("abc", Some("3"), None),
@@ -357,7 +357,7 @@ async fn test_query_using_between_string() -> Result<(), Box<dyn std::error::Err
         .create_temporary_table_with_items(
             "pk",
             Some("sk,S"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("11"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
@@ -397,7 +397,7 @@ async fn test_query_using_between_number() -> Result<(), Box<dyn std::error::Err
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("11"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
@@ -437,7 +437,7 @@ async fn test_query_using_begins_with() -> Result<(), Box<dyn std::error::Error>
         .create_temporary_table_with_items(
             "pk",
             Some("sk,S"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("11"), None),
                 util::TemporaryItem::new("abc", Some("21"), None),
@@ -475,7 +475,7 @@ async fn test_query_non_strict() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![util::TemporaryItem::new("abc", Some("1100"), None)],
+            [util::TemporaryItem::new("abc", Some("1100"), None)],
         )
         .await?;
 
@@ -505,7 +505,7 @@ async fn test_query_invalid_input() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,S"),
-            vec![util::TemporaryItem::new("abc", Some("2"), None)],
+            [util::TemporaryItem::new("abc", Some("2"), None)],
         )
         .await?;
 
@@ -534,7 +534,7 @@ async fn test_query_with_strict_mode_with_suggestion() -> Result<(), Box<dyn std
         .create_temporary_table_with_items(
             "pk",
             Some("sk,S"),
-            vec![util::TemporaryItem::new("abc", Some("2"), None)],
+            [util::TemporaryItem::new("abc", Some("2"), None)],
         )
         .await?;
 
@@ -567,7 +567,7 @@ async fn test_query_with_strict_mode_without_suggestion() -> Result<(), Box<dyn 
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![util::TemporaryItem::new("abc", Some("8"), None)],
+            [util::TemporaryItem::new("abc", Some("8"), None)],
         )
         .await?;
 
@@ -599,7 +599,7 @@ async fn test_query_with_strict_config() -> Result<(), Box<dyn std::error::Error
         .create_temporary_table_with_items(
             "pk",
             Some("sk,S"),
-            vec![util::TemporaryItem::new("abc", Some("2"), None)],
+            [util::TemporaryItem::new("abc", Some("2"), None)],
         )
         .await?;
     let mut c = tm.command_with_envs(
@@ -640,7 +640,7 @@ async fn test_query_overriding_with_non_strict_config() -> Result<(), Box<dyn st
         .create_temporary_table_with_items(
             "pk",
             Some("sk,S"),
-            vec![util::TemporaryItem::new("abc", Some("2"), None)],
+            [util::TemporaryItem::new("abc", Some("2"), None)],
         )
         .await?;
     let mut c = tm.command_with_envs(

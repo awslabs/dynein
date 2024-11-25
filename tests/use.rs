@@ -126,7 +126,7 @@ async fn test_use_switch() -> Result<(), Box<dyn std::error::Error>> {
             .create_temporary_table_with_items(
                 "pk1",
                 None,
-                vec![
+                [
                     util::TemporaryItem::new("v1", None, None),
                     util::TemporaryItem::new("v2", None, None),
                 ],
@@ -136,7 +136,7 @@ async fn test_use_switch() -> Result<(), Box<dyn std::error::Error>> {
             .create_temporary_table_with_items(
                 "pk2",
                 None,
-                vec![
+                [
                     util::TemporaryItem::new("v3", None, None),
                     util::TemporaryItem::new("v4", None, None),
                 ],

@@ -319,7 +319,7 @@ async fn test_put_same_pk() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "42",
                 None,
                 Some(r#"{"null-field": null}"#),
