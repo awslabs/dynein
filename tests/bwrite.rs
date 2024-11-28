@@ -75,7 +75,7 @@ async fn test_batch_write_json_delete() -> Result<(), Box<dyn std::error::Error>
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "ichi",
                 None,
                 Some(r#"{"null-field": null}"#),
@@ -87,7 +87,7 @@ async fn test_batch_write_json_delete() -> Result<(), Box<dyn std::error::Error>
         .create_temporary_table_with_items(
             "pk",
             Some("sk"),
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "ichi",
                 Some("sortkey"),
                 Some(r#"{"null-field": null}"#),
@@ -147,7 +147,7 @@ async fn test_batch_write_json_put_delete() -> Result<(), Box<dyn std::error::Er
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "ichi",
                 None,
                 Some(r#"{"null-field": null}"#),
@@ -198,7 +198,7 @@ async fn test_batch_write_json_put_delete_multiple_tables() -> Result<(), Box<dy
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "ichi",
                 None,
                 Some(r#"{"null-field": null}"#),
@@ -210,7 +210,7 @@ async fn test_batch_write_json_put_delete_multiple_tables() -> Result<(), Box<dy
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "ichi",
                 None,
                 Some(r#"{"null-field": null}"#),
@@ -356,7 +356,7 @@ async fn test_batch_write_del() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "11",
                 None,
                 Some(r#"{"null-field": null}"#),
@@ -399,7 +399,7 @@ async fn test_batch_write_del_sk() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk"),
-            vec![util::TemporaryItem::new(
+            [util::TemporaryItem::new(
                 "11",
                 Some("111"),
                 Some(r#"{"null-field": null}"#),
@@ -442,7 +442,7 @@ async fn test_batch_write_all_options() -> Result<(), Box<dyn std::error::Error>
         .create_temporary_table_with_items(
             "pk",
             None,
-            vec![
+            [
                 util::TemporaryItem::new("11", None, Some(r#"{"null-field": null}"#)),
                 util::TemporaryItem::new("ichi", None, Some(r#"{"null-field": null}"#)),
             ],

@@ -62,7 +62,7 @@ async fn test_del_existent_item() -> Result<(), Box<dyn std::error::Error>> {
             .create_temporary_table_with_items(
                 "pk",
                 None,
-                vec![
+                [
                     util::TemporaryItem::new("a", None, None),
                     util::TemporaryItem::new("b", None, None),
                 ],
@@ -94,7 +94,7 @@ async fn test_del_existent_item_with_sk() -> Result<(), Box<dyn std::error::Erro
         .create_temporary_table_with_items(
             "pk,S",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("2"), None),
                 util::TemporaryItem::new("abc", Some("3"), None),

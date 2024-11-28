@@ -70,7 +70,7 @@ async fn test_export_with_items() -> Result<(), Box<dyn std::error::Error>> {
         .create_temporary_table_with_items(
             "pk",
             Some("sk,N"),
-            vec![
+            [
                 util::TemporaryItem::new("abc", Some("1"), None),
                 util::TemporaryItem::new("abc", Some("2"), Some(r#"{"a": 1, "b": 2}"#)),
                 util::TemporaryItem::new("def", Some("3"), None),
