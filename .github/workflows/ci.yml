@@ -18,9 +18,6 @@ jobs:
       RUST_LOG: debug # Output debug log
       RUST_BACKTRACE: 1 # Dump backtrace on panic
       DYNEIN_TEST_NO_DOCKER_SETUP: true
-      # define AWS credentials in environment for test
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
     services:
       dynamodb:
         # Pinned to the version not to be broken with latest
@@ -54,9 +51,6 @@ jobs:
       RUST_LOG: debug # Output debug log
       RUST_BACKTRACE: 1 # Dump backtrace on panic
       DYNEIN_TEST_NO_DOCKER_SETUP: true
-      # define AWS credentials in environment for test
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
     steps:
     - uses: actions/checkout@v4
     - name: Install rust toolchain
