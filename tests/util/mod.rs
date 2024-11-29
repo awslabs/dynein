@@ -72,7 +72,11 @@ impl<'a> TestManager<'a> {
 
     pub fn command(&self) -> Result<Command, Box<dyn std::error::Error>> {
         let mut c = Command::cargo_bin("dy")?;
-        c.env("DYNEIN_CONFIG_DIR", &self.default_config_dir);
+        c.envs([
+            ("DYNEIN_CONFIG_DIR", &self.default_config_dir),
+            ("AWS_ACCESS_KEY_ID", &PathBuf::from("test")),
+            ("AWS_SECRET_ACCESS_KEY", &PathBuf::from("test")),
+        ]);
         Ok(c)
     }
 
