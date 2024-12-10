@@ -285,8 +285,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                     debug!("context after execution of shell command: {:#?}", context)
                 }
-                ParseError(_) => {
-                    // do nothing because read_line already handles the error
+                ParseError(e) => {
+                    debug!("parse error occur: {:#?}", e);
                 }
             }
         }
