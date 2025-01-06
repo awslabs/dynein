@@ -18,7 +18,7 @@ dynein - DynamoDB CLI
     - [Commands overview](#commands-overview)
     - [Bootstrapping sample DynamoDB tables](#bootstrapping-sample-dynamodb-tables)
     - [Working with DynamoDB tables](#working-with-dynamodb-tables)
-        - [Infrastracture as Code - enpowered by CloudFormation](#infrastracture-as-code---enpowered-by-cloudformation)
+        - [Infrastructure as Code - enpowered by CloudFormation](#Infrastructure-as-code---enpowered-by-cloudformation)
         - [`dy use` and `dy config` to switch/manage context](#dy-use-and-dy-config-to-switchmanage-context)
     - [Working with DynamoDB items](#working-with-dynamodb-items)
         - [Read](#read)
@@ -66,7 +66,7 @@ dynein - DynamoDB CLI
 
 ## Method 1. Download binaries
 
-You can download binaries of a specific version from [the releases page](https://github.com/awslabs/dynein/releases). For example, below instructions are example comamnds to download the latest version in each platform.
+You can download binaries of a specific version from [the releases page](https://github.com/awslabs/dynein/releases). For example, below instructions are example commands to download the latest version in each platform.
 
 ### macOS
 
@@ -350,11 +350,11 @@ $ dy admin update table app_users --mode provisioned --wcu 10 --rcu 25
 ```
 
 
-### Infrastracture as Code - enpowered by CloudFormation
+### Infrastructure as Code - enpowered by CloudFormation
 
 NOTE: currently this feature is under development
 
-[Infrastracture as Code](https://www.martinfowler.com/bliki/InfrastructureAsCode.html) is a concept that you define code to provision "infrastructures", such as DynamoDB tables, with "declarative" way (On the other hand you can say `dy admin create table` and `dy admin update table` commands are "imperative" way).
+[Infrastructure as Code](https://www.martinfowler.com/bliki/InfrastructureAsCode.html) is a concept that you define code to provision "infrastructures", such as DynamoDB tables, with "declarative" way (On the other hand you can say `dy admin create table` and `dy admin update table` commands are "imperative" way).
 
 To manage DynamoDB tables with "declarative" way, dynein provides `dy admin plan` and `dy admin apply` commands. Internally dynein executes [AWS CloudFormation](https://aws.amazon.com/cloudformation/) APIs to provision DynamoDB resources for you.
 
