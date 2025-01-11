@@ -373,6 +373,7 @@ pub async fn update_table(
 ///   * [-] ReplicaUpdates > Create/Update/Delete and details of the update on Global Tbles replicas
 ///   * [] SSESpecification > obj
 ///   * [] StreamSpecification > obj
+///
 /// [+] = supported, [-] = implemented (or plan to so) in another location, [] = not yet supported
 /// Especially note that you should explicitly pass GSI update parameter to make any change on GSI.
 async fn update_table_api(
