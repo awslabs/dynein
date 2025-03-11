@@ -175,8 +175,7 @@ pub async fn scan_api(
 
     let scan_params: GeneratedScanParams = generate_scan_expressions(&ts, attributes, keys_only);
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     ddb.scan()
         .table_name(ts.name)
@@ -233,8 +232,7 @@ pub async fn query(cx: &app::Context, params: QueryParams) {
         &ts.name, &query_params
     );
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     let req = ddb
         .query()
@@ -295,8 +293,7 @@ pub async fn get_item(
         &ts.name, &primary_keys
     );
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb
         .get_item()
@@ -366,8 +363,7 @@ pub async fn put_item(cx: &app::Context, pval: String, sval: Option<String>, ite
 
     debug!("Calling PutItem API to insert: {:?}", &full_item_image);
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb
         .put_item()
@@ -397,8 +393,7 @@ pub async fn delete_item(cx: &app::Context, pval: String, sval: Option<String>) 
         &ts.name, &primary_keys
     );
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb
         .delete_item()
@@ -453,8 +448,7 @@ pub async fn update_item(
         panic!("Neither --set nor --remove is not specified, but this should not be catched here.");
     };
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb
         .update_item()
@@ -1121,10 +1115,7 @@ fn convert_item_to_csv_line(
     if keys_only {
     } else if let Some(attrs) = attributes_to_append {
         for attr /* String */ in attrs {
-            let attrval: &AttributeValue = match item.iter().find(|x| x.0 == attr) {
-                None => &AttributeValue::Null(true),
-                Some(x) => x.1
-            };
+            let attrval: &AttributeValue = item.iter().find(|x| x.0 == attr).expect("Specified attribute not found in the item.").1;
             line.push(',');
             // NOTE: If special handling for complex data type is needed: `if let Some(_) = attrval.m {...`
             line.push_str(&attrval_to_jsonval(attrval).to_string());

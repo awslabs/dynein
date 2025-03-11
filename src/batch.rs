@@ -237,7 +237,8 @@ async fn batch_write_item_api(
     let config = cx
         .effective_sdk_config_with_retry(retry_config.cloned())
         .await;
-    let ddb = DynamoDbSdkClient::new(&config);
+
+    let ddb = &cx.ddb_client;
 
     match ddb
         .batch_write_item()

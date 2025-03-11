@@ -259,7 +259,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // when --region <region-name e.g. ap-northeast-1>, use the region. when --region local, use DynamoDB local.
     // --region/--table option can be passed as a top-level or subcommand-level (i.e. global).
-    let mut context = app::Context::new(c.region, c.port, c.table)?;
+    let mut context = app::Context::new(c.region, c.port, c.table).await?;
     debug!("Initial command context: {:?}", &context);
 
     if let Some(child) = c.child {

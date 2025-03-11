@@ -148,7 +148,7 @@ pub async fn describe_table(cx: &app::Context, target_table_to_desc: Option<Stri
 pub async fn describe_table_api(cx: &app::Context, table_name: String) -> TableDescription {
     let region = cx.effective_region().await;
     let config = cx.effective_sdk_config_with_region(region.as_ref()).await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb.describe_table().table_name(table_name).send().await {
         Err(e) => {
@@ -196,8 +196,7 @@ pub async fn create_table_api(
     let (key_schema, attribute_definitions) =
         table::generate_essential_key_definitions(&given_keys);
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     ddb.create_table()
         .table_name(name)
@@ -227,8 +226,7 @@ pub async fn create_index(cx: &app::Context, index_name: String, given_keys: Vec
     let (key_schema, attribute_definitions) =
         table::generate_essential_key_definitions(&given_keys);
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     let create_gsi_action = CreateGlobalSecondaryIndexAction::builder()
         .index_name(index_name)
@@ -373,7 +371,6 @@ pub async fn update_table(
 ///   * [-] ReplicaUpdates > Create/Update/Delete and details of the update on Global Tbles replicas
 ///   * [] SSESpecification > obj
 ///   * [] StreamSpecification > obj
-///
 /// [+] = supported, [-] = implemented (or plan to so) in another location, [] = not yet supported
 /// Especially note that you should explicitly pass GSI update parameter to make any change on GSI.
 async fn update_table_api(
@@ -387,8 +384,7 @@ async fn update_table_api(
 > {
     debug!("Trying to update the table '{}'.", &table_name_to_update);
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     ddb.update_table()
         .table_name(table_name_to_update)
@@ -411,8 +407,7 @@ pub async fn delete_table(cx: &app::Context, name: String, skip_confirmation: bo
         return;
     }
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb.delete_table().table_name(name).send().await {
         Err(e) => {
@@ -446,8 +441,7 @@ pub async fn backup(cx: &app::Context, all_tables: bool) {
         .expect("should be able to generate UNIX EPOCH")
         .as_secs();
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     let req = ddb
         .create_backup()
@@ -566,8 +560,7 @@ pub async fn restore(cx: &app::Context, backup_name: Option<String>, restore_nam
         Some(restore) => restore,
     };
 
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb
         .restore_table_from_backup()
@@ -601,7 +594,7 @@ async fn list_tables_api(cx: &app::Context, override_region: Option<&str>) -> Ve
     } else {
         cx.effective_sdk_config().await
     };
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     match ddb.list_tables().send().await {
         Err(e) => {
@@ -615,8 +608,7 @@ async fn list_tables_api(cx: &app::Context, override_region: Option<&str>) -> Ve
 
 /// This function is a private function that simply calls ListBackups API and return results
 async fn list_backups_api(cx: &app::Context, all_tables: bool) -> Vec<BackupSummary> {
-    let config = cx.effective_sdk_config().await;
-    let ddb = DynamoDbSdkClient::new(&config);
+    let ddb = &cx.ddb_client;
 
     let mut req = ddb.list_backups();
     if !all_tables {

@@ -19,6 +19,7 @@ use aws_config::{
     meta::region::RegionProviderChain, retry::RetryConfig, BehaviorVersion, Region, SdkConfig,
 };
 use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
+use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
 use aws_smithy_runtime_api::client::result::SdkError;
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use log::{debug, error, info};
@@ -33,6 +34,7 @@ use std::{
     io::Error as IOError,
     path,
 };
+use std::sync::Arc;
 use tempfile::NamedTempFile;
 use thiserror::Error;
 
@@ -216,6 +218,7 @@ pub struct Context {
     pub output: Option<String>,
     pub should_strict_for_query: Option<bool>,
     pub retry: Option<Retry>,
+    pub ddb_client: Arc<DynamoDbSdkClient>,
 }
 
 /*
@@ -224,7 +227,7 @@ pub struct Context {
  Overwritten information is retrieved with `effective_*` functions as 1st priority.
 */
 impl Context {
-    pub fn new(
+    pub async fn new(
         region: Option<String>,
         port: Option<u32>,
         table: Option<String>,
@@ -236,6 +239,10 @@ impl Context {
             })?),
             None => None,
         };
+
+        let sdk_config = aws_config::load_from_env().await;
+        let ddb_client = DynamoDbSdkClient::new(&sdk_config);
+
         Ok(Context {
             config: Some(config),
             cache: Some(load_or_touch_cache_file(true)?),
@@ -245,6 +252,7 @@ impl Context {
             output: None,
             should_strict_for_query: None,
             retry,
+            ddb_client: Arc::new(ddb_client),
         })
     }
 
@@ -565,7 +573,10 @@ pub async fn insert_to_table_cache(
     let mut cache: Cache = cx.cache.clone().expect("cx should have cache");
     let cache_key = format!("{}/{}", region.as_ref(), table_name);
 
-    let mut table_schema_hashmap: HashMap<String, TableSchema> = cache.tables.unwrap_or_default();
+    let mut table_schema_hashmap: HashMap<String, TableSchema> = match cache.tables {
+        Some(ts) => ts,
+        None => HashMap::<String, TableSchema>::new(),
+    };
     debug!(
         "table schema cache before insert: {:#?}",
         table_schema_hashmap
