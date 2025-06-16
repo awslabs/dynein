@@ -224,7 +224,7 @@ pub async fn query(cx: &app::Context, params: QueryParams) {
     ) {
         Ok(qp) => qp,
         Err(e) => {
-            error!("{}", e.to_string());
+            error!("{}", e);
             std::process::exit(1);
         }
     };

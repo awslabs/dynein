@@ -277,7 +277,7 @@ impl Context {
         let sdk_region = Region::new(region_name.to_owned());
 
         let provider = RegionProviderChain::first_try(sdk_region);
-        let mut config = aws_config::defaults(BehaviorVersion::v2024_03_28()).region(provider);
+        let mut config = aws_config::defaults(BehaviorVersion::v2025_01_17()).region(provider);
         if self.is_local().await {
             config = config.endpoint_url(format!("http://localhost:{}", self.effective_port()));
         }
@@ -381,7 +381,7 @@ impl Context {
 
     pub fn should_strict_for_query(&self) -> bool {
         self.should_strict_for_query
-            .unwrap_or_else(|| self.config.as_ref().map_or(false, |c| c.query.strict_mode))
+            .unwrap_or_else(|| self.config.as_ref().is_some_and(|c| c.query.strict_mode))
     }
 
     pub async fn is_local(&self) -> bool {

@@ -44,7 +44,7 @@ struct / enum / const
 pub enum DyneinBootstrapError {
     LoadData(IOError),
     PraseJSON(serde_json::Error),
-    BatchError(aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>),
+    BatchError(Box<aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>>),
 }
 impl fmt::Display for DyneinBootstrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -76,7 +76,7 @@ impl From<serde_json::Error> for DyneinBootstrapError {
 }
 impl From<aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>> for DyneinBootstrapError {
     fn from(e: aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>) -> Self {
-        Self::BatchError(e)
+        Self::BatchError(Box::new(e))
     }
 }
 

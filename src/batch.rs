@@ -38,7 +38,7 @@ struct / enum / const
 pub enum DyneinBatchError {
     LoadData(IOError),
     PraseJSON(serde_json::Error),
-    BatchWriteError(aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>),
+    BatchWriteError(Box<aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>>),
     InvalidInput(String),
     ParseError(crate::parser::ParseError),
 }
@@ -76,7 +76,7 @@ impl From<serde_json::Error> for DyneinBatchError {
 }
 impl From<aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>> for DyneinBatchError {
     fn from(e: aws_sdk_dynamodb::error::SdkError<BatchWriteItemError>) -> Self {
-        Self::BatchWriteError(e)
+        Self::BatchWriteError(Box::new(e))
     }
 }
 
