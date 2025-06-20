@@ -71,8 +71,12 @@ pub async fn list_tables_all_regions(cx: &app::Context) {
 }
 
 pub async fn list_tables(cx: &app::Context, override_region: Option<&str>) {
-    let table_names = list_tables_api(cx, override_region).await;
-    let region = cx.effective_region().await.to_string();
+    let region = match override_region {
+        Some(region) => region.to_string(),
+        None => cx.effective_region().await.to_string(),
+    };
+
+    let table_names = list_tables_api(cx, Some(&region)).await;
 
     println!("DynamoDB tables in region: {}", region);
     if table_names.is_empty() {
@@ -122,7 +126,7 @@ pub async fn describe_table(cx: &app::Context, target_table_to_desc: Option<Stri
     );
 
     // save described table info into cache for future use.
-    // Note that when this functiono is called from describe_all_tables, not all tables would be cached as calls are parallel.
+    // Note that when this function is called from describe_all_tables, not all tables would be cached as calls are parallel.
     match app::insert_to_table_cache(new_context.as_ref(), &desc).await {
         Ok(_) => debug!("Described table schema was written to the cache file."),
         Err(e) => println!(
