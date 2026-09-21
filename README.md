@@ -146,7 +146,7 @@ DynamoDB tables in region: us-east-2
 
 Here `--all-regions` option enables you to iterate over all AWS regions and list all tables for you.
 
-Next you can try `dy scan` with region and table options. `dy scan` command executes [Scan API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html) internally to retrieve all items in the table.
+Next you can try `dy scan` with region and table options. `dy scan` command executes [Scan API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html) internally with a default limit. To retrieve all items from a table, use `dy import` command.
 
 ```
 $ dy scan --region us-west-2 --table Forum
@@ -459,7 +459,7 @@ To make it easy to interact with DynamoDB items, dynein automatically replace re
 
 #### `dy scan`
 
-The simplest command would be `dy scan`, which list items in a table.
+The simplest command would be `dy scan`, which list items in a table with a default limit. You can specify the maximum number of items to scan using the `--limit` option.
 
 ```
 $ dy scan --limit 10
