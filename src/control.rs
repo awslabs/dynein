@@ -176,7 +176,16 @@ pub async fn create_table(cx: &app::Context, name: String, given_keys: Vec<Strin
     };
 
     match create_table_api(cx, name, given_keys).await {
-        Ok(desc) => table::print_table_description(cx.effective_region().await.as_ref(), &desc),
+        Ok(desc) => {
+            match app::insert_to_table_cache(cx, &desc).await {
+                Ok(_) => debug!("Created table schema was written to the cache file."),
+                Err(e) => println!(
+                    "Failed to write table schema to the cache with the following error: {:?}",
+                    e
+                ),
+            };
+            table::print_table_description(cx.effective_region().await.as_ref(), &desc);
+        }
         Err(e) => {
             debug!("CreateTable API call got an error -- {:#?}", e);
             app::bye_with_sdk_error(1, e);
@@ -425,9 +434,17 @@ pub async fn delete_table(cx: &app::Context, name: String, skip_confirmation: bo
         }
         Ok(res) => {
             debug!("Returned result: {:#?}", res);
+            let table_name = res.table_description.unwrap().table_name.unwrap();
+            match app::remove_from_table_cache(cx, &table_name).await {
+                Ok(_) => debug!("Deleted table schema was removed from the cache file."),
+                Err(e) => println!(
+                    "Failed to remove table schema from the cache with the following error: {:?}",
+                    e
+                ),
+            };
             println!(
                 "Delete operation for the table '{}' has been started.",
-                res.table_description.unwrap().table_name.unwrap()
+                table_name
             );
         }
     }

@@ -595,6 +595,37 @@ pub async fn insert_to_table_cache(
     Ok(())
 }
 
+/// Removes the specified table from the cache file.
+pub async fn remove_from_table_cache(
+    cx: &Context,
+    table_name: &str,
+) -> Result<(), DyneinConfigError> {
+    let region = cx.effective_region().await;
+    let cache_key = format!("{}/{}", region.as_ref(), table_name);
+    let mut cache = cx.cache.clone().expect("cx should have cache");
+    let mut table_schema_hashmap = cache.tables.unwrap_or_default();
+    debug!(
+        "table schema cache before removal: {:#?}",
+        table_schema_hashmap
+    );
+
+    table_schema_hashmap.remove(&cache_key);
+    cache.tables = if table_schema_hashmap.is_empty() {
+        None
+    } else {
+        Some(table_schema_hashmap)
+    };
+
+    let cache_yaml_string = serde_yaml::to_string(&cache)?;
+    debug!(
+        "this YAML will be written to the cache file: {:#?}",
+        &cache_yaml_string
+    );
+    write_dynein_file(DyneinFileType::CacheFile, cache_yaml_string)?;
+
+    Ok(())
+}
+
 /// Physicall remove config and cache file.
 pub fn remove_dynein_files() -> Result<(), DyneinConfigError> {
     fs::remove_file(retrieve_dynein_file_path(DyneinFileType::ConfigFile)?)?;

@@ -65,6 +65,30 @@ created_at: .*"
 }
 
 #[tokio::test]
+async fn test_admin_create_table_updates_cache() -> Result<(), Box<dyn std::error::Error>> {
+    let mut tm = setup().await?;
+    const TBL: &str = "table--test_admin_create_table_updates_cache";
+    tm.command()?
+        .args([
+            "-r", "local", "admin", "create", "table", TBL, "--keys", "pk,N",
+        ])
+        .assert()
+        .success();
+    tm.add_tables_to_delete([TBL]);
+
+    tm.command()?
+        .args(["config", "dump"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(format!("local/{TBL}:"))
+                .and(predicate::str::contains("kind: N")),
+        );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_create_table_with_region_local_and_port_number_options(
 ) -> Result<(), Box<dyn std::error::Error>> {
     const PORT: i32 = 8001;
