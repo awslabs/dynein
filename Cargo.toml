@@ -43,6 +43,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 dialoguer        = "0.11.0"
 env_logger       = "0.11.3"
 futures          = "0.3.31"
+jiff = { version = "0.2", default-features = false, features = ["std", "serde"] }
 log              = "0.4.21"
 regex            = "1.10.4"
 serde = { version = "1.0", features = ["derive"] }

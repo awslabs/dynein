@@ -116,6 +116,44 @@ async fn test_use() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
+async fn test_use_preserves_retry_backoff() -> Result<(), Box<dyn std::error::Error>> {
+    let mut tm = util::setup().await?;
+    let table = tm.create_temporary_table("pk", None).await?;
+    let config_path = tm.default_config_dir().join("config.yml");
+    let retry_yaml = "\
+retry:
+  default:
+    initial_backoff: 100ms
+    max_backoff: 2
+    max_attempts: 8
+  batch_write_item:
+    initial_backoff: 0.5
+    max_backoff:
+      secs: 20
+      nanos: 0
+    max_attempts: 8
+";
+    std::fs::write(&config_path, retry_yaml)?;
+    let expected: serde_yaml::Value = serde_yaml::from_str(retry_yaml)?;
+
+    // Both command forms rewrite the whole config. Repeating the write must
+    // retain all four duration representations in the retry subtree.
+    for args in [
+        vec!["--region", "local", "use", &table],
+        vec!["--region", "local", "use", "--table", &table],
+    ] {
+        tm.command()?.args(args).assert().success();
+        let actual: serde_yaml::Value =
+            serde_yaml::from_str(&std::fs::read_to_string(&config_path)?)?;
+        assert_eq!(actual["retry"], expected["retry"]);
+        assert_eq!(actual["using_table"].as_str(), Some(table.as_str()));
+        assert_eq!(actual["using_region"].as_str(), Some("local"));
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_use_switch() -> Result<(), Box<dyn std::error::Error>> {
     let mut tm = util::setup().await?;
 
