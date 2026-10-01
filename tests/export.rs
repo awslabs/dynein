@@ -116,3 +116,70 @@ async fn test_export_with_items() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_export_to_stdout() -> Result<(), Box<dyn std::error::Error>> {
+    let mut tm = util::setup().await?;
+    let table_name = tm
+        .create_temporary_table_with_items(
+            "pk",
+            None,
+            [
+                util::TemporaryItem::new("one", None, None),
+                util::TemporaryItem::new("two", None, None),
+            ],
+        )
+        .await?;
+
+    for target in ["-", "/dev/stdout"] {
+        for format in ["json", "json-compact", "jsonl", "csv"] {
+            let mut c = tm.command()?;
+            let output = c
+                .args([
+                    "--region",
+                    "local",
+                    "--table",
+                    &table_name,
+                    "export",
+                    "--output-file",
+                    target,
+                    "--format",
+                    format,
+                ])
+                .args(if format == "csv" {
+                    vec!["--keys-only"]
+                } else {
+                    vec![]
+                })
+                .output()?;
+
+            assert!(
+                output.status.success(),
+                "{format}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(String::from_utf8_lossy(&output.stderr).contains("items processed"));
+            let stdout = String::from_utf8(output.stdout)?;
+            match format {
+                "json" | "json-compact" => {
+                    let items: Vec<serde_json::Value> = serde_json::from_str(&stdout)?;
+                    assert_eq!(items.len(), 2);
+                }
+                "jsonl" => {
+                    let items = stdout
+                        .lines()
+                        .map(serde_json::from_str::<serde_json::Value>)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    assert_eq!(items.len(), 2);
+                }
+                "csv" => {
+                    assert_eq!(stdout.lines().next(), Some("pk"));
+                    assert_eq!(stdout.lines().count(), 3);
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    Ok(())
+}
