@@ -516,7 +516,7 @@ pub fn assert_eq_cmd_yaml(cmd: &mut Command, expected: &str) {
 
 pub fn assert_eq_yaml<AsStrA: AsRef<str>, AsStrE: AsRef<str>>(actual: AsStrA, expected: AsStrE) {
     assert_eq!(
-        serde_yaml::from_str::<serde_yaml::Value>(actual.as_ref()).unwrap(),
-        serde_yaml::from_str::<serde_yaml::Value>(expected.as_ref()).unwrap(),
+        yaml_serde::from_str::<yaml_serde::Value>(actual.as_ref()).unwrap(),
+        yaml_serde::from_str::<yaml_serde::Value>(expected.as_ref()).unwrap(),
     )
 }

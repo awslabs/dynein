@@ -199,11 +199,11 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
             cmd::ConfigSub::Dump => {
                 println!(
                     "{}",
-                    serde_yaml::to_string(&app::load_or_touch_cache_file(true)?)?
+                    yaml_serde::to_string(&app::load_or_touch_cache_file(true)?)?
                 );
                 println!(
                     "{}",
-                    serde_yaml::to_string(&app::load_or_touch_config_file(true)?)?
+                    yaml_serde::to_string(&app::load_or_touch_config_file(true)?)?
                 );
             }
             cmd::ConfigSub::Clear => app::remove_dynein_files()?,

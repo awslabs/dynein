@@ -112,7 +112,7 @@ pub fn print_table_description(region: &str, desc: &TableDescription) {
         count: desc.item_count.unwrap(),
         created_at: epoch_to_rfc3339(desc.creation_date_time.unwrap().as_secs_f64()),
     };
-    println!("{}", serde_yaml::to_string(&print_table).unwrap());
+    println!("{}", yaml_serde::to_string(&print_table).unwrap());
 }
 
 /// Using Vec of String which is passed via command line,
