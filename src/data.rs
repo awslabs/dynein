@@ -315,7 +315,7 @@ pub async fn get_item(
                 ),
                 Some("yaml") => println!(
                     "{}",
-                    serde_yaml::to_string(&convert_to_json(&item)).unwrap()
+                    yaml_serde::to_string(&convert_to_json(&item)).unwrap()
                 ),
                 Some("raw") => println!(
                     "{}",

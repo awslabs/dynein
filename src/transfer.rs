@@ -208,6 +208,7 @@ pub async fn export(
 
     let mut last_evaluated_key: Option<HashMap<String, AttributeValue>> = None;
     let mut progress_status = ProgressState::new(MAX_NUMBER_OF_OBSERVES);
+    let mut wrote_csv_rows = false;
     loop {
         // Invoke Scan API here. At the 1st iteration exclusive_start_key would be "None" as defined above, outside of the loop.
         // On 2nd iteration and later, passing last_evaluated_key from the previous loop as an exclusive_start_key.
@@ -251,7 +252,7 @@ pub async fn export(
                     &attrs_to_append(&ts, &attributes),
                     keys_only,
                 );
-                tmp_output_file.write_all(s.as_bytes())?;
+                write_csv_page(&mut tmp_output_file, &s, &mut wrote_csv_rows)?;
             }
             Some(o) => panic!("Invalid output format is given: {}", o),
         }
@@ -518,6 +519,23 @@ fn csv_finish(
     Ok(f)
 }
 
+/// Write one page of CSV rows, separating it from any rows written earlier.
+fn write_csv_page(
+    writer: &mut impl Write,
+    contents: &str,
+    wrote_rows: &mut bool,
+) -> Result<(), IOError> {
+    if contents.is_empty() {
+        return Ok(());
+    }
+    if *wrote_rows {
+        writer.write_all(b"\n")?;
+    }
+    writer.write_all(contents.as_bytes())?;
+    *wrote_rows = true;
+    Ok(())
+}
+
 /// This function generate CSV headers for the output file to export.
 fn build_csv_header(
     ts: &app::TableSchema,
@@ -583,6 +601,21 @@ mod tests {
     use super::*;
     use std::ops::Add;
     use std::time::Duration;
+
+    #[test]
+    fn csv_pages_are_separated_without_blank_rows() {
+        let mut output = Vec::new();
+        let mut wrote_rows = false;
+
+        write_csv_page(&mut output, "first\nsecond", &mut wrote_rows).unwrap();
+        write_csv_page(&mut output, "", &mut wrote_rows).unwrap();
+        write_csv_page(&mut output, "third\nfourth", &mut wrote_rows).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "first\nsecond\nthird\nfourth"
+        );
+    }
 
     #[test]
     fn test_progress_status() {

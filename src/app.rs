@@ -22,7 +22,6 @@ use aws_sdk_dynamodb::types::{AttributeDefinition, TableDescription};
 use aws_smithy_runtime_api::client::result::SdkError;
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use log::{debug, error, info};
-use serde_yaml::Error as SerdeYAMLError;
 use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 use std::{
@@ -35,6 +34,7 @@ use std::{
 };
 use tempfile::NamedTempFile;
 use thiserror::Error;
+use yaml_serde::Error as SerdeYAMLError;
 
 use super::control;
 use super::ddb::{key, table};
@@ -429,7 +429,7 @@ impl error::Error for DyneinConfigError {
     }
 }
 
-// Implement the conversion from existing error like `serde_yaml::Error` to `DyneinConfigError`.
+// Implement the conversion from existing error like `yaml_serde::Error` to `DyneinConfigError`.
 // This will be automatically called by `?` if underlying errors needs to be converted into a `DyneinConfigError`.
 impl From<IOError> for DyneinConfigError {
     fn from(e: IOError) -> Self {
@@ -463,7 +463,7 @@ pub fn load_or_touch_config_file(first_try: bool) -> Result<Config, DyneinConfig
 
     match fs::read_to_string(&path) {
         Ok(_str) => {
-            let config: Config = serde_yaml::from_str(&_str)?;
+            let config: Config = yaml_serde::from_str(&_str)?;
             debug!("Loaded current config: {:?}", config);
             Ok(config)
         }
@@ -475,7 +475,7 @@ pub fn load_or_touch_config_file(first_try: bool) -> Result<Config, DyneinConfig
                 "Config file doesn't exist in the path, hence creating a blank file: {}",
                 e
             );
-            let yaml_string = serde_yaml::to_string(&Config {
+            let yaml_string = yaml_serde::to_string(&Config {
                 ..Default::default()
             })
             .unwrap();
@@ -494,7 +494,7 @@ pub fn load_or_touch_cache_file(first_try: bool) -> Result<Cache, DyneinConfigEr
 
     match fs::read_to_string(&path) {
         Ok(_str) => {
-            let cache: Cache = serde_yaml::from_str(&_str)?;
+            let cache: Cache = yaml_serde::from_str(&_str)?;
             debug!("Loaded current cache: {:?}", cache);
             Ok(cache)
         }
@@ -506,7 +506,7 @@ pub fn load_or_touch_cache_file(first_try: bool) -> Result<Cache, DyneinConfigEr
                 "Cache file doesn't exist in the path, hence creating a blank file: {}",
                 e
             );
-            let yaml_string = serde_yaml::to_string(&Cache {
+            let yaml_string = yaml_serde::to_string(&Cache {
                 ..Default::default()
             })?;
 
@@ -585,7 +585,7 @@ pub async fn insert_to_table_cache(
     cache.tables = Some(table_schema_hashmap);
 
     // write to cache file
-    let cache_yaml_string = serde_yaml::to_string(&cache)?;
+    let cache_yaml_string = yaml_serde::to_string(&cache)?;
     debug!(
         "this YAML will be written to the cache file: {:#?}",
         &cache_yaml_string
@@ -781,7 +781,7 @@ async fn save_using_target(
     debug!("config file will be updated with: {:?}", config);
 
     // write to config file
-    let config_yaml_string = serde_yaml::to_string(config)?;
+    let config_yaml_string = yaml_serde::to_string(config)?;
     write_dynein_file(DyneinFileType::ConfigFile, config_yaml_string)?;
 
     // save target table info into cache.
