@@ -616,7 +616,7 @@ pub async fn remove_from_table_cache(
         Some(table_schema_hashmap)
     };
 
-    let cache_yaml_string = serde_yaml::to_string(&cache)?;
+    let cache_yaml_string = yaml_serde::to_string(&cache)?;
     debug!(
         "this YAML will be written to the cache file: {:#?}",
         &cache_yaml_string
