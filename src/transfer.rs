@@ -20,7 +20,7 @@ use std::time::Instant;
 use std::{
     collections::HashMap,
     fs,
-    io::{Error as IOError, Write},
+    io::{self, Error as IOError, Seek, Write},
     path::Path,
 };
 
@@ -115,10 +115,14 @@ impl ProgressState {
         }
     }
 
-    fn show(&self) {
+    fn show(&self, to_stderr: bool) {
         let items = self.processed_items();
         let items_per_sec = self.recent_average_processed_items_per_second();
-        let mut term = Term::stdout();
+        let mut term = if to_stderr {
+            Term::stderr()
+        } else {
+            Term::stdout()
+        };
         term.clear_line().expect("Failed to clear line");
         write!(
             term,
@@ -150,11 +154,12 @@ pub async fn export(
     // TODO: Show rough progress bar (sum(scan_output.scanned_item)/item_size_of_the_table(6hr)) to track progress.
     let ts: app::TableSchema = app::table_schema(cx).await;
     let format_str: Option<&str> = format.as_deref();
+    let to_stdout = output_file == "-" || output_file == "/dev/stdout";
 
     if ts.mode == table::Mode::Provisioned {
         let msg = "WARN: For the best performance on import/export, dynein recommends OnDemand mode. However the target table is Provisioned mode now. Proceed anyway?";
         if !Confirm::new().with_prompt(msg).interact()? {
-            app::bye(0, "Operation has been cancelled.");
+            export_bye(to_stdout, 0, "Operation has been cancelled.");
         }
     }
 
@@ -162,7 +167,7 @@ pub async fn export(
     let attributes: Option<String> = match format_str {
         Some("csv") => {
             if !keys_only && given_attributes.is_none() {
-                overwrite_attributes_or_exit(cx, &ts)
+                overwrite_attributes_or_exit(cx, &ts, to_stdout)
                     .await
                     .expect("failed to overwrite attributes based on a scanned item")
             } else {
@@ -171,7 +176,8 @@ pub async fn export(
         }
         None | Some(_) => {
             if keys_only || given_attributes.is_some() {
-                app::bye(
+                export_bye(
+                    to_stdout,
                     1,
                     "You can use --keys-only and --attributes only with CSV format.",
                 )
@@ -180,35 +186,50 @@ pub async fn export(
         }
     };
 
-    // Create output file. If target file already exists, ask users if it's ok to delete contents of the file.
-    // Though final output file is created here, it would be blank until scan all items. You can see progress in temporary output file.
-    let f: fs::File = if Path::new(&output_file).exists() {
+    // Create the output file, or use stdout for a pipe. Confirm before truncating an existing file.
+    let mut f: Box<dyn Write> = if to_stdout {
+        Box::new(io::stdout())
+    } else if Path::new(&output_file).exists() {
         let msg = "Specified output file already exists. Is it OK to truncate contents?";
         if !Confirm::new().with_prompt(msg).interact()? {
-            app::bye(0, "Operation has been cancelled.");
+            export_bye(to_stdout, 0, "Operation has been cancelled.");
         }
         debug!("truncating existing output file.");
         let _f = fs::OpenOptions::new().append(true).open(&output_file)?;
         _f.set_len(0)?;
-        _f
+        Box::new(_f)
     } else {
-        fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&output_file)?
+        Box::new(
+            fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&output_file)?,
+        )
     };
 
-    // These temporary file is used to store data "body" and finally merged into output file.
-    let tmp_output_filename: &str = &format!("{}_tmp", output_file);
-    let mut tmp_output_file: fs::File = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(tmp_output_filename)?;
-    tmp_output_file.set_len(0)?;
+    // Keep file exports buffered, but stream directly when stdout is requested.
+    let mut tmp_output_file = if to_stdout {
+        None
+    } else {
+        Some(tempfile::tempfile()?)
+    };
+    let writer: &mut dyn Write = match tmp_output_file.as_mut() {
+        Some(tmp) => tmp,
+        None => &mut f,
+    };
+
+    let attributes_to_append = attrs_to_append(&ts, &attributes, to_stdout);
+    match format_str {
+        None | Some("json") | Some("json-compact") => writer.write_all(b"[")?,
+        Some("csv") => writer
+            .write_all(build_csv_header(&ts, attributes_to_append.clone(), keys_only).as_bytes())?,
+        _ => {}
+    }
 
     let mut last_evaluated_key: Option<HashMap<String, AttributeValue>> = None;
     let mut progress_status = ProgressState::new(MAX_NUMBER_OF_OBSERVES);
     let mut wrote_csv_rows = false;
+    let mut wrote_json_items = false;
     loop {
         // Invoke Scan API here. At the 1st iteration exclusive_start_key would be "None" as defined above, outside of the loop.
         // On 2nd iteration and later, passing last_evaluated_key from the previous loop as an exclusive_start_key.
@@ -231,32 +252,31 @@ pub async fn export(
         match format_str {
             None | Some("json") => {
                 let s = serde_json::to_string_pretty(&data::convert_to_json_vec(&items))?;
-                tmp_output_file.write_all(connectable_json(s, false).as_bytes())?;
+                write_json_page(writer, s, false, &mut wrote_json_items)?;
             }
             Some("jsonl") => {
-                let mut s: String = String::new();
                 for item in &items {
-                    s.push_str(&serde_json::to_string(&data::convert_to_json(item))?);
-                    s.push('\n');
+                    writer.write_all(
+                        serde_json::to_string(&data::convert_to_json(item))?.as_bytes(),
+                    )?;
+                    writer.write_all(b"\n")?;
                 }
-                tmp_output_file.write_all(s.as_bytes())?;
             }
             Some("json-compact") => {
                 let s = serde_json::to_string(&data::convert_to_json_vec(&items))?;
-                tmp_output_file.write_all(connectable_json(s, true).as_bytes())?;
+                write_json_page(writer, s, true, &mut wrote_json_items)?;
             }
             Some("csv") => {
-                let s = data::convert_items_to_csv_lines(
-                    &items,
-                    &ts,
-                    &attrs_to_append(&ts, &attributes),
-                    keys_only,
-                );
-                write_csv_page(&mut tmp_output_file, &s, &mut wrote_csv_rows)?;
+                let s =
+                    data::convert_items_to_csv_lines(&items, &ts, &attributes_to_append, keys_only);
+                write_csv_page(writer, &s, &mut wrote_csv_rows)?;
             }
             Some(o) => panic!("Invalid output format is given: {}", o),
         }
-        progress_status.show();
+        if to_stdout {
+            writer.flush()?;
+        }
+        progress_status.show(to_stdout);
 
         // update last_evaluated_key for the next iteration.
         // If there's no more item in the table, last_evaluated_key would be "None" and it means it's ok to break the loop.
@@ -271,22 +291,18 @@ pub async fn export(
     }
 
     match format_str {
-        None | Some("json") => json_finish(f, tmp_output_filename)?.write_all(b"\n]")?,
-        Some("json-compact") => json_finish(f, tmp_output_filename)?.write_all(b"]")?,
-        Some("jsonl") => jsonl_finish(f, tmp_output_filename)?,
-        Some("csv") => csv_finish(
-            f,
-            tmp_output_filename,
-            &ts,
-            attrs_to_append(&ts, &attributes),
-            keys_only,
-        )?
-        .write_all(b"\n")?,
+        None | Some("json") => writer.write_all(b"\n]")?,
+        Some("json-compact") => writer.write_all(b"]")?,
+        Some("jsonl") => {}
+        Some("csv") => writer.write_all(b"\n")?,
         Some(o) => panic!("Invalid output format is given: {}", o),
     };
-
-    // As mentioned earlier, deleting temporary file here in all formats.
-    fs::remove_file(tmp_output_filename)?;
+    writer.flush()?;
+    if let Some(mut tmp) = tmp_output_file {
+        tmp.rewind()?;
+        io::copy(&mut tmp, &mut f)?;
+    }
+    f.flush()?;
 
     Ok(())
 }
@@ -349,7 +365,7 @@ pub async fn import(
                 if i % 25 == 0 {
                     write_csv_matrix(cx, &matrix, &headers, enable_set_inference).await?;
                     progress_status.add_observation(25);
-                    progress_status.show();
+                    progress_status.show(false);
                     matrix.clear();
                 }
             }
@@ -357,7 +373,7 @@ pub async fn import(
             if !matrix.is_empty() {
                 write_csv_matrix(cx, &matrix, &headers, enable_set_inference).await?;
                 progress_status.add_observation(matrix.len());
-                progress_status.show();
+                progress_status.show(false);
             }
         }
         Some(o) => panic!("Invalid input format is given: {}", o),
@@ -372,21 +388,28 @@ Private functions
 async fn overwrite_attributes_or_exit(
     cx: &app::Context,
     ts: &app::TableSchema,
+    to_stderr: bool,
 ) -> Result<Option<String>, dialoguer::Error> {
-    println!("As neither --keys-only nor --attributes options are given, fetching an item to understand attributes to export...");
-    let suggested_attributes: Vec<SuggestedAttribute> = suggest_attributes(cx, ts).await;
+    print_export_info(to_stderr, "As neither --keys-only nor --attributes options are given, fetching an item to understand attributes to export...");
+    let suggested_attributes: Vec<SuggestedAttribute> = suggest_attributes(cx, ts, to_stderr).await;
 
     // if at least one attribute found
-    println!("Found following attributes in the first item in the table:");
+    print_export_info(
+        to_stderr,
+        "Found following attributes in the first item in the table:",
+    );
     for preview_attribute in &suggested_attributes {
-        println!(
-            "  - {} ({})",
-            preview_attribute.name, preview_attribute.type_str
+        print_export_info(
+            to_stderr,
+            &format!(
+                "  - {} ({})",
+                preview_attribute.name, preview_attribute.type_str
+            ),
         );
     }
     let msg = "Are you OK to export items in CSV with columns(attributes) above?";
     if !Confirm::new().with_prompt(msg).interact()? {
-        app::bye(0, "Operation has been cancelled. You can use --keys-only or --attributes option to specify columns explicitly.");
+        export_bye(to_stderr, 0, "Operation has been cancelled. You can use --keys-only or --attributes option to specify columns explicitly.");
     }
 
     // Overwrite given attributes with suggested attributes beased on a sampled item
@@ -400,7 +423,11 @@ async fn overwrite_attributes_or_exit(
 }
 
 /// This function scan the fisrt item from the target table and use it as a source of attributes.
-async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<SuggestedAttribute> {
+async fn suggest_attributes(
+    cx: &app::Context,
+    ts: &app::TableSchema,
+    to_stderr: bool,
+) -> Vec<SuggestedAttribute> {
     let mut attributes_suggestion = vec![];
 
     // items: Vec<HashMap<String, AttributeValue>>
@@ -418,7 +445,11 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
     .expect("items should be 'Some' even if there's no item in the table.");
 
     if items.is_empty() {
-        app::bye(0, "No item to export in this table. Quit the operation.");
+        export_bye(
+            to_stderr,
+            0,
+            "No item to export in this table. Quit the operation.",
+        );
     }
 
     // Filter out primary keys. i.e. select attributes that aren't required by the table's keyschema.
@@ -448,26 +479,43 @@ async fn suggest_attributes(cx: &app::Context, ts: &app::TableSchema) -> Vec<Sug
     attributes_suggestion
 }
 
-fn attrs_to_append(ts: &app::TableSchema, attributes: &Option<String>) -> Option<Vec<String>> {
+fn attrs_to_append(
+    ts: &app::TableSchema,
+    attributes: &Option<String>,
+    to_stderr: bool,
+) -> Option<Vec<String>> {
     attributes
         .as_ref()
-        .map(|ats| filter_attributes_to_append(ts, ats))
+        .map(|ats| filter_attributes_to_append(ts, ats, to_stderr))
 }
 
 /// This function takes list of attributes separated by comma (e.g. "name,age,address")
 /// and return vec of these strings, filtering pk/sk.
-fn filter_attributes_to_append(ts: &app::TableSchema, ats: &str) -> Vec<String> {
+fn filter_attributes_to_append(ts: &app::TableSchema, ats: &str, to_stderr: bool) -> Vec<String> {
     let mut attributes_to_append: Vec<String> = vec![];
     let splitted_attributes: Vec<String> = ats.split(',').map(|x| x.trim().to_owned()).collect();
     for attr in splitted_attributes {
         // skip if attributes contain primary key(s)
         if attr == ts.pk.name || (ts.sk.is_some() && attr == ts.sk.as_ref().unwrap().name) {
-            println!("NOTE: primary keys are included by default and you don't need to give them as a part of --attributes.");
+            print_export_info(to_stderr, "NOTE: primary keys are included by default and you don't need to give them as a part of --attributes.");
             continue;
         }
         attributes_to_append.push(attr);
     }
     attributes_to_append
+}
+
+fn print_export_info(to_stderr: bool, message: &str) {
+    if to_stderr {
+        eprintln!("{message}");
+    } else {
+        println!("{message}");
+    }
+}
+
+fn export_bye(to_stderr: bool, code: i32, message: &str) -> ! {
+    print_export_info(to_stderr, message);
+    std::process::exit(code);
 }
 
 /// This function tweaks scan output items.
@@ -487,41 +535,29 @@ fn connectable_json(mut s: String, compact: bool) -> String {
     s
 }
 
-/// This function takes final output file and temporary filename which has incomplete JSON body, and write final output JSON file.
-/// last "]" is not added in this function, as it depends on json or json-compact.
-fn json_finish(mut f: fs::File, tmp_output_filename: &str) -> Result<fs::File, IOError> {
-    f.write_all(b"[")?; // write initial "[" as the first letter of JSON array.
-    let mut contents = fs::read_to_string(tmp_output_filename)?;
-    let len = contents.len();
-    contents.truncate(len - 1); // remove last ","
-    f.write_all(contents.as_bytes())?;
-    Ok(f)
-}
-
-/// This function takes final output file and temporary filename. For JSON"L", copying whole content is enough.
-fn jsonl_finish(mut f: fs::File, tmp_output_filename: &str) -> Result<(), IOError> {
-    let contents = fs::read_to_string(tmp_output_filename)?;
-    f.write_all(contents.as_bytes())?;
+/// Append one JSON page without breaking the surrounding array.
+fn write_json_page(
+    writer: &mut dyn Write,
+    contents: String,
+    compact: bool,
+    wrote_items: &mut bool,
+) -> Result<(), IOError> {
+    let mut body = connectable_json(contents, compact);
+    body.pop(); // Remove the comma added for the next page.
+    if body.is_empty() {
+        return Ok(());
+    }
+    if *wrote_items {
+        writer.write_all(b",")?;
+    }
+    writer.write_all(body.as_bytes())?;
+    *wrote_items = true;
     Ok(())
-}
-
-/// This function takes final output file and temporary filename, writing CSV header and then copying contents to the output file.
-fn csv_finish(
-    mut f: fs::File,
-    tmp_output_filename: &str,
-    ts: &app::TableSchema,
-    attributes_to_append: Option<Vec<String>>,
-    keys_only: bool,
-) -> Result<fs::File, IOError> {
-    f.write_all(build_csv_header(ts, attributes_to_append, keys_only).as_bytes())?;
-    let contents = fs::read_to_string(tmp_output_filename)?;
-    f.write_all(contents.as_bytes())?;
-    Ok(f)
 }
 
 /// Write one page of CSV rows, separating it from any rows written earlier.
 fn write_csv_page(
-    writer: &mut impl Write,
+    writer: &mut dyn Write,
     contents: &str,
     wrote_rows: &mut bool,
 ) -> Result<(), IOError> {
@@ -571,7 +607,7 @@ async fn write_array_of_jsons_with_chunked_25(
         let request_items: HashMap<String, Vec<WriteRequest>> = batch::convert_jsonvals_to_request_items(cx, items, enable_set_inference).await?;
         batch::batch_write_until_processed(cx, request_items).await?;
         progress_status.add_observation(count);
-        progress_status.show();
+        progress_status.show(false);
     }
     Ok(())
 }
@@ -599,6 +635,7 @@ async fn write_csv_matrix(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ddb::key::{Key, KeyType};
     use std::ops::Add;
     use std::time::Duration;
 
@@ -615,6 +652,59 @@ mod tests {
             String::from_utf8(output).unwrap(),
             "first\nsecond\nthird\nfourth"
         );
+    }
+
+    #[test]
+    fn json_pages_form_one_valid_array() {
+        let mut json = Vec::new();
+        let mut wrote_items = false;
+        json.extend_from_slice(b"[");
+        write_json_page(&mut json, "[{\"pk\":1}]".to_owned(), true, &mut wrote_items).unwrap();
+        write_json_page(&mut json, "[]".to_owned(), true, &mut wrote_items).unwrap();
+        write_json_page(&mut json, "[{\"pk\":2}]".to_owned(), true, &mut wrote_items).unwrap();
+        json.extend_from_slice(b"]");
+        assert_eq!(String::from_utf8(json).unwrap(), r#"[{"pk":1},{"pk":2}]"#);
+
+        let mut empty = Vec::new();
+        let mut wrote_items = false;
+        empty.extend_from_slice(b"[");
+        write_json_page(&mut empty, "[]".to_owned(), true, &mut wrote_items).unwrap();
+        empty.extend_from_slice(b"]");
+        assert_eq!(String::from_utf8(empty).unwrap(), "[]");
+
+        let mut pretty = Vec::new();
+        let mut wrote_items = false;
+        pretty.extend_from_slice(b"[");
+        write_json_page(
+            &mut pretty,
+            "[\n  {\n    \"pk\": 1\n  }\n]".to_owned(),
+            false,
+            &mut wrote_items,
+        )
+        .unwrap();
+        pretty.extend_from_slice(b"\n]");
+        assert!(serde_json::from_slice::<serde_json::Value>(&pretty).is_ok());
+    }
+
+    #[test]
+    fn csv_header_and_rows_are_separated() {
+        let schema = app::TableSchema {
+            region: "local".to_owned(),
+            name: "test".to_owned(),
+            pk: Key {
+                name: "pk".to_owned(),
+                kind: KeyType::S,
+            },
+            sk: None,
+            indexes: None,
+            mode: table::Mode::OnDemand,
+        };
+        let mut csv = Vec::new();
+        csv.extend_from_slice(build_csv_header(&schema, None, true).as_bytes());
+        let mut wrote_rows = false;
+        write_csv_page(&mut csv, "one\ntwo", &mut wrote_rows).unwrap();
+        csv.extend_from_slice(b"\n");
+        assert_eq!(csv, b"pk\none\ntwo\n");
     }
 
     #[test]

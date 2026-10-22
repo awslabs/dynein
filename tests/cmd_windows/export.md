@@ -14,7 +14,7 @@ Usage: dy[EXE] export [OPTIONS] --output-file <OUTPUT_FILE>
 
 Options:
   -o, --output-file <OUTPUT_FILE>
-          Output target filename where dynein exports data into.
+          Output filename, or '-' to write data to stdout. '/dev/stdout' also works.
 
   -f, --format <FORMAT>
           Data format for export items.
@@ -64,7 +64,7 @@ Usage: dy[EXE] export [OPTIONS] --output-file <OUTPUT_FILE>
 
 Options:
   -o, --output-file <OUTPUT_FILE>
-          Output target filename where dynein exports data into.
+          Output filename, or '-' to write data to stdout. '/dev/stdout' also works.
 
   -f, --format <FORMAT>
           Data format for export items.
