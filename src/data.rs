@@ -145,7 +145,7 @@ pub async fn scan(
     .items
     .expect("items should be 'Some' even if there's no item in the table.");
     match cx.output.as_deref() {
-        None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
+        None | Some("table") => display_items_table(items, &ts, None, attributes, keys_only),
         Some("json") => println!(
             "{}",
             serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()
@@ -239,7 +239,7 @@ pub async fn query(cx: &app::Context, params: QueryParams) {
     let req = ddb
         .query()
         .table_name(ts.name.to_string())
-        .set_index_name(params.index)
+        .set_index_name(params.index.clone())
         .set_limit(params.limit)
         .set_key_condition_expression(query_params.exp)
         .set_expression_attribute_names(query_params.names)
@@ -253,9 +253,13 @@ pub async fn query(cx: &app::Context, params: QueryParams) {
             match res.items {
                 None => panic!("This message should not be shown"), // as Query returns 'Some([])' if there's no item to return.
                 Some(items) => match cx.output.as_deref() {
-                    None | Some("table") => {
-                        display_items_table(items, &ts, &params.attributes, params.keys_only)
-                    }
+                    None | Some("table") => display_items_table(
+                        items,
+                        &ts,
+                        params.index.as_deref(),
+                        &params.attributes,
+                        params.keys_only,
+                    ),
                     Some("json") => println!(
                         "{}",
                         serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()
@@ -954,6 +958,28 @@ fn append_sort_key_expression(
     })
 }
 
+/// Return index keys first, then table keys, without repeating shared names.
+fn table_key_columns<'a>(ts: &'a app::TableSchema, index_name: Option<&str>) -> Vec<&'a str> {
+    let mut columns = Vec::with_capacity(4);
+    if let Some(index) = ts.indexes.as_ref().and_then(|indexes| {
+        indexes
+            .iter()
+            .find(|index| Some(index.name.as_str()) == index_name)
+    }) {
+        columns.push(index.pk.name.as_str());
+        if let Some(sk) = &index.sk {
+            columns.push(sk.name.as_str());
+        }
+    }
+    for key in [Some(&ts.pk), ts.sk.as_ref()].iter().flatten() {
+        let name = key.name.as_str();
+        if !columns.contains(&name) {
+            columns.push(name);
+        }
+    }
+    columns
+}
+
 /// Display items as a readable table format:
 ///   $ dy scan --output table
 ///   userName    registeredAt
@@ -963,6 +989,7 @@ fn append_sort_key_expression(
 fn display_items_table(
     items: Vec<HashMap<String, AttributeValue>>,
     ts: &app::TableSchema,
+    index_name: Option<&str>,
     selected_attributes: &Option<String>,
     keys_only: bool,
 ) {
@@ -972,12 +999,10 @@ fn display_items_table(
         return;
     };
 
-    // build header - first, primary key(s). Even index, key(s) are always projected.
+    // Build header with index keys first, then table keys. All are projected.
     // ref: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html#GSI.Projections
-    let mut header: Vec<&str> = vec![ts.pk.name.as_str()];
-    if let Some(sk) = &ts.sk {
-        header.push(sk.name.as_str())
-    };
+    let key_columns = table_key_columns(ts, index_name);
+    let mut header = key_columns.clone();
 
     // build header - next, attribute names or aggregated "attributes" header, unless --keys-only flag is set.
     if !keys_only {
@@ -996,14 +1021,10 @@ fn display_items_table(
     let mut cells: Vec<String> = vec![]; // may be able to use with_capacity to initialize the vec.
     for mut item in items {
         let mut item_attributes = vec![];
-        // First, take primary key(s) of each item.
-        let x: Option<AttributeValue> = item.remove(&ts.pk.name);
-        if let Some(sk) = &ts.sk {
-            let y: Option<AttributeValue> = item.remove(&sk.name);
-            item_attributes.extend(vec![attrval_to_cell_print(x), attrval_to_cell_print(y)]);
-        } else {
-            item_attributes.extend(vec![attrval_to_cell_print(x)]);
-        };
+        // Print each key once, in the same order as the header.
+        for key in &key_columns {
+            item_attributes.push(attrval_to_cell_print(item.remove(*key)));
+        }
 
         if !item.is_empty() {
             if let Some(_attributes) = selected_attributes {
@@ -1252,6 +1273,45 @@ mod tests {
     use super::*;
     use serde_json::Value;
     use std::collections::HashMap;
+
+    fn schema_with_index(index_pk: &str, index_sk: Option<&str>) -> app::TableSchema {
+        let key = |name: &str| key::Key {
+            name: name.to_owned(),
+            kind: key::KeyType::S,
+        };
+        app::TableSchema {
+            region: "local".to_owned(),
+            name: "test-table".to_owned(),
+            pk: key("pk"),
+            sk: Some(key("sk")),
+            indexes: Some(vec![app::IndexSchema {
+                name: "gsi".to_owned(),
+                kind: app::IndexType::Gsi,
+                pk: key(index_pk),
+                sk: index_sk.map(key),
+            }]),
+            mode: crate::ddb::table::Mode::OnDemand,
+        }
+    }
+
+    #[test]
+    fn test_query_key_columns_include_index_keys_before_table_keys() {
+        let schema = schema_with_index("gsi_pk", Some("gsi_sk"));
+        assert_eq!(
+            table_key_columns(&schema, Some("gsi")),
+            vec!["gsi_pk", "gsi_sk", "pk", "sk"]
+        );
+        assert_eq!(table_key_columns(&schema, None), vec!["pk", "sk"]);
+    }
+
+    #[test]
+    fn test_query_key_columns_do_not_repeat_shared_keys() {
+        let schema = schema_with_index("pk", Some("gsi_sk"));
+        assert_eq!(
+            table_key_columns(&schema, Some("gsi")),
+            vec!["pk", "gsi_sk", "sk"]
+        );
+    }
 
     #[test]
     fn test_generate_update_expressions_set_int() {
