@@ -78,7 +78,18 @@ async fn dispatch(context: &mut app::Context, subcommand: cmd::Sub) -> Result<()
                     mode,
                     wcu,
                     rcu,
-                } => control::update_table(context, table_name_to_update, mode, wcu, rcu).await,
+                    inherit_index_capacity,
+                } => {
+                    control::update_table(
+                        context,
+                        table_name_to_update,
+                        mode,
+                        wcu,
+                        rcu,
+                        inherit_index_capacity,
+                    )
+                    .await?
+                }
             },
             cmd::AdminSub::Delete { target_type } => match target_type {
                 cmd::DeleteSub::Table {

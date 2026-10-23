@@ -19,7 +19,7 @@ use aws_sdk_dynamodb::{
     types::{
         BackupStatus, BackupSummary, BillingMode, CreateGlobalSecondaryIndexAction,
         GlobalSecondaryIndexUpdate, Projection, ProjectionType, ProvisionedThroughput,
-        TableDescription,
+        TableDescription, UpdateGlobalSecondaryIndexAction,
     },
     Client as DynamoDbSdkClient,
 };
@@ -272,13 +272,145 @@ pub async fn create_index(cx: &app::Context, index_name: String, given_keys: Vec
     }
 }
 
+const INHERIT_INDEX_CAPACITY_FLAG: &str = "--inherit-index-capacity";
+
+enum InheritedIndexUpdates {
+    /// The table update does not need index throughput.
+    NotApplicable,
+    /// The user declined to set index capacity. Do not call UpdateTable.
+    Cancelled,
+    /// Include these updates in the same UpdateTable request.
+    Apply(Vec<GlobalSecondaryIndexUpdate>),
+}
+
+fn global_secondary_index_names(desc: &TableDescription) -> Result<Vec<String>, String> {
+    let Some(indexes) = desc.global_secondary_indexes.as_ref() else {
+        return Ok(Vec::new());
+    };
+
+    let mut names = Vec::with_capacity(indexes.len());
+    for index in indexes {
+        match index.index_name() {
+            Some(name) if !name.is_empty() => names.push(name.to_string()),
+            _ => {
+                return Err(
+                    "A global secondary index is missing a name, so its provisioned capacity cannot be set.".to_string(),
+                );
+            }
+        }
+    }
+    Ok(names)
+}
+
+fn format_index_capacity_lines(index_names: &[String], rcu: i64, wcu: i64) -> String {
+    index_names
+        .iter()
+        .map(|name| format!("- {name}: rcu {rcu}, wcu {wcu}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn index_capacity_updates(
+    index_names: &[String],
+    throughput: &ProvisionedThroughput,
+) -> Result<Vec<GlobalSecondaryIndexUpdate>, aws_smithy_types::error::operation::BuildError> {
+    let mut updates = Vec::with_capacity(index_names.len());
+    for name in index_names {
+        let action = UpdateGlobalSecondaryIndexAction::builder()
+            .index_name(name)
+            .provisioned_throughput(throughput.clone())
+            .build()?;
+        updates.push(GlobalSecondaryIndexUpdate::builder().update(action).build());
+    }
+    Ok(updates)
+}
+
+/// Ask before applying the table's RCU/WCU to every existing GSI.
+///
+/// Returns whether the UpdateTable call should proceed. A non-interactive run
+/// without `--inherit-index-capacity` is an error so the process does not
+/// panic on a missing TTY.
+fn confirm_inherited_index_capacity(
+    table_name: &str,
+    index_names: &[String],
+    rcu: i64,
+    wcu: i64,
+    inherit_index_capacity: bool,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    println!(
+        "Switching '{table_name}' from on-demand to provisioned mode will set capacity on these global secondary indexes."
+    );
+    println!("Each index is billed in addition to the table:");
+    println!("{}", format_index_capacity_lines(index_names, rcu, wcu));
+
+    if inherit_index_capacity {
+        println!("{INHERIT_INDEX_CAPACITY_FLAG} was set; applying this capacity without a prompt.");
+        return Ok(true);
+    }
+
+    let accepted = Confirm::new()
+        .with_prompt("Apply this capacity to every index?")
+        .interact()
+        .map_err(|err| {
+            format!(
+                "{err}. Re-run with {INHERIT_INDEX_CAPACITY_FLAG} to apply the table RCU/WCU to every global secondary index without a prompt."
+            )
+        })?;
+    if !accepted {
+        println!("The table update operation has been canceled.");
+    }
+    Ok(accepted)
+}
+
+fn inherited_index_updates(
+    table_name: &str,
+    desc: &TableDescription,
+    switching_to_mode: &Option<table::Mode>,
+    provisioned_throughput: Option<&ProvisionedThroughput>,
+    inherit_index_capacity: bool,
+) -> Result<InheritedIndexUpdates, Box<dyn std::error::Error>> {
+    let switching_to_provisioned = matches!(
+        (
+            table::extract_mode(&desc.billing_mode_summary),
+            switching_to_mode.as_ref()
+        ),
+        (table::Mode::OnDemand, Some(table::Mode::Provisioned))
+    );
+    if !switching_to_provisioned {
+        return Ok(InheritedIndexUpdates::NotApplicable);
+    }
+
+    let index_names = global_secondary_index_names(desc)?;
+    if index_names.is_empty() {
+        return Ok(InheritedIndexUpdates::NotApplicable);
+    }
+
+    let throughput = provisioned_throughput
+        .ok_or("Provisioned throughput is required when switching a table to provisioned mode.")?;
+    if !confirm_inherited_index_capacity(
+        table_name,
+        &index_names,
+        throughput.read_capacity_units(),
+        throughput.write_capacity_units(),
+        inherit_index_capacity,
+    )? {
+        return Ok(InheritedIndexUpdates::Cancelled);
+    }
+
+    Ok(InheritedIndexUpdates::Apply(index_capacity_updates(
+        &index_names,
+        throughput,
+    )?))
+}
+
 pub async fn update_table(
     cx: &app::Context,
     table_name_to_update: String,
     mode_string: Option<String>,
     wcu: Option<i64>,
     rcu: Option<i64>,
-) {
+    inherit_index_capacity: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Retrieve TableDescription of the table to update, current (before update) status.
     let desc: TableDescription = describe_table_api(cx, table_name_to_update.clone()).await;
 
@@ -347,20 +479,34 @@ pub async fn update_table(
         },
     };
 
-    // TODO: support updating CU of the table with GSI. If the table has GSIs, you must specify CU for them at the same time.
-    // error message: One or more parameter values were invalid: ProvisionedThroughput must be specified for index: xyz_index,abc_index2
-    //   if table has gsi
-    //     build GlobalSecondaryIndexUpdates { [... current values ...] }
+    // Switching OnDemand -> Provisioned must send ProvisionedThroughput for every
+    // existing GSI in the same request. Per-index values, and changing capacity
+    // on a table that is already provisioned, are left for a separate change.
+    let gsi_updates = match inherited_index_updates(
+        &table_name_to_update,
+        &desc,
+        &switching_to_mode,
+        provisioned_throughput.as_ref(),
+        inherit_index_capacity,
+    )? {
+        InheritedIndexUpdates::Cancelled => return Ok(()),
+        InheritedIndexUpdates::NotApplicable => None,
+        InheritedIndexUpdates::Apply(updates) => Some(updates),
+    };
 
     match update_table_api(
         cx,
         table_name_to_update,
         switching_to_mode,
         provisioned_throughput,
+        gsi_updates,
     )
     .await
     {
-        Ok(desc) => table::print_table_description(cx.effective_region().await.as_ref(), &desc),
+        Ok(desc) => {
+            table::print_table_description(cx.effective_region().await.as_ref(), &desc);
+            Ok(())
+        }
         Err(e) => {
             debug!("UpdateTable API call got an error -- {:#?}", e);
             app::bye_with_sdk_error(1, e);
@@ -373,7 +519,8 @@ pub async fn update_table(
 ///   * [x] BillingMode
 ///   * [x] ProvisionedThroughput > obj
 ///   * [-] AttributeDefinitions > array of AttributeDefinition obj
-///   * [-] GlobalSecondaryIndexUpdates > Create/Update/Delete and details of the update on GSIs
+///   * [x] GlobalSecondaryIndexUpdates > Update throughput of existing GSIs when switching to Provisioned
+///   * [-] GlobalSecondaryIndexUpdates > Create/Delete (Create is implemented in `create_index`)
 ///   * [-] ReplicaUpdates > Create/Update/Delete and details of the update on Global Tbles replicas
 ///   * [] SSESpecification > obj
 ///   * [] StreamSpecification > obj
@@ -385,6 +532,7 @@ async fn update_table_api(
     table_name_to_update: String,
     switching_to_mode: Option<table::Mode>,
     provisioned_throughput: Option<ProvisionedThroughput>,
+    gsi_updates: Option<Vec<GlobalSecondaryIndexUpdate>>,
 ) -> Result<
     TableDescription,
     aws_sdk_dynamodb::error::SdkError<aws_sdk_dynamodb::operation::update_table::UpdateTableError>,
@@ -398,6 +546,7 @@ async fn update_table_api(
         .table_name(table_name_to_update)
         .set_billing_mode(switching_to_mode.map(|v| v.into()))
         .set_provisioned_throughput(provisioned_throughput)
+        .set_global_secondary_index_updates(gsi_updates)
         .send()
         .await
         .map(|res| {
@@ -648,4 +797,64 @@ fn fetch_arn_from_backup_name(
         .unwrap() /* BackupSummary */
         .backup_arn /* Option<String> */
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        format_index_capacity_lines, global_secondary_index_names, index_capacity_updates,
+    };
+    use aws_sdk_dynamodb::types::{
+        GlobalSecondaryIndexDescription, ProvisionedThroughput, TableDescription,
+    };
+
+    #[test]
+    fn capacity_lines_list_every_index_with_the_table_units() {
+        let lines = format_index_capacity_lines(&["idx".to_string(), "other".to_string()], 100, 10);
+        assert_eq!(lines, "- idx: rcu 100, wcu 10\n- other: rcu 100, wcu 10");
+    }
+
+    #[test]
+    fn index_names_skip_tables_without_a_gsi() {
+        let desc = TableDescription::builder().build();
+        assert!(global_secondary_index_names(&desc).unwrap().is_empty());
+    }
+
+    #[test]
+    fn index_names_reject_a_nameless_gsi() {
+        let desc = TableDescription::builder()
+            .global_secondary_indexes(GlobalSecondaryIndexDescription::builder().build())
+            .build();
+        assert!(global_secondary_index_names(&desc).is_err());
+    }
+
+    #[test]
+    fn index_capacity_updates_reuse_the_table_throughput() {
+        let throughput = ProvisionedThroughput::builder()
+            .read_capacity_units(5)
+            .write_capacity_units(10)
+            .build()
+            .unwrap();
+        let updates =
+            index_capacity_updates(&["idx".to_string(), "other".to_string()], &throughput).unwrap();
+
+        assert_eq!(updates.len(), 2);
+        let first = updates[0].update().unwrap();
+        assert_eq!(first.index_name(), "idx");
+        assert_eq!(
+            first
+                .provisioned_throughput()
+                .unwrap()
+                .read_capacity_units(),
+            5
+        );
+        assert_eq!(
+            first
+                .provisioned_throughput()
+                .unwrap()
+                .write_capacity_units(),
+            10
+        );
+        assert_eq!(updates[1].update().unwrap().index_name(), "other");
+    }
 }
