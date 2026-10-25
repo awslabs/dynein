@@ -150,6 +150,18 @@ async fn test_admin_update_table_mode_with_index() -> Result<(), Box<dyn std::er
                 .and(predicate::str::contains("wcu: 0").not()),
         );
 
+    // Query the table again so this checks the GSI's persisted throughput,
+    // rather than only the UpdateTable response.
+    tm.command()?
+        .args(["--region", "local", "admin", "desc", &tbl])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("mode: Provisioned")
+                .and(predicate::str::contains("gsi:\n- name: idx"))
+                .and(predicate::str::contains("    wcu: 10\n    rcu: 100")),
+        );
+
     tm.command()?
         .args([
             "--region", "local", "admin", "update", "table", &tbl, "--mode", "ondemand",
@@ -182,6 +194,16 @@ async fn test_admin_update_table_mode_with_index() -> Result<(), Box<dyn std::er
                 .and(predicate::str::contains("wcu: 5"))
                 .and(predicate::str::contains("rcu: 0").not())
                 .and(predicate::str::contains("wcu: 0").not()),
+        );
+
+    tm.command()?
+        .args(["--region", "local", "admin", "desc", &tbl])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("mode: Provisioned")
+                .and(predicate::str::contains("gsi:\n- name: idx"))
+                .and(predicate::str::contains("    wcu: 5\n    rcu: 5")),
         );
 
     Ok(())
