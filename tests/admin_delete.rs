@@ -16,6 +16,7 @@
 pub mod util;
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
+use std::fs;
 
 #[tokio::test]
 async fn test_admin_delete_non_existent_table() -> Result<(), Box<dyn std::error::Error>> {
@@ -73,6 +74,56 @@ async fn test_admin_delete_existent_table() -> Result<(), Box<dyn std::error::Er
 
     // To prevent double deletion in the Drop trait, exclude the table here
     tm.remove_temporary_table(&table_name);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_admin_delete_removes_table_from_cache() -> Result<(), Box<dyn std::error::Error>> {
+    let mut tm = util::setup_with_lock().await?;
+    let table_name = tm.create_temporary_table("pk", None).await?;
+    let other_table_name = tm.create_temporary_table("pk", None).await?;
+
+    tm.command()?
+        .args(["--region", "local", "use", &table_name])
+        .assert()
+        .success();
+    tm.command()?
+        .args([
+            "--region",
+            "local",
+            "admin",
+            "delete",
+            "table",
+            &table_name,
+            "--yes",
+        ])
+        .assert()
+        .success();
+    tm.remove_temporary_table(&table_name);
+
+    let cache = fs::read_to_string(tm.default_config_dir().join("cache.yml"))?;
+    assert!(!cache.contains(&table_name));
+    assert!(cache.contains(&other_table_name));
+
+    tm.command()?
+        .args([
+            "--region",
+            "local",
+            "admin",
+            "create",
+            "table",
+            &table_name,
+            "--keys",
+            "pk,N",
+        ])
+        .assert()
+        .success();
+    tm.add_tables_to_delete([table_name.clone()]);
+    tm.command()?
+        .args(["--region", "local", "put", "1"])
+        .assert()
+        .success();
 
     Ok(())
 }
