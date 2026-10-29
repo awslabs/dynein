@@ -59,7 +59,7 @@ itertools = "0.15.0"
 console = "0.16.6"
 brotli = "6.0.0"
 base64 = "0.23.1"
-thiserror = "1.0.59"
+thiserror = "2.0.18"
 home = "0.5.9"
 
 [dev-dependencies]
