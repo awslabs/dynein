@@ -268,12 +268,13 @@ async fn test_query_for_index() -> Result<(), Box<dyn std::error::Error>> {
             "--table",
             &table_name,
             "query",
-            "abc",
+            "1",
             "--index",
             "gsi",
         ])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::is_match("gsi +pk +sk +attributes\\n1 +abc +1").unwrap());
 
     Ok(())
 }
