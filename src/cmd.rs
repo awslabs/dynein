@@ -338,7 +338,7 @@ pub enum Sub {
     /// When you export items as CSV, on the other hand, dynein has to know which attributes are to be exported as CSV format requires "column" - i.e. N th column should contain attribute ABC throughout a csv file.
     #[clap(verbatim_doc_comment)]
     Export {
-        /// Output target filename where dynein exports data into.
+        /// Output filename, or '-' to write data to stdout. '/dev/stdout' also works.
         #[clap(short, long, verbatim_doc_comment)]
         output_file: String,
 
