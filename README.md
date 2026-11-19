@@ -423,6 +423,26 @@ using_region: ap-northeast-1
 using_table: customers
 ```
 
+Retry backoff in `config.yml` accepts human-readable durations as well as the legacy `secs`/`nanos` mapping:
+
+```yaml
+retry:
+  default:
+    initial_backoff: 100ms   # also: 0.5, 0.1s, or {secs: 0, nanos: 500000000}
+    max_backoff: 20s
+    max_attempts: 10
+```
+
+Bare integers and floating-point numbers are interpreted as seconds (`2` is two
+seconds, `0.5` is 500 milliseconds). Strings must include units and follow
+[Jiff's friendly duration syntax](https://docs.rs/jiff/0.2/jiff/fmt/friendly/index.html),
+including `100 ms` and `1s 500ms`. Both backoff fields support these forms in
+`retry.default` and `retry.batch_write_item`.
+
+Commands such as `dy use` preserve each duration's representation when saving
+the config: strings keep their contents, numbers remain numbers, and legacy
+`secs`/`nanos` values remain mappings. YAML formatting may be normalized.
+
 To clear current table configuration, simply execute `dy config clear`.
 
 ```
