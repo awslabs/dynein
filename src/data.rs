@@ -132,27 +132,53 @@ pub async fn scan(
 ) {
     let ts: app::TableSchema = app::table_schema(cx).await;
 
-    let items = scan_api(
-        cx,
-        index,
-        consistent_read,
-        attributes,
-        keys_only,
-        Some(limit),
-        None,
-    )
-    .await
-    .items
-    .expect("items should be 'Some' even if there's no item in the table.");
+    let mut all_items = Vec::new();
+    let mut last_evaluated_key: Option<HashMap<String, AttributeValue>> = None;
+    let mut remaining_limit = limit;
+
+    loop {
+        let scan_output = scan_api(
+            cx,
+            index.clone(),
+            consistent_read,
+            attributes,
+            keys_only,
+            Some(remaining_limit),
+            last_evaluated_key,
+        )
+        .await;
+
+        let items = scan_output
+            .items
+            .expect("items should be 'Some' even if there's no item in the table.");
+
+        all_items.extend(items);
+
+        // Check if we've reached the requested limit
+        if all_items.len() >= limit as usize {
+            all_items.truncate(limit as usize);
+            break;
+        }
+
+        // Update remaining limit for next iteration
+        remaining_limit = limit - all_items.len() as i32;
+
+        // Check if there are more items to scan
+        match scan_output.last_evaluated_key {
+            None => break,
+            Some(lek) => last_evaluated_key = Some(lek),
+        }
+    }
+
     match cx.output.as_deref() {
-        None | Some("table") => display_items_table(items, &ts, attributes, keys_only),
+        None | Some("table") => display_items_table(all_items, &ts, attributes, keys_only),
         Some("json") => println!(
             "{}",
-            serde_json::to_string_pretty(&convert_to_json_vec(&items)).unwrap()
+            serde_json::to_string_pretty(&convert_to_json_vec(&all_items)).unwrap()
         ),
         Some("raw") => println!(
             "{}",
-            serde_json::to_string_pretty(&strip_items(&items)).unwrap()
+            serde_json::to_string_pretty(&strip_items(&all_items)).unwrap()
         ),
         Some(o) => {
             println!("ERROR: unsupported output type '{}'.", o);
