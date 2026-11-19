@@ -349,6 +349,8 @@ Similarly you can update tables with dynein.
 $ dy admin update table app_users --mode provisioned --wcu 10 --rcu 25
 ```
 
+If that table has global secondary indexes, dynein applies the same RCU and WCU to every existing index. Each index is billed in addition to the table, so the command asks for confirmation first. Pass `--inherit-index-capacity` to apply that capacity and skip the prompt. Non-interactive runs need the flag when the table has indexes.
+
 
 ### Infrastracture as Code - enpowered by CloudFormation
 
