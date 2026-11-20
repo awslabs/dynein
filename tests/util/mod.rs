@@ -23,7 +23,7 @@ use aws_config::{BehaviorVersion, Region, SdkConfig};
 use aws_sdk_dynamodb::config::Credentials;
 use aws_sdk_dynamodb::Client as DynamoDbSdkClient;
 use once_cell::sync::Lazy;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, RngExt};
 use regex::bytes::Regex;
 use serde_json::Value;
 use std::io::{self, Write}; // Used when check results by printing to stdout
@@ -48,7 +48,7 @@ pub struct TestManager<'a> {
 
 impl<'a> TestManager<'a> {
     fn create_config_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let dir_name: String = rand::thread_rng()
+        let dir_name: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(16)
             .map(char::from)
@@ -110,7 +110,7 @@ impl<'a> TestManager<'a> {
         pk: &'static str,
         sk: Option<&'static str>,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        let table_name: String = rand::thread_rng()
+        let table_name: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(16)
             .map(char::from)
