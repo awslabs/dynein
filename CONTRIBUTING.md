@@ -68,23 +68,23 @@ brew install pre-commit # (or appropriate for your platform: https://pre-commit.
 pre-commit install
 ```
 
-We also use [trycmd](https://crates.io/crates/trycmd) to conduct snapshot testing for CLI.
+We also use [snapbox](https://crates.io/crates/snapbox) to conduct snapshot testing for CLI.
+The test cases are listed in `tests/cli_tests.rs`, and the expected outputs are stored in `tests/snapshots/cli/`.
 If the snapshot is needed to be updated, run command;
 
 MacOS and Linux
 ```shell
-TRYCMD=overwrite cargo test --test cli_tests
+SNAPSHOTS=overwrite cargo test --test cli_tests
 ```
 
 Windows (PowerShell)
 ```powershell
-$Env:TRYCMD='overwrite'
+$Env:SNAPSHOTS='overwrite'
 cargo test --test cli_tests
-[Environment]::SetEnvironmentVariable('TRYCMD',$null)
+[Environment]::SetEnvironmentVariable('SNAPSHOTS',$null)
 ```
 
-Please note that we use different snapshots for the Windows environment.
-Therefore, you need to update snapshot both Linux and Windows after modifying the behavior of CLI output.
+The same snapshots are used for all platforms. `[EXE]` in a snapshot matches `.exe` on Windows and nothing on other platforms.
 
 #### Bot command for a pull request
 *We temporarily disable the bot command currently.*

@@ -38,7 +38,6 @@ aws-sdk-dynamodb = { version = "1.117.0", default-features = false, features = [
 aws-sdk-ec2      = { version = "1.240.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-runtime-api = "1.6.0"
 aws-smithy-types = "1.1.9"
-chrono           = "0.4"
 clap = { version = "4.5.4", features = ["derive"] }
 dialoguer        = "0.12.0"
 env_logger       = "0.11.3"
@@ -59,12 +58,13 @@ itertools = "0.15.0"
 console = "0.16.6"
 brotli = "9.1.0"
 base64 = "0.23.1"
-thiserror = "1.0.59"
+thiserror = "2.0.18"
 home = "0.5.9"
+jiff = "1.0.1"
 
 [dev-dependencies]
 assert_cmd = "2.0.14" # contains helpers make executing the main binary on integration tests easier.
 predicates = "3.1.0" # to introduce advanced assertions
 once_cell = "1.19.0" # to setup docker container syncrhonously
-trycmd = "0.15.1" # snapshot testing for CLI
-rand = "0.8.5"
+snapbox = { version = "1.2.2", features = ["cmd"] } # snapshot testing for CLI
+rand = "0.10.3"

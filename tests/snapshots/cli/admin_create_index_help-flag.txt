@@ -1,0 +1,16 @@
+Create new GSI (global secondary index) for a table with given primary key(s). [API: UpdateTable]
+
+Usage: dy[EXE] admin create index [OPTIONS] --keys <KEYS>... <INDEX_NAME>
+
+Arguments:
+  <INDEX_NAME>  index name to create
+
+Options:
+  -k, --keys <KEYS>...   (requried) Primary key(s) of the index. Key name followed by comma and data type (S/N/B).
+                         e.g. for Partition key only table: `--keys myPk,S`, and for Partition and Sort key table `--keys myPk,S mySk,N`
+  -r, --region <REGION>  The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
+                         You can use --region option in both top-level and subcommand-level.
+  -p, --port <PORT>      Specify the port number. This option has an effect only when `--region local` is used.
+  -t, --table <TABLE>    Target table of the operation. You can use --table option in both top-level and subcommand-level.
+                         You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
+  -h, --help             Print help
