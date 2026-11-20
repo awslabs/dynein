@@ -55,8 +55,8 @@ jobs:
       linux: ${{ steps.gen_patch.outputs.linux }}
       windows: ${{ steps.gen_patch.outputs.windows }}
     env:
-      # Set TRYCMD=overwrite to update snapshot
-      TRYCMD: overwrite
+      # Set SNAPSHOTS=overwrite to update snapshot
+      SNAPSHOTS: overwrite
     steps:
     - name: Determine a target repository and a commit hash from the pull request
       uses: actions/github-script@v7

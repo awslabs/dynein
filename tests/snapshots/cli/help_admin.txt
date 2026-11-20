@@ -1,0 +1,19 @@
+<sub> Admin operations such as creating/updating table or GSI
+
+Usage: dy[EXE] admin [OPTIONS] <COMMAND>
+
+Commands:
+  list    List tables in the region. [API: ListTables]
+  desc    Show detailed information of a table. [API: DescribeTable]
+  create  Create new DynamoDB table or GSI. [API: CreateTable, UpdateTable]
+  update  Update a DynamoDB table. [API: UpdateTable etc]
+  delete  Delete a DynamoDB table or GSI. [API: DeleteTable]
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -r, --region <REGION>  The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
+                         You can use --region option in both top-level and subcommand-level.
+  -p, --port <PORT>      Specify the port number. This option has an effect only when `--region local` is used.
+  -t, --table <TABLE>    Target table of the operation. You can use --table option in both top-level and subcommand-level.
+                         You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
+  -h, --help             Print help
