@@ -20,7 +20,7 @@ use aws_sdk_dynamodb::types::{
     KeySchemaElement, KeyType, LocalSecondaryIndexDescription, ProvisionedThroughputDescription,
     ScalarAttributeType, StreamSpecification, TableDescription,
 };
-use chrono::DateTime;
+use jiff::Timestamp;
 use log::error;
 
 use crate::ddb::key;
@@ -222,8 +222,9 @@ fn extract_stream(arn: &Option<String>, spec: &Option<StreamSpecification>) -> O
 }
 
 pub fn epoch_to_rfc3339(epoch: f64) -> String {
-    let utc_datetime = DateTime::from_timestamp(epoch as i64, 0).unwrap();
-    utc_datetime.to_rfc3339()
+    // Keep chrono's `to_rfc3339()` output format (e.g. "2020-03-03T13:34:43+00:00").
+    let utc_timestamp = Timestamp::from_second(epoch as i64).unwrap();
+    utc_timestamp.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string()
 }
 
 fn extract_capacity(
@@ -272,5 +273,24 @@ impl IndexDesc for LocalSecondaryIndexDescription {
     }
     fn extract_index_capacity(&self, _: &Mode) -> Option<PrintCapacityUnits> {
         None // Unlike GSI, LSI doesn't have it's own capacity.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_epoch_to_rfc3339() {
+        assert_eq!(epoch_to_rfc3339(0.0), "1970-01-01T00:00:00+00:00");
+        assert_eq!(
+            epoch_to_rfc3339(1_583_242_483.0),
+            "2020-03-03T13:34:43+00:00"
+        );
+        // Fractional seconds are truncated, matching the previous chrono implementation.
+        assert_eq!(
+            epoch_to_rfc3339(1_583_242_483.987),
+            "2020-03-03T13:34:43+00:00"
+        );
     }
 }
