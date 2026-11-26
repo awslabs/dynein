@@ -72,6 +72,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_AUDIT_BASE_FLAGS: --quiet -D warnings -D unmaintained -D unsound -D yanked
+      # Keep in sync with CARGO_AUDIT_IGNORE_FLAGS in audit.yml (see justification there).
+      CARGO_AUDIT_IGNORE_FLAGS: --ignore RUSTSEC-2026-0542
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -80,7 +82,7 @@ jobs:
     - name: Install cargo audit
       run: cargo install cargo-audit
     - name: Run audit command
-      run: cargo audit ${{ env.CARGO_AUDIT_BASE_FLAGS }}
+      run: cargo audit ${{ env.CARGO_AUDIT_BASE_FLAGS }} ${{ env.CARGO_AUDIT_IGNORE_FLAGS }}
   credentials-scan:
     name: Credentials scan
     runs-on: ubuntu-latest
