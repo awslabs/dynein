@@ -210,15 +210,19 @@ Arguments:
   <TABLE_NAME_TO_UPDATE>  table name to update
 
 Options:
-  -m, --mode <MODE>      DynamoDB capacity mode. Availablle values: [provisioned, ondemand].
-                         When you switch from OnDemand to Provisioned mode, you can pass WCU and RCU as well (NOTE: default capacity unit for Provisioned mode is 5). [possible values: provisioned, ondemand]
-      --wcu <WCU>        WCU (write capacity units) for the table. Acceptable only on Provisioned mode.
-      --rcu <RCU>        RCU (read capacity units) for the table. Acceptable only on Provisioned mode.
-  -r, --region <REGION>  The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
-                         You can use --region option in both top-level and subcommand-level.
-  -p, --port <PORT>      Specify the port number. This option has an effect only when `--region local` is used.
-  -t, --table <TABLE>    Target table of the operation. You can use --table option in both top-level and subcommand-level.
-                         You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
-  -h, --help             Print help
+  -m, --mode <MODE>             DynamoDB capacity mode. Availablle values: [provisioned, ondemand].
+                                When you switch from OnDemand to Provisioned mode, you can pass WCU and RCU as well (NOTE: default capacity unit for Provisioned mode is 5). [possible values: provisioned, ondemand]
+      --wcu <WCU>               WCU (write capacity units) for the table. Acceptable only on Provisioned mode.
+      --rcu <RCU>               RCU (read capacity units) for the table. Acceptable only on Provisioned mode.
+      --inherit-index-capacity  When switching a table that has global secondary indexes from on-demand
+                                to provisioned mode, apply this table's RCU/WCU to every existing index
+                                and skip the confirmation prompt. Each index is billed in addition to the
+                                table. Required for non-interactive runs when the table has indexes.
+  -r, --region <REGION>         The region to use (e.g. --region us-east-1). When using DynamodB Local, use `--region local`.
+                                You can use --region option in both top-level and subcommand-level.
+  -p, --port <PORT>             Specify the port number. This option has an effect only when `--region local` is used.
+  -t, --table <TABLE>           Target table of the operation. You can use --table option in both top-level and subcommand-level.
+                                You can store table schema locally by executing `$ dy use`, after that you need not to specify --table on every command.
+  -h, --help                    Print help
 
 ```

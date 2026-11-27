@@ -533,6 +533,13 @@ pub enum UpdateSub {
         /// RCU (read capacity units) for the table. Acceptable only on Provisioned mode.
         #[clap(long, verbatim_doc_comment)]
         rcu: Option<i64>,
+
+        /// When switching a table that has global secondary indexes from on-demand
+        /// to provisioned mode, apply this table's RCU/WCU to every existing index
+        /// and skip the confirmation prompt. Each index is billed in addition to the
+        /// table. Required for non-interactive runs when the table has indexes.
+        #[clap(long, verbatim_doc_comment)]
+        inherit_index_capacity: bool,
         // TODO: support following parameters
         // - sse_enabled: bool, (default false) ... UpdateTable API
         // - stream_enabled: bool, (default false) ... UpdateTable API
