@@ -7,9 +7,11 @@ on:
 env:
   # We treat all findings as error to notify its status for maintainers.
   # If we need to temporarily suppress the error, we use `--ignore` option with justification.
+  # - RUSTSEC-2026-0542 (humantime is unmaintained): dev-dependency only, pulled in by trycmd
+  #   (latest 1.2.1 still depends on it). Not included in the dy binary. Remove once trycmd drops it.
   CARGO_AUDIT_BASE_FLAGS: --quiet -D warnings -D unmaintained -D unsound -D yanked
-  CARGO_AUDIT_IGNORE_FLAGS:
-
+  CARGO_AUDIT_IGNORE_FLAGS: >-
+    --ignore RUSTSEC-2026-0542
 permissions: {}
 
 jobs:
